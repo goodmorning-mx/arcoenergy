@@ -1,0 +1,62 @@
+server {
+  listen 80;
+  server_name _;
+
+  proxy_http_version 1.1;
+  proxy_set_header Host ${DOLLAR}host;
+  proxy_set_header X-Real-IP ${DOLLAR}remote_addr;
+  proxy_set_header X-Forwarded-For ${DOLLAR}proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto ${DOLLAR}scheme;
+  proxy_set_header Upgrade ${DOLLAR}http_upgrade;
+  proxy_set_header Connection "upgrade";
+
+  location = /health {
+    default_type application/json;
+    return 200 '{"service":"frontend-gateway","status":"ok"}';
+  }
+
+  location = /app {
+    return 301 /app/;
+  }
+
+  location /app/ {
+    proxy_pass ${REACT_UPSTREAM}/;
+  }
+
+  location = /api {
+    proxy_pass ${API_UPSTREAM};
+  }
+
+  location /api/ {
+    proxy_pass ${API_UPSTREAM}/;
+  }
+
+  location = /seo {
+    proxy_pass ${NEXT_UPSTREAM};
+  }
+
+  location /seo/ {
+    proxy_pass ${NEXT_UPSTREAM};
+  }
+
+  location /_next/ {
+    proxy_pass ${NEXT_UPSTREAM};
+  }
+
+  location / {
+    proxy_pass ${NEXT_UPSTREAM};
+  }
+
+  error_page 502 = /gateway-502;
+  error_page 504 = /gateway-504;
+
+  location = /gateway-502 {
+    default_type application/json;
+    return 502 '{"status":"bad_gateway","message":"Upstream service unavailable"}';
+  }
+
+  location = /gateway-504 {
+    default_type application/json;
+    return 504 '{"status":"gateway_timeout","message":"Upstream service timed out"}';
+  }
+}

@@ -1,0 +1,94 @@
+# Local development only. The hybrid profile adds the private Next app and
+# public frontend gateway used by the hybrid Coolify composition.
+services:
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+        VITE_BASE_PATH: ${VITE_BASE_PATH:-/}
+    # Local development port mapping only; public Coolify URLs must not include ports.
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  backend:
+    build: ./backend
+    environment:
+      APP_NAME: ${APP_NAME:-GoodMorning MVP Template API}
+      APP_ENV: ${APP_ENV:-local}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:8080}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://goodmorning:goodmorning_local_password@postgres:5432/goodmorning_mvp}
+    # Local development port mapping only; public Coolify URLs must not include ports.
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  seo:
+    profiles: ["hybrid"]
+    build: ./seo
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  gateway:
+    profiles: ["hybrid"]
+    build: ./gateway
+    environment:
+      REACT_UPSTREAM: ${REACT_UPSTREAM:-http://frontend:80}
+      NEXT_UPSTREAM: ${NEXT_UPSTREAM:-http://seo:3000}
+      API_UPSTREAM: ${API_UPSTREAM:-http://backend:8000}
+    ports:
+      - "${GATEWAY_PORT:-8081}:80"
+    depends_on:
+      frontend:
+        condition: service_healthy
+      seo:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-goodmorning_mvp}
+      POSTGRES_USER: ${POSTGRES_USER:-goodmorning}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-goodmorning_local_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres_data:
