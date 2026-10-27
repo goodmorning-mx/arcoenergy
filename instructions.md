@@ -16,7 +16,7 @@ GoodMorning Factory administra este producto. El repositorio del producto es la 
 - Rama de desarrollo integrada: `dev`
 - DEV frontend: `dev.arcoenergy.goodmorning.mx`
 - PROD esperado: `https://arcoenergy.goodmorning.mx`
-- Perfil frontend: `react` (react por defecto; next/hybrid son explícitos)
+- Perfil frontend: `hybrid` (react por defecto; next/hybrid son explícitos)
 
 ### Cómo trabajar
 
@@ -39,9 +39,32 @@ GoodMorning Factory administra este producto. El repositorio del producto es la 
 
 #### Aplicaciones
 
+#### Routing frontend
+
+- Perfil `hybrid` · metadata de routing `hybrid` · host `https://dev.arcoenergy.goodmorning.mx`
+- En hybrid, Factory compone el gateway público y mantiene React/Next como upstreams internos; no se crea un subdominio `app`.
+
+- `api` · rol `api` · puerto `8000` · healthcheck `/health` · dominio `https://api.dev.arcoenergy.goodmorning.mx` · auto-deploy `True`
+  - Variables declaradas (sin valores): `APP_NAME` [literal], `APP_ENV` [literal], `ORGANIZATION_ID` [literal], `CORS_ORIGINS` [literal], `AUTH_JWT_SECRET` [generated_secret], `ADMIN_BOOTSTRAP_EMAIL` [literal], `ADMIN_BOOTSTRAP_PASSWORD` [generated_secret], `SITE_URL` [literal]
+- `frontend` · rol `frontend` · puerto `80` · healthcheck `/` · dominio `privado` · auto-deploy `True`
+  - Variables declaradas (sin valores): `VITE_API_URL` [literal], `VITE_BASE_PATH` [literal]
+- `seo` · rol `frontend` · puerto `3000` · healthcheck `/health` · dominio `privado` · auto-deploy `True`
+  - Variables declaradas (sin valores): `SITE_URL` [literal], `SITE_NAME` [literal], `SITE_DESCRIPTION` [literal], `SITE_INDEXABLE` [literal]
+- `crm` · rol `frontend` · puerto `80` · healthcheck `/` · dominio `privado` · auto-deploy `True`
+  - Variables declaradas (sin valores): `VITE_API_URL` [literal]
+
 #### Bases de datos
 
 - `postgres` · versión `16` · privado `True` · persistencia/backups declarados en el manifiesto
+
+#### Módulos core y servicios
+
+- `gm-auth` v`0.1.5` · tipo `full-stack` · modo seleccionado `embedded` · modos permitidos: `embedded`, `service`
+  - Source pin verificado por Factory: `138d66cb44a94781e0d38d8afd1be2dbf718c294`
+  - Recurso `postgres` · clase `postgresql` · owner `gm-auth` · shared `True`
+  - Bindings (sin valores): `DATABASE_URL` [database_url]
+- `gm-pwa` v`0.1.5` · tipo `frontend` · modo seleccionado `embedded` · modos permitidos: `embedded`
+  - Source pin verificado por Factory: `67e08f85f8c12f5953ee819c391bec050e227a64`
 
 ### Validación y Definition of Done
 
