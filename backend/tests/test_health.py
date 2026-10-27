@@ -10,7 +10,7 @@ def test_health_endpoint_returns_service_status() -> None:
 
     assert response.status_code == 200
     assert response.json() == {
-        "service": "GoodMorning MVP Template API",
+        "service": "ArcoEnergy API",
         "status": "ok",
         "environment": "local",
     }

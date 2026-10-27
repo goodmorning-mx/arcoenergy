@@ -1,9 +1,10 @@
 {
-  "name": "GoodMorning Product",
-  "short_name": "GoodMorning",
-  "start_url": "./",
-  "scope": "./",
+  "name": "ArcoEnergy Campo",
+  "short_name": "ArcoEnergy",
+  "description": "Cotizaciones solares y operación de campo para el equipo ArcoEnergy.",
+  "start_url": "/app/",
+  "scope": "/app/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#111827"
+  "background_color": "#f5f6f1",
+  "theme_color": "#173c30"
 }

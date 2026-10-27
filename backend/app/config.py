@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    app_name: str = Field(default="GoodMorning MVP Template API", alias="APP_NAME")
+    app_name: str = Field(default="ArcoEnergy API", alias="APP_NAME")
     app_env: str = Field(default="local", alias="APP_ENV")
     source_commit: str = Field(default="unknown", alias="SOURCE_COMMIT")
     cors_origins: str = Field(default="http://localhost:5173", alias="CORS_ORIGINS")
@@ -15,6 +15,12 @@ class Settings(BaseSettings):
         default="postgresql+psycopg://goodmorning:goodmorning_local_password@localhost:5432/goodmorning_mvp",
         alias="DATABASE_URL",
     )
+    auth_secret: str = Field(default="local-development-auth-secret-change-me-000000", alias="AUTH_JWT_SECRET")
+    admin_bootstrap_email: str = Field(default="", alias="ADMIN_BOOTSTRAP_EMAIL")
+    admin_bootstrap_password: str = Field(default="", alias="ADMIN_BOOTSTRAP_PASSWORD")
+    organization_id: str = Field(default="arcoenergy", alias="ORGANIZATION_ID")
+    google_drive_folder_id: str = Field(default="", alias="GOOGLE_DRIVE_FOLDER_ID")
+    whatsapp_phone: str = Field(default="", alias="WHATSAPP_PHONE")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -69,10 +69,11 @@ def test_compose_local_contract() -> None:
     ]
     assert "context: ./frontend" in compose
     assert "VITE_API_URL:" in compose
-    assert '"8080:80"' in compose
     assert "condition: service_healthy" in compose
     assert "build: ./backend" in compose
-    assert '"8000:8000"' in compose
+    assert '"${GATEWAY_PORT:-18081}:80"' in compose
+    assert '"8080:80"' not in compose
+    assert '"8000:8000"' not in compose
     assert "postgresql+psycopg://goodmorning:goodmorning_local_password@postgres:5432/goodmorning_mvp" in compose
     assert "image: postgres:16-alpine" in compose
     assert "postgres_data:/var/lib/postgresql/data" in compose

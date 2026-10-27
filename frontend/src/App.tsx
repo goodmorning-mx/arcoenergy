@@ -1,70 +1,76 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Login, useAuth } from '@goodmorning/gm-auth';
+import { PwaStatus } from '@goodmorning/gm-pwa';
+import './styles.css';
 
-type HealthResponse = {
-  service: string;
-  status: string;
-  environment: string;
-};
-
-type ApiState =
-  | { status: 'loading' }
-  | { status: 'success'; data: HealthResponse }
-  | { status: 'error'; message: string };
-
-const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
+type Screen = 'inicio' | 'cotizar' | 'instalaciones' | 'inventario' | 'cuenta';
+type StockItem = { id:string; name:string; unit:string; quantity:number; minimum_quantity:number; unit_cost:number };
+const money = (n: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
 
 function App() {
-  const [apiState, setApiState] = useState<ApiState>({ status: 'loading' });
+  const [screen, setScreen] = useState<Screen>('inicio');
+  const [panels, setPanels] = useState(8);
+  const [saved, setSaved] = useState(false);
+  const [customerName, setCustomerName] = useState('');
+  const [customerCity, setCustomerCity] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [folio, setFolio] = useState('AE-DEMO-0148');
+  const [quoteNotice, setQuoteNotice] = useState('');
+  const [liveStock, setLiveStock] = useState<StockItem[]|null>(null);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const { identity, accessToken, logout } = useAuth();
+  const quote = useMemo(() => ({ watts: panels * 610, price: panels * 13250 + 14900 }), [panels]);
 
   useEffect(() => {
-    const controller = new AbortController();
+    if (!accessToken) { setLiveStock(null); return; }
+    void fetch(`${import.meta.env.VITE_API_URL || '/api'}/v1/inventory`, { headers: { Authorization: `Bearer ${accessToken}` } })
+      .then(async response => { if (!response.ok) throw new Error('No se pudo consultar el inventario.'); setLiveStock(await response.json()); })
+      .catch(error => setQuoteNotice(error instanceof Error ? error.message : 'Error de conexión.'));
+  }, [accessToken]);
 
-    async function loadHealth() {
+  async function consumeStock(item:StockItem) {
+    if (!accessToken) { setLoginOpen(true); return; }
+    const amount = Number(window.prompt(`¿Cuánto material usaste? (${item.unit})`, '1'));
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/v1/inventory/consume`, { method:'POST', headers:{'Content-Type':'application/json',Authorization:`Bearer ${accessToken}`}, body:JSON.stringify({item_id:item.id,quantity:amount,reason:'Consumo de instalación'}) });
+      if (!response.ok) throw new Error((await response.json()).detail || 'No se pudo registrar el consumo.');
+      const result=await response.json(); setLiveStock(rows=>(rows||[]).map(row=>row.id===item.id?result.item:row));
+    } catch(error) { setQuoteNotice(error instanceof Error?error.message:'No se pudo guardar el consumo.'); }
+  }
+
+  async function generateQuote() {
+    if (accessToken && !customerName.trim()) { setQuoteNotice('Escribe el nombre del cliente para guardar la cotización.'); return; }
+    if (accessToken && customerName.trim()) {
       try {
-        const response = await fetch(`${apiUrl}/health`, { signal: controller.signal });
-        if (!response.ok) {
-          throw new Error(`API returned ${response.status}`);
-        }
-        const data = (await response.json()) as HealthResponse;
-        setApiState({ status: 'success', data });
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          return;
-        }
-        setApiState({
-          status: 'error',
-          message: error instanceof Error ? error.message : 'Unable to reach the API',
-        });
-      }
+        const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` };
+        const customerResponse = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/v1/customers`, { method: 'POST', headers, body: JSON.stringify({ name: customerName, city: customerCity, phone: customerPhone }) });
+        if (!customerResponse.ok) throw new Error((await customerResponse.json()).detail || 'No se pudo guardar el cliente.');
+        const customer = await customerResponse.json();
+        const quoteResponse = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/v1/quotes`, { method: 'POST', headers, body: JSON.stringify({ customer_id: customer.id, panel_count: panels, panel_brand: 'Jinko', panel_watts: 610, payment_method: 'Contado' }) });
+        if (!quoteResponse.ok) throw new Error((await quoteResponse.json()).detail || 'No se pudo crear la cotización.');
+        const savedQuote = await quoteResponse.json(); setFolio(savedQuote.folio);
+        const pdfResponse = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/v1/quotes/${savedQuote.id}/pdf`, { headers: { Authorization: `Bearer ${accessToken}` } });
+        if (pdfResponse.ok) { const link = document.createElement('a'); link.href = URL.createObjectURL(await pdfResponse.blob()); link.download = `${savedQuote.folio}.pdf`; link.click(); URL.revokeObjectURL(link.href); }
+      } catch (error) { setQuoteNotice(error instanceof Error ? error.message : 'No se pudo guardar.'); return; }
+    } else if (!accessToken) {
+      setFolio(`AE-DEMO-${String(Date.now()).slice(-5)}`);
     }
+    setSaved(true);
+    if (!accessToken) window.setTimeout(() => window.print(), 250);
+  }
 
-    loadHealth();
-    return () => controller.abort();
-  }, []);
-
-  return (
-    <main className="page-shell">
-      <section className="hero" aria-labelledby="page-title">
-        <p className="eyebrow">GoodMorning Software Factory</p>
-        <h1 id="page-title">Standard MVP starter</h1>
-        <p className="lede">
-          A minimal full-stack foundation for new GoodMorning products using React,
-          FastAPI, PostgreSQL, Docker, and CI checks.
-        </p>
-        <div className="status-card" role="status" aria-live="polite">
-          <span className={`status-dot status-dot--${apiState.status}`} aria-hidden="true" />
-          {apiState.status === 'loading' && <p>Checking API connection…</p>}
-          {apiState.status === 'success' && (
-            <p>
-              Connected to <strong>{apiState.data.service}</strong> ({apiState.data.environment}) with status{' '}
-              <strong>{apiState.data.status}</strong>.
-            </p>
-          )}
-          {apiState.status === 'error' && <p>API connection failed: {apiState.message}</p>}
-        </div>
-      </section>
-    </main>
-  );
+  return <div className="app-frame">
+    <header className="topbar"><a className="brand" href="/"><span className="brand-mark">A</span><span>arco<span>energy</span></span></a><div className="top-actions"><PwaStatus/>{identity?<button className="avatar" title="Cerrar sesión" onClick={()=>void logout()}>{identity.name?.slice(0,2).toUpperCase()||'AE'}</button>:<button className="login-small" onClick={()=>setLoginOpen(true)}>Iniciar sesión</button>}</div></header>
+    <div className="workspace"><aside className="rail"><div className="rail-label">CAMPO</div>{([['inicio','⌂','Resumen'],['cotizar','＋','Cotizador'],['instalaciones','⌁','Instalaciones'],['inventario','▦','Inventario'],['cuenta','◉','Mi cuenta']] as [Screen,string,string][]).map(([id,icon,label])=><button key={id} className={screen===id?'rail-item active':'rail-item'} onClick={()=>setScreen(id)}><span>{icon}</span>{label}</button>)}<div className="rail-bottom"><span className="mini-avatar">LM</span><div><b>Luis Mendoza</b><small>Ventas · Demo</small></div></div></aside>
+    <main className="content">
+      {screen==='inicio'&&<><div className="welcome"><div><div className="eyebrow">MARTES, 27 OCTUBRE</div><h1>Hola, Luis <span>☀</span></h1><p>Tu operación solar, en un solo lugar.</p></div><button className="button dark" onClick={()=>setScreen('cotizar')}>＋ Crear cotización</button></div><section className="stats"><article><small>COTIZACIONES ABIERTAS</small><strong>12</strong><span className="trend">↑ 3 esta semana</span></article><article><small>INSTALACIONES EN CURSO</small><strong>4</strong><span className="muted">2 requieren atención</span></article><article><small>CARTERA POR COBRAR</small><strong>$184,500</strong><span className="warn">$32,000 vencidos</span></article></section><section className="overview-grid"><article className="panel pipeline"><div className="panel-head"><div><small>EMBUDO COMERCIAL</small><h2>Oportunidades</h2></div><a href="/crm">Abrir CRM ↗</a></div><div className="pipeline-total">$862,400 <span>MXN en propuestas</span></div><div className="bars"><div style={{height:'82%'}}/><div style={{height:'67%'}}/><div style={{height:'54%'}}/><div style={{height:'38%'}}/><div style={{height:'24%'}}/><div style={{height:'14%'}}/></div><div className="bar-labels"><span>May</span><span>Jun</span><span>Jul</span><span>Ago</span><span>Sep</span><span>Oct</span></div></article><article className="panel todo"><div className="panel-head"><div><small>PARA HOY</small><h2>Lo que sigue</h2></div><span className="count">3</span></div><div className="todo-row"><span className="todo-icon amber">⌕</span><div><b>Visita técnica · Tampico</b><small>Abel Agundiz · 10:30 am</small></div><span className="arrow">↗</span></div><div className="todo-row"><span className="todo-icon green">✓</span><div><b>Instalar sistema · 12 paneles</b><small>Col. Petrolera · 2 instaladores</small></div><span className="arrow">↗</span></div><div className="todo-row"><span className="todo-icon blue">◷</span><div><b>Seguimiento de propuesta</b><small>Mariana López · hace 3 días</small></div><span className="arrow">↗</span></div></article></section><section className="panel activity"><div className="panel-head"><div><small>MOVIMIENTO RECIENTE</small><h2>Actividad del equipo</h2></div><a href="/crm">Ver todo ↗</a></div><div className="activity-table"><div className="table-head"><span>CLIENTE / PROYECTO</span><span>ACTIVIDAD</span><span>RESPONSABLE</span><span>ESTADO</span></div><div className="table-row"><b>Abel Agundiz <small>Tampico · 20 paneles</small></b><span>Cotización enviada</span><span>Luis Mendoza</span><em className="pill sent">En seguimiento</em></div><div className="table-row"><b>Mariana López <small>Altamira · 8 paneles</small></b><span>Visita agendada</span><span>Carla Ríos</span><em className="pill scheduled">Visita mañana</em></div></div></section></>}
+      {screen==='cotizar'&&<><div className="page-title"><div><div className="eyebrow">VENTAS / NUEVA PROPUESTA</div><h1>Cotizador solar</h1><p>Arma una propuesta clara en menos de un minuto.</p></div><span className="demo-tag">MODO DEMOSTRACIÓN</span></div><div className="quote-layout"><section className="panel form-panel"><h2>Cuéntanos del proyecto</h2><label>Nombre del cliente<input value={customerName} onChange={e=>setCustomerName(e.target.value)} placeholder="Ej. Andrea Martínez"/></label><label>Teléfono / WhatsApp<input value={customerPhone} onChange={e=>setCustomerPhone(e.target.value)} placeholder="833 123 4567" inputMode="tel"/></label><label>Lugar de instalación<input value={customerCity} onChange={e=>setCustomerCity(e.target.value)} placeholder="Ciudad o código postal"/></label><div className="form-row"><label>Paneles <div className="stepper"><button onClick={()=>{setSaved(false);setPanels(Math.max(4,panels-1))}}>−</button><strong>{panels}</strong><button onClick={()=>{setSaved(false);setPanels(Math.min(20,panels+1))}}>＋</button><span>paneles</span></div></label><label>Forma de pago<select><option>Contado</option><option>Financiamiento</option><option>Mixto</option></select></label></div><label>Inversor recomendado<select><option>Growatt · 5 kW</option><option>Huawei · 6 kW</option><option>Enphase · Microinversores</option></select></label><button className="button dark full" onClick={()=>void generateQuote()}>{saved?'✓ Propuesta guardada':'Generar propuesta y PDF'}</button>{quoteNotice&&<small className="form-error">{quoteNotice}</small>}<small className="form-note">{accessToken?'La cotización se guardará en el CRM y el PDF se descargará.':'Entra con tu cuenta para guardar la cotización; puedes revisar la demo sin iniciar sesión.'}</small></section><section className="quote-preview"><div className="preview-top"><span>PROPUESTA</span><span>{folio}</span></div><div className="sun-art">☼</div><div className="quote-copy"><small>SISTEMA SOLAR RESIDENCIAL</small><h2>Tu energía,<br/>a tu manera.</h2><p>Un sistema diseñado para aprovechar el sol y reducir tu recibo.</p></div><div className="quote-spec"><span><b>{panels} ×</b> paneles de 610 W</span><span><b>{(quote.watts/1000).toFixed(2)} kWp</b> capacidad</span></div><div className="quote-price"><small>INVERSIÓN ESTIMADA</small><strong>{money(quote.price)}</strong><small>o desde {money(Math.round(quote.price/24))} / mes · 24 pagos</small></div>{saved&&customerPhone&&<a className="button lime full share-button" href={`https://wa.me/52${customerPhone.replace(/\D/g,'')}?text=${encodeURIComponent(`Hola ${customerName||''}, te comparto tu propuesta solar ${folio} por ${money(quote.price)}. Estoy al pendiente de tus dudas.`)}`} target="_blank" rel="noreferrer">Compartir por WhatsApp ↗</a>}<p className="fine">Precios de demostración · configuración comercial pendiente de validar</p></section></div></>}
+      {screen==='instalaciones'&&<><div className="page-title"><div><div className="eyebrow">OPERACIÓN / CAMPO</div><h1>Instalaciones</h1><p>Tu agenda de trabajo y el estado de cada proyecto.</p></div><button className="button dark">Ver calendario ↗</button></div><div className="install-list">{[['HOY · 10:30 AM','Abel Agundiz','Tampico, Tamaulipas','20 paneles · 12.2 kWp','En preparación','AA'],['MAÑANA · 9:00 AM','Mariana López','Altamira, Tamaulipas','8 paneles · 4.9 kWp','Material listo','ML'],['JUEVES · 8:00 AM','Jorge Salinas','Ciudad Madero, Tamaulipas','12 paneles · 7.3 kWp','Por confirmar','JS']].map(([date,name,place,system,status,initials],i)=><article className="panel install-card" key={name}><div className="install-date">{date}</div><div className="install-person"><span className="person-avatar">{initials}</span><div><h2>{name}</h2><small>{place}</small></div></div><div className="install-system"><b>{system}</b><small>Inversor Growatt · estructura aluminio</small></div><span className={`pill ${i===0?'scheduled':'sent'}`}>{status}</span><button className="icon-button" aria-label="Abrir instalación">↗</button></article>)}</div></>}
+      {screen==='inventario'&&<><div className="page-title"><div><div className="eyebrow">OPERACIÓN / ALMACÉN</div><h1>Inventario</h1><p>Material disponible para los próximos proyectos.</p></div><span className="demo-tag">{liveStock?`${liveStock.length} ARTÍCULOS`:'MODO DEMOSTRACIÓN'}</span></div><section className="stats"><article><small>VALOR ESTIMADO</small><strong>{liveStock?money(liveStock.reduce((sum,item)=>sum+item.quantity*item.unit_cost,0)):'$486,200'}</strong><span className="muted">{liveStock?'Costo registrado':'Costo de demostración'}</span></article><article><small>STOCK BAJO</small><strong>{liveStock?liveStock.filter(item=>item.quantity<=item.minimum_quantity).length:2}</strong><span className="warn">Requieren revisión</span></article><article><small>ASIGNADO A PROYECTOS</small><strong>{liveStock?'Consultar instalación':'40 paneles'}</strong><span className="muted">Material para cuadrillas</span></article></section><section className="panel inventory-list"><div className="table-head inv-head"><span>ARTÍCULO</span><span>DISPONIBLE</span><span>ASIGNADO</span><span>ESTADO</span></div>{liveStock?liveStock.map((item,i)=><div className="inv-row" key={item.id}><span className="item-cell"><i>{['▧','⌁','▤','⌁','⟐'][i%5]}</i><b>{item.name}</b></span><b>{item.quantity} {item.unit}</b><span>—</span><em className={`pill ${item.quantity<=item.minimum_quantity?'scheduled':'sent'}`}>{item.quantity<=item.minimum_quantity?'Stock bajo':'Disponible'}</em><button className="row-action stock-consume" onClick={()=>void consumeStock(item)}>Registrar uso</button></div>):[['Panel solar 610 W · Jinko','84','40','Suficiente'],['Inversor Growatt 5 kW','6','2','Suficiente'],['Estructura aluminio · módulo','128','40','Suficiente'],['Cable solar 6 mm · rojo','18 rollos','4','Stock bajo'],['Conector MC4 · par','34 pares','12','Stock bajo']].map((r,i)=><div className="inv-row" key={r[0]}><span className="item-cell"><i>{['▧','⌁','▤','⌁','⟐'][i]}</i><b>{r[0]}</b></span><b>{r[1]}</b><span>{r[2]}</span><em className={`pill ${i>2?'scheduled':'sent'}`}>{r[3]}</em></div>)}</section></>}
+      {screen==='cuenta'&&<><div className="page-title"><div><div className="eyebrow">PERFIL</div><h1>Mi cuenta</h1><p>Acceso de demostración para el equipo comercial.</p></div></div><section className="panel account-card"><span className="person-avatar">LM</span><div><h2>Luis Mendoza</h2><p>Ventas · arcoenergy</p><span className="pill sent">Datos de demostración</span></div><a className="button outline" href="/crm">Abrir CRM</a></section><section className="panel integrations"><h2>Conexiones del negocio</h2><div><span className="integration-icon">G</span><span><b>Google Drive</b><small>El almacenamiento se conecta al configurar la cuenta del negocio.</small></span><em>Pendiente de conectar</em></div><div><span className="integration-icon">⌕</span><span><b>WhatsApp</b><small>Abre una conversación con el cliente desde el CRM.</small></span><em>Enlace disponible</em></div></section></>}
+    </main></div><nav className="mobile-nav">{([['inicio','⌂','Inicio'],['cotizar','＋','Cotizar'],['instalaciones','⌁','Obras'],['inventario','▦','Stock'],['cuenta','◉','Más']] as [Screen,string,string][]).map(([id,icon,label])=><button key={id} className={screen===id?'selected':''} onClick={()=>setScreen(id)}><span>{icon}</span>{label}</button>)}</nav>
+    {loginOpen&&<div className="login-backdrop" onClick={()=>setLoginOpen(false)}><section className="login-sheet" onClick={e=>e.stopPropagation()}><button className="login-close" onClick={()=>setLoginOpen(false)}>×</button><div className="eyebrow">CUENTA ARCOENERGY</div><h2>Acceso de equipo</h2><p>Entra para guardar actividad en la operación.</p><Login/><small>La vista actual usa datos de demostración.</small></section></div>}
+  </div>
 }
-
 export default App;

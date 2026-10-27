@@ -19,6 +19,14 @@ server {
     return 301 /app/;
   }
 
+  location = /crm {
+    return 301 /crm/;
+  }
+
+  location /crm/ {
+    proxy_pass ${CRM_UPSTREAM}/;
+  }
+
   location /app/ {
     proxy_pass ${REACT_UPSTREAM}/;
   }
