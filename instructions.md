@@ -62,7 +62,7 @@ GoodMorning Factory administra este producto. El repositorio del producto es la 
 - `gm-auth` v`0.1.5` · tipo `full-stack` · modo seleccionado `embedded` · modos permitidos: `embedded`, `service`
   - Source pin verificado por Factory: `138d66cb44a94781e0d38d8afd1be2dbf718c294`
   - Recurso `postgres` · clase `postgresql` · owner `gm-auth` · shared `True`
-  - Bindings (sin valores): `DATABASE_URL` [database_url]
+  - Bindings (sin valores): `DATABASE_URL` [database_url, driver=psycopg]
 - `gm-pwa` v`0.1.5` · tipo `frontend` · modo seleccionado `embedded` · modos permitidos: `embedded`
   - Source pin verificado por Factory: `67e08f85f8c12f5953ee819c391bec050e227a64`
 
