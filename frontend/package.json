@@ -4,17 +4,20 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "npm --prefix node_modules/@goodmorning/gm-pwa run build && npm --prefix node_modules/@goodmorning/gm-auth run build",
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
+    "@goodmorning/gm-auth": "https://github.com/goodmorning-mx/gm-auth/archive/138d66cb44a94781e0d38d8afd1be2dbf718c294.tar.gz",
+    "@goodmorning/gm-pwa": "https://github.com/goodmorning-mx/gm-pwa/archive/67e08f85f8c12f5953ee819c391bec050e227a64.tar.gz",
     "@vitejs/plugin-react": "5.0.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "typescript": "5.8.3",
-    "vite": "7.3.6"
+    "vite": "^7.3.7"
   },
   "devDependencies": {
     "@types/react": "19.1.8",

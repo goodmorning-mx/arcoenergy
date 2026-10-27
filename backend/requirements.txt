@@ -6,3 +6,5 @@ psycopg[binary]==3.2.9
 alembic==1.16.4
 pytest==8.4.1
 httpx==0.28.1
+gm-auth @ git+https://github.com/goodmorning-mx/gm-auth.git@138d66cb44a94781e0d38d8afd1be2dbf718c294
+reportlab==4.4.4
