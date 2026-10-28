@@ -8,7 +8,7 @@ ArcoEnergy is delivered as separate public, mobile and desktop surfaces over one
 - `/api/`: FastAPI application with `gm-auth`, role permissions and product endpoints.
 - PostgreSQL 16: customers, quote folios, activities, follow-ups, installation tasks, inventory movements, project expenses and receivables.
 
-The Factory hybrid gateway is the only public frontend resource. It routes `/` and `/seo` to Next, `/app` to the PWA, `/crm` to the separate CRM service, and `/api` to FastAPI. All business routes require an authenticated identity with matching permissions. The public package catalog is marked as demonstration data until the customer supplies approved prices and equipment rules.
+The Factory hybrid gateway is the only public frontend resource. Its Nginx resolver refreshes private service addresses so Coolify container replacements cannot leave routes pointed at stale container IPs. It routes `/` and `/seo` to Next, `/app` to the PWA, `/crm` to the separate CRM service, and `/api` to FastAPI. All business routes require an authenticated identity with matching permissions. The public package catalog is marked as demonstration data until the customer supplies approved prices and equipment rules.
 
 ## Data and integrations
 
