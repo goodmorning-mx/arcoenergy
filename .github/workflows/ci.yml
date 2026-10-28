@@ -91,6 +91,26 @@ jobs:
       - run: curl --fail http://127.0.0.1:18081/ | grep -F 'ArcoEnergy'
       - run: curl --fail http://127.0.0.1:18081/app/ | grep -F 'ArcoEnergy Campo'
       - run: curl --fail http://127.0.0.1:18081/crm/ | grep -F 'ArcoEnergy'
+      - name: Verify routed PWA and CRM bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          verify_surface() {
+            local route="$1" html js css js_type css_type
+            html="$(curl --fail --silent --show-error "http://127.0.0.1:18081${route}/")"
+            js="$(printf '%s' "$html" | sed -nE 's/.*src="([^"]+\.js)".*/\1/p' | head -n1)"
+            css="$(printf '%s' "$html" | sed -nE 's/.*href="([^"]+\.css)".*/\1/p' | head -n1)"
+            [[ "$js" == "${route}"/assets/*.js ]]
+            [[ "$css" == "${route}"/assets/*.css ]]
+            js_type="$(curl --fail --silent --show-error --output "/tmp/arcoenergy-${route#/}-bundle.js" --write-out '%{content_type}' "http://127.0.0.1:18081${js}")"
+            css_type="$(curl --fail --silent --show-error --output "/tmp/arcoenergy-${route#/}-bundle.css" --write-out '%{content_type}' "http://127.0.0.1:18081${css}")"
+            [[ "$js_type" == application/javascript ]]
+            [[ "$css_type" == text/css ]]
+            [[ "$(wc -c < "/tmp/arcoenergy-${route#/}-bundle.js")" -gt 10000 ]]
+            [[ "$(wc -c < "/tmp/arcoenergy-${route#/}-bundle.css")" -gt 1000 ]]
+          }
+          verify_surface /app
+          verify_surface /crm
       - run: curl --fail http://127.0.0.1:18081/app/version.json | grep -F '"commit_sha":"unknown"'
       - run: curl --fail http://127.0.0.1:18081/crm/version.json | grep -F '"commit_sha":"unknown"'
       - if: always()
