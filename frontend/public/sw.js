@@ -13,7 +13,12 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     fetch(request).then((response) => {
-      if (response.ok) void caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+      if (response.ok) {
+        // Clone while the response body is still unused. Deferring clone() until
+        // caches.open() resolves races the browser consuming the response.
+        const cachedResponse = response.clone();
+        void caches.open(CACHE_NAME).then((cache) => cache.put(request, cachedResponse)).catch(() => {});
+      }
       return response;
     }).catch(() => caches.match(request).then((cached) => cached || caches.match('/app/'))),
   );
