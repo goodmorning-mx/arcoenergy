@@ -10,18 +10,48 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session, sessionmaker
-from gm_auth import require_permissions
+from gm_auth.dependencies import identity_dependency
+from gm_auth.models import AuthIdentity
 from gm_auth.models import memberships, users
 
 from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
 from app.models import Activity, Customer, FollowUp, Installation, InventoryItem, InventoryMovement, ProjectExpense, Quote, Receivable
+from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 
 settings = get_settings()
 engine = create_database_engine()
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 router = APIRouter(prefix="/v1", tags=["arcoenergy"])
+
+
+def require_permissions(service, *required: str):
+    """Check current membership permissions so role changes apply immediately."""
+    token_identity = identity_dependency(service)
+
+    def dependency(identity: AuthIdentity = Depends(token_identity)):
+        with service.engine.connect() as connection:
+            row = connection.execute(
+                select(users.c.email, users.c.name, memberships.c.roles, memberships.c.permissions)
+                .join(memberships, memberships.c.user_id == users.c.id)
+                .where(
+                    users.c.id == identity.user_id,
+                    users.c.is_active.is_(True),
+                    memberships.c.organization_id == identity.organization_id,
+                )
+            ).mappings().first()
+        if row is None:
+            raise HTTPException(status_code=401, detail="Active organization membership required.")
+        current = AuthIdentity(
+            identity.user_id, identity.organization_id, frozenset(row["roles"] or []),
+            frozenset(row["permissions"] or []), row["email"], row["name"],
+        )
+        if not set(required) <= current.permissions:
+            raise HTTPException(status_code=403, detail="Insufficient permissions.")
+        return current
+
+    return dependency
 
 
 def get_db():
@@ -243,19 +273,26 @@ def list_installations(db: Session = Depends(get_db)):
     return [{**_serialize(row), "customer": _serialize(db.get(Customer, row.customer_id))} for row in rows]
 
 
-@router.get("/inventory", dependencies=[Depends(require_permissions(auth_service, "inventory:read"))])
-def list_inventory(db: Session = Depends(get_db)):
-    return [_serialize(row) for row in db.scalars(select(InventoryItem).order_by(InventoryItem.name)).all()]
+@router.get("/inventory")
+def list_inventory(identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:read")), db: Session = Depends(get_db)):
+    rows = [_serialize(row) for row in db.scalars(select(InventoryItem).order_by(InventoryItem.name)).all()]
+    if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
+        for row in rows:
+            row.pop("unit_cost", None)
+    return rows
 
 
-@router.post("/inventory/consume", status_code=201, dependencies=[Depends(require_permissions(auth_service, "inventory:write"))])
-def consume_inventory(data: StockInput, db: Session = Depends(get_db)):
+@router.post("/inventory/consume", status_code=201)
+def consume_inventory(data: StockInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:write")), db: Session = Depends(get_db)):
     item = db.get(InventoryItem, data.item_id)
     if not item: raise HTTPException(404, "Artículo no encontrado.")
     if float(item.quantity) < data.quantity: raise HTTPException(409, "Existencia insuficiente para este consumo.")
     item.quantity = float(item.quantity) - data.quantity
     movement = InventoryMovement(**data.model_dump()); db.add(movement); db.commit(); db.refresh(movement)
-    return {"movement": _serialize(movement), "item": _serialize(item)}
+    serialized_item = _serialize(item)
+    if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
+        serialized_item.pop("unit_cost", None)
+    return {"movement": _serialize(movement), "item": serialized_item}
 
 
 @router.post("/inventory/receive", status_code=201, dependencies=[Depends(require_permissions(auth_service, "inventory:manage"))])
@@ -312,38 +349,66 @@ def integration_status():
     return {"google_drive": {"connected": drive, "status": "connected" if drive else "pending_configuration", "supports": ["quotes", "contracts", "receipts"]}, "whatsapp": {"connected": bool(settings.whatsapp_phone), "mode": "click_to_chat", "status": "configured" if settings.whatsapp_phone else "available_as_link"}, "contract_signing": {"connected": False, "status": "provider_and_legal_review_required"}, "electric_bill_analysis": {"connected": False, "status": "future_phase"}}
 
 
-ROLE_PERMISSIONS = {
-    "admin": {"customers:read", "customers:write", "quotes:read", "quotes:write", "installations:read", "installations:write", "inventory:read", "inventory:write", "inventory:manage", "expenses:read", "expenses:write", "receivables:read", "receivables:write", "team:manage"},
-    "ventas": {"customers:read", "customers:write", "quotes:read", "quotes:write", "installations:read"},
-    "instalador": {"installations:read", "inventory:read", "inventory:write", "expenses:read", "expenses:write"},
-    "finanzas": {"customers:read", "quotes:read", "receivables:read", "receivables:write", "expenses:read"},
-}
-
-
 @router.get("/team", dependencies=[Depends(require_permissions(auth_service, "team:manage"))])
 def team_list(db: Session = Depends(get_db)):
     with auth_service.engine.connect() as connection:
         rows = connection.execute(select(users.c.id, users.c.email, users.c.name, memberships.c.roles, memberships.c.permissions).join(memberships, users.c.id == memberships.c.user_id).where(memberships.c.organization_id == settings.organization_id)).mappings().all()
-    return [{"id": row["id"], "email": row["email"], "name": row["name"], "roles": row["roles"], "permissions": row["permissions"]} for row in rows]
+    return [{"id": row["id"], "email": row["email"], "name": row["name"], "roles": sorted({canonical_role(role) for role in row["roles"]}), "permissions": row["permissions"]} for row in rows]
+
+
+@router.get("/team/roles", dependencies=[Depends(require_permissions(auth_service, "team:manage"))])
+def team_roles():
+    return [{"id": role, "label": label, "permissions": sorted(ROLE_PERMISSIONS[role])} for role, label in ROLE_LABELS.items()]
 
 
 @router.post("/team", status_code=201, dependencies=[Depends(require_permissions(auth_service, "team:manage"))])
 def team_create(data: TeamMemberInput):
-    role = data.role.strip().lower()
+    role = canonical_role(data.role)
     if role not in ROLE_PERMISSIONS: raise HTTPException(422, "Rol no permitido.")
-    identity = auth_service.create_user(email=data.email, name=data.name, password=data.password, organization_id=settings.organization_id, roles={role}, permissions=ROLE_PERMISSIONS[role])
+    email = data.email.strip().lower()
+    if role == "cliente":
+        with SessionLocal() as db:
+            if not db.scalar(select(Customer.id).where(func.lower(Customer.email) == email)):
+                raise HTTPException(422, "Registra primero al cliente con este correo en la cartera.")
+    identity = auth_service.create_user(email=email, name=data.name.strip(), password=data.password, organization_id=settings.organization_id, roles={role}, permissions=set(ROLE_PERMISSIONS[role]))
     return {"id": identity.user_id, "email": identity.email, "name": identity.name, "roles": sorted(identity.roles), "permissions": sorted(identity.permissions)}
 
 
 @router.patch("/team/{user_id}", dependencies=[Depends(require_permissions(auth_service, "team:manage"))])
 def team_update_role(user_id: str, data: TeamRoleInput):
-    role = data.role.strip().lower()
+    role = canonical_role(data.role)
     if role not in ROLE_PERMISSIONS: raise HTTPException(422, "Rol no permitido.")
     with auth_service.engine.connect() as connection:
         member = connection.execute(select(memberships.c.user_id).where(memberships.c.user_id == user_id, memberships.c.organization_id == settings.organization_id)).first()
     if not member: raise HTTPException(404, "Usuario no encontrado.")
-    auth_service.set_membership(user_id=user_id, organization_id=settings.organization_id, roles={role}, permissions=ROLE_PERMISSIONS[role])
+    if role == "cliente":
+        with auth_service.engine.connect() as connection:
+            email = connection.execute(select(users.c.email).where(users.c.id == user_id)).scalar_one_or_none()
+        with SessionLocal() as db:
+            if not email or not db.scalar(select(Customer.id).where(func.lower(Customer.email) == email.lower())):
+                raise HTTPException(422, "Registra primero al cliente con este correo en la cartera.")
+    auth_service.set_membership(user_id=user_id, organization_id=settings.organization_id, roles={role}, permissions=set(ROLE_PERMISSIONS[role]))
     return {"id": user_id, "roles": [role], "permissions": sorted(ROLE_PERMISSIONS[role])}
+
+
+@router.get("/client/portal")
+def client_portal(identity: AuthIdentity = Depends(require_permissions(auth_service, "client:portal")), db: Session = Depends(get_db)):
+    return client_portal_data(identity, db)
+
+
+def client_portal_data(identity: AuthIdentity, db: Session):
+    if not identity.email:
+        raise HTTPException(403, "La cuenta cliente necesita un correo asociado.")
+    customers = db.scalars(select(Customer).where(func.lower(Customer.email) == identity.email.lower())).all()
+    if not customers:
+        raise HTTPException(404, "No hay una cuenta de cliente asociada a este correo.")
+    customer_ids = [customer.id for customer in customers]
+    return {
+        "customers": [{"id": row.id, "name": row.name, "city": row.city, "status": row.status} for row in customers],
+        "quotes": [_serialize(row) for row in db.scalars(select(Quote).where(Quote.customer_id.in_(customer_ids)).order_by(Quote.created_at.desc())).all()],
+        "installations": [_serialize(row) for row in db.scalars(select(Installation).where(Installation.customer_id.in_(customer_ids)).order_by(Installation.scheduled_at)).all()],
+        "payments": [{"installment_number": row.installment_number, "due_date": row.due_date, "amount": row.amount, "paid_amount": row.paid_amount, "balance": float(row.amount) - float(row.paid_amount), "status": row.status, "payment_method": row.payment_method} for row in db.scalars(select(Receivable).where(Receivable.customer_id.in_(customer_ids)).order_by(Receivable.due_date)).all()],
+    }
 
 
 @router.get("/whatsapp-link", dependencies=[Depends(require_permissions(auth_service, "customers:read"))])
