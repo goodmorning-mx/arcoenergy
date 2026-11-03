@@ -6,6 +6,7 @@ from gm_auth.models import organizations, users
 
 from app.config import get_settings
 from app.database import create_database_engine
+from app.roles import ROLE_PERMISSIONS
 
 settings = get_settings()
 auth_engine = create_database_engine()
@@ -26,4 +27,4 @@ def bootstrap_admin() -> None:
     with auth_engine.connect() as connection:
         admin = connection.execute(select(users.c.id).where(users.c.email == settings.admin_bootstrap_email.lower())).first()
     if admin is None:
-        auth_service.create_user(email=settings.admin_bootstrap_email, name="ArcoEnergy Admin", password=settings.admin_bootstrap_password, organization_id=settings.organization_id, roles={"admin"}, permissions={"customers:read", "customers:write", "quotes:read", "quotes:write", "installations:read", "installations:write", "inventory:read", "inventory:write", "inventory:manage", "expenses:read", "expenses:write", "receivables:read", "receivables:write", "team:manage"})
+        auth_service.create_user(email=settings.admin_bootstrap_email, name="ArcoEnergy Admin", password=settings.admin_bootstrap_password, organization_id=settings.organization_id, roles={"administrador"}, permissions=ROLE_PERMISSIONS["administrador"])
