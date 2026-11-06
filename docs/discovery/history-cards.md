@@ -508,3 +508,11 @@ CRM y PWA conservan accesos separados en `/crm/login` y `/app/login`; `/login` l
 | US-14 | Parcial funcional | Login CRM/PWA separado y acceso de cliente redirigido a PWA; completar revisión de permisos por entidad/campo. |
 | US-39 | Parcial funcional | CRM y PWA sin datos de muestra y rutas privadas tras login; hace falta completar el resto administrativo/financiero y configurar catálogo aprobado. |
 | US-40 | Parcial funcional | PWA consulta órdenes asignadas, actualiza checklist con autorización de API y activa avisos locales con permiso del navegador. Offline para escritura y push de fondo siguen pendientes. |
+
+## Iteración 10 — exportación del kardex (2026-11-06)
+
+El CRM ya permitía filtrar el kardex por artículo y rango de fechas, pero no descargarlo. Se agrega exportación CSV de los movimientos actualmente consultados. La exportación respeta el permiso de costos y escapa celdas de texto que podrían interpretarse como fórmulas. La fuente literal de la historia no se modifica.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-27 | Funcional básico | CRM expone filtro por artículo/fecha y descarga CSV del conjunto cargado (hasta 500 movimientos de API). Costos se exportan solo con permiso. Pendientes paginación/volúmenes mayores y valoración histórica completa. |
