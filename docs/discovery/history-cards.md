@@ -399,22 +399,21 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 | US-13 | Pendiente | Google Drive y políticas de carpetas/permisos. |
 | US-14 | Funcional en API y portales | Completar matriz de acceso por cada entidad/campo y pruebas de aislamiento. |
 | US-15–16, US-19 | Pendientes/parciales | Ventas contables, historial/aplicación de cobranza y alertas financieras; el resumen comercial actual no es estado financiero. |
-| US-17 | Funcional básico | Administrador y contador registran gastos operativos/directos por fecha, categoría, proyecto opcional y comprobante enlazado; el gasto descuenta la cuenta seleccionada. Falta autorización y conciliación bancaria. |
-| US-18 | Funcional básico | Se crean cuentas de efectivo/banco con saldo inicial y se consultan saldos/reportes; pagos a proveedores y gastos administrativos enlazan sus salidas; faltan ventas, cobranza y conciliación bancaria. |
+| US-17 | Funcional básico | Administrador y contador registran gastos operativos/directos por fecha, categoría, proyecto opcional y comprobante enlazado. Falta afectar una cuenta de caja/banco, autorización y conciliación. |
+| US-18 | Funcional básico | Se crean cuentas de efectivo/banco con saldo inicial y se consultan saldos/reportes; falta conciliación bancaria y vincular automáticamente los cobros, pagos y gastos. |
 | US-20 | Parcial | Artículos con descripción, unidad, existencia, mínimo y costo; faltan categoría, marca, modelo, proveedor y QR. |
-| US-21 | Funcional básico | Compra multirenglón con proveedor y referencia de factura; cada renglón aumenta almacén y conserva costo por movimiento; faltan captura XML y OCR de factura. |
-| US-22 | Pendiente | Lectura automática de factura XML/PDF y conciliación de datos antes de registrar. |
+| US-21–22 | Pendientes/parciales | Entrada individual de almacén disponible; faltan compra multirenglón, proveedor, factura/XML y OCR. |
 | US-23 | Funcional básico | El instalador devuelve contra una salida de su orden; el kardex enlaza ambos movimientos, limita el acumulado devuelto y repone existencias. Falta distinguir condición del material y aprobar costos de devolución. |
 | US-24 | Parcial | Consumo y devolución vinculados a la orden; falta diferenciar cantidades solicitadas, entregadas y consumidas con autorización previa. |
 | US-25 | Pendiente | Lectura asistida de orden/solicitud escaneada. |
 | US-26 | Funcional básico | CRM y PWA señalan existencias por debajo del mínimo configurado; faltan notificaciones push y asignación de responsable de reabasto. |
 | US-27 | Funcional básico | Kardex con entradas/salidas firmadas, responsable, fecha y referencia; registra costo para nuevos movimientos y deja el costo histórico como desconocido cuando no se capturó. Acceso de instalador limitado a sus propias órdenes. Faltan filtros expuestos en UI y exportación. |
 | US-28–29 | Pendientes | Cámara QR/código de barras e informes de operación. |
-| US-30 | Funcional básico | Proveedores y condiciones contado/crédito con días; el saldo se deriva de compras y pagos vinculados. |
-| US-31 | Funcional básico | Cuentas por pagar derivadas de compras; anticipos y pagos parciales/totales se vinculan a caja/banco y reducen el saldo del proveedor; falta conciliación y reversa enlazada. |
+| US-30 | Funcional básico | Proveedores y condiciones contado/crédito con días; el saldo queda pendiente hasta enlazar entradas de compra y pagos. |
+| US-31 | Pendiente | Compras multirenglón, saldos por proveedor y pagos vinculados. |
 | US-32 | Parcial | Orden enlazada con cliente y cotización; falta entidad proyecto y folio comercial acordado. |
 | US-33, US-35 | Pendientes | Libro contable de doble partida y efectos relacionados automáticos; no se inventó contabilidad sin validar sus reglas. |
-| US-34 | Funcional básico | Entradas/salidas manuales de efectivo o banco y pagos a proveedor vinculados, con saldos derivados e historial; faltan enlazar ventas, cobranza y gastos. |
+| US-34 | Funcional básico | Entradas/salidas manuales de efectivo o banco, saldo derivado e historial; las operaciones comerciales aún no se enlazan automáticamente. |
 | US-36 | Parcial | Las entradas/salidas manuales se corrigen con reversa append-only; falta extender la corrección relacionada a compras, ventas, cobranza e inventario. |
 | US-37 | Pendiente | Comparación con cada pantalla del sistema legado; falta acceso al entorno de César. |
 | US-38 | Pendiente | Estado de resultados con fórmula compartida; definir devoluciones, impuestos, costo y corte contable con Mario/Josué. |
@@ -422,5 +421,34 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 | US-40 | Parcial funcional | PWA autenticada con consulta de órdenes/inventario y captura de consumos/gastos; faltan flujos de cierre y trabajo offline. |
 | US-41 | Parcial funcional | Web pública y agente con catálogo aprobado; faltan credenciales y validación de experiencia de venta completa. |
 | US-42 | Funcional para registro/versiones | 42 tarjetas iniciales persistidas con fuente, vista administrativa e inserción append-only; cotejar reconstrucciones e incorporar futuras iteraciones. |
+
+## Iteración 3 — Compras y proveedores (2026-11-06)
+
+Cada tarjeta conserva las versiones previas; el relato fuente y su procedencia no se modifican.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-18 | Funcional básico | Saldos de caja/banco reflejan pagos de compra ligados al proveedor. Pendiente: ventas, cobranza y conciliación bancaria. |
+| US-21 | Funcional básico | Compra multirenglón con proveedor, referencia/factura, folio, costo por línea y entrada de existencias. Pendiente: XML/OCR, impuestos/fletes y valoración acordada. |
+| US-30 | Funcional básico | El saldo por pagar se deriva de compras y pagos vinculados al proveedor. |
+| US-31 | Funcional básico | Anticipos y pagos parciales/totales reducen la cuenta por pagar y descuentan caja/banco. Pendiente: conciliación y reversa enlazada a la compra. |
+| US-34 | Funcional básico | Pagos de compra ligados al proveedor se reflejan en las cuentas y conservan historial. Pendiente: ventas, cobranza y gastos. |
+
+## Iteración 4 — Gastos vinculados a cuentas (2026-11-06)
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-17 | Funcional básico | Los gastos administrativos/contables requieren cuenta activa y generan salida de caja/banco; gastos de campo siguen registrándose por orden en PWA. Pendiente: autorización, conciliación y anticipos/reembolsos de campo. |
+| US-18 | Funcional básico | Gastos administrativos y pagos a proveedores afectan la cuenta elegida. Pendiente: ventas, cobranza y conciliación bancaria. |
+| US-34 | Funcional básico | Movimientos ligados a compras y gastos administrativos se reflejan en cuentas con historial. Pendiente: enlazar ventas/cobros y conciliación. |
+
+## Iteración 5 — Cobranza de clientes (2026-11-06)
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-11 | Parcial funcional | CRM registra cuotas, abonos parciales y recordatorios WhatsApp iniciados por el encargado; los pagos aumentan la cuenta elegida. Pendiente: agenda/avisos automáticos y conexión con planes de venta. |
+| US-16 | Funcional básico | Cuotas manuales por cliente, forma de pago, pagos parciales con fecha/referencia e historial enlazado a caja/banco. Pendiente: generar cuotas desde ventas/crédito y distribuir un pago entre deudas. |
+| US-18 | Funcional básico | La cobranza aumenta caja/banco y los pagos ligados a compras/gastos reducen saldos. Pendiente: enlazar ventas y conciliar. |
+| US-34 | Funcional básico | Movimientos ligados a compras, gastos administrativos y abonos de clientes se reflejan en cuentas con historial. Pendiente: enlazar ventas y conciliación. |
 
 Las funciones marcadas como pendientes se mantienen visibles en el backlog. Los bloqueos de esta iteración no autorizan inventar precios, documentos legales, tratamiento biométrico, reglas contables ni credenciales de servicios externos.

@@ -23,7 +23,7 @@ from gm_auth.models import memberships, users
 from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
-from app.models import Activity, CashMovement, Customer, FinancialAccount, FollowUp, HistoryCard, Installation, InventoryItem, InventoryMovement, ProjectExpense, Purchase, PurchaseLine, Quote, QuotePackage, Receivable, Supplier, SupplierPayment
+from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InventoryItem, InventoryMovement, ProjectExpense, Purchase, PurchaseLine, Quote, QuotePackage, Receivable, Supplier, SupplierPayment
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 
 settings = get_settings()
@@ -393,6 +393,9 @@ class ReceivableInput(BaseModel):
 
 class PaymentInput(BaseModel):
     amount: Decimal = Field(gt=0)
+    account_id: str
+    paid_on: date = Field(default_factory=date.today)
+    reference: str = Field(default="", max_length=180)
 
 
 class TeamMemberInput(BaseModel):
@@ -1099,25 +1102,44 @@ def add_supplier_payment(purchase_id: str, data: SupplierPaymentInput, identity:
 def add_receivable(data: ReceivableInput, db: Session = Depends(get_db)):
     if not db.get(Customer, data.customer_id): raise HTTPException(404, "Cliente no encontrado.")
     row = Receivable(**data.model_dump(), status="overdue" if data.due_date < date.today() else "pending"); db.add(row); db.commit(); db.refresh(row)
-    return _serialize(row)
+    return _receivable_result(db, row)
 
 
 @router.get("/receivables", dependencies=[Depends(require_permissions(auth_service, "receivables:read"))])
 def list_receivables(db: Session = Depends(get_db)):
     rows = db.scalars(select(Receivable).order_by(Receivable.due_date)).all()
-    return [{**_serialize(row), "customer": _serialize(db.get(Customer,row.customer_id)), "balance": float(row.amount)-float(row.paid_amount)} for row in rows]
+    return [_receivable_result(db, row) for row in rows]
+
+
+def _receivable_result(db: Session, row: Receivable):
+    balance = Decimal(row.amount) - Decimal(row.paid_amount)
+    status = "paid" if balance <= 0 else "overdue" if row.due_date < date.today() else "partial" if row.paid_amount > 0 else "pending"
+    payments = db.scalars(select(CustomerPayment).where(CustomerPayment.receivable_id == row.id).order_by(CustomerPayment.paid_on.desc(), CustomerPayment.created_at.desc())).all()
+    account_names = {account.id: account.name for account in db.scalars(select(FinancialAccount).where(FinancialAccount.id.in_([payment.account_id for payment in payments]))).all()} if payments else {}
+    return {**_serialize(row), "customer": _serialize(db.get(Customer, row.customer_id)), "balance": balance, "status": status,
+        "payments": [{**_serialize(payment), "account_name": account_names.get(payment.account_id, "Cuenta")} for payment in payments]}
 
 
 @router.post("/receivables/{receivable_id}/payments", status_code=201, dependencies=[Depends(require_permissions(auth_service, "receivables:write"))])
-def record_payment(receivable_id: str, data: PaymentInput, db: Session = Depends(get_db)):
-    row = db.get(Receivable, receivable_id)
+def record_payment(receivable_id: str, data: PaymentInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    row = db.scalar(select(Receivable).where(Receivable.id == receivable_id).with_for_update())
     if not row: raise HTTPException(404, "Cuenta por cobrar no encontrada.")
     balance = Decimal(row.amount) - Decimal(row.paid_amount)
     if data.amount > balance: raise HTTPException(409, "El pago excede el saldo pendiente.")
+    account = db.scalar(select(FinancialAccount).where(FinancialAccount.id == data.account_id, FinancialAccount.active.is_(True)).with_for_update())
+    if account is None: raise HTTPException(404, "Selecciona una cuenta de caja o banco activa para recibir el pago.")
+    customer = db.get(Customer, row.customer_id)
+    movement = CashMovement(account_id=account.id, direction="in", amount=data.amount,
+        category="Cobranza de cliente", description=f"{customer.name if customer else 'Cliente'} · {row.payment_method}",
+        occurred_on=data.paid_on, source_type="customer_payment", created_by=identity.email or "")
+    db.add(movement); db.flush()
+    payment = CustomerPayment(receivable_id=row.id, account_id=account.id, cash_movement_id=movement.id,
+        amount=data.amount, paid_on=data.paid_on, reference=data.reference.strip(), created_by=identity.email or "")
+    db.add(payment); db.flush(); movement.source_id = payment.id
     row.paid_amount = Decimal(row.paid_amount) + data.amount
     row.status = "paid" if row.paid_amount >= row.amount else "partial"
     db.commit(); db.refresh(row)
-    return _serialize(row)
+    return {**_receivable_result(db, row), "payment": _serialize(payment), "account_name": account.name}
 
 
 @router.get("/integrations", dependencies=[Depends(require_permissions(auth_service, "team:manage"))])

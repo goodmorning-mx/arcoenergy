@@ -242,6 +242,19 @@ class Receivable(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
+class CustomerPayment(Base):
+    __tablename__ = "ae_customer_payments"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    receivable_id: Mapped[str] = mapped_column(ForeignKey("ae_receivables.id"), nullable=False, index=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("ae_financial_accounts.id"), nullable=False, index=True)
+    cash_movement_id: Mapped[str] = mapped_column(ForeignKey("ae_cash_movements.id"), unique=True, nullable=False)
+    amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    paid_on: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
+    reference: Mapped[str] = mapped_column(String(180), default="")
+    created_by: Mapped[str] = mapped_column(String(180), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
 class IntegrationStatus(Base):
     __tablename__ = "ae_integrations"
     __table_args__ = (UniqueConstraint("provider", name="uq_ae_integration_provider"),)

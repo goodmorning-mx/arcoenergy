@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNo
 import { AgentChat } from '@goodmorning/gm-agent';
 import { useAuth } from '@goodmorning/gm-auth';
 
-type View = 'inicio' | 'clientes' | 'cotizaciones' | 'seguimientos' | 'instalaciones' | 'inventario' | 'gastos' | 'cuentas' | 'proveedores' | 'compras' | 'catalogo' | 'equipo' | 'historial';
+type View = 'inicio' | 'clientes' | 'cotizaciones' | 'seguimientos' | 'instalaciones' | 'inventario' | 'gastos' | 'cobranza' | 'cuentas' | 'proveedores' | 'compras' | 'catalogo' | 'equipo' | 'historial';
 type Customer = { id: string; name: string; phone: string; email: string; city: string; address: string; status: string; source: string; created_at?: string };
 type Quote = { id: string; folio: string; customer_id: string; customer?: Customer; panel_count: number; panel_brand: string; panel_watts: number; inverter: string; payment_method: string; total: number; status: string; pricing_approved: boolean; installation_city: string; installation_address: string; created_at: string };
 type Package = { id: string; panel_count: number; panel_brand: string; panel_watts: number; panel_unit_price: number; structure_name: string; structure_price: number; inverter_options: Array<{ name: string; price_mxn: number }>; default_inverter: string; payment_methods: string[]; enabled: boolean; pricing_approved: boolean; price_mxn: number; system_kw: number };
@@ -17,6 +17,7 @@ type FinancialAccount = { id: string; name: string; account_type: 'cash' | 'bank
 type CashMovement = { id: string; account_id: string; direction: 'in' | 'out'; amount: number; category: string; description: string; occurred_on: string; source_type: string; source_id: string | null; reversal_of_id: string | null; created_by: string };
 type Supplier = { id: string; name: string; rfc: string; phone: string; email: string; payment_terms: 'cash' | 'credit'; credit_days: number; active: boolean; current_balance: number };
 type Purchase = { id: string; folio: string; supplier_id: string; supplier?: { id: string; name: string }; invoice_number: string; payment_terms: 'cash' | 'credit'; purchase_date: string; due_date: string | null; total: number; paid_amount: number; balance: number; status: string; lines: Array<{ id: string; item_name: string; quantity: number; unit_cost: number; line_total: number }> };
+type Receivable = { id: string; customer_id: string; customer?: Customer; quote_id: string | null; due_date: string; amount: number; paid_amount: number; balance: number; installment_number: number; payment_method: string; status: 'pending' | 'partial' | 'overdue' | 'paid'; payments?: Array<{ id: string; amount: number; paid_on: string; reference: string; account_name: string }> };
 type Dashboard = { customers?: number; quotes_open?: number; quotes_amount?: number; installations_active?: number; receivables_open?: number };
 type CatalogPayload = { packages: Package[]; payment_methods: string[]; catalog_note: string };
 type Notice = { type: 'success' | 'error' | 'info'; text: string };
@@ -67,6 +68,7 @@ export default function App() {
   const [accountMovements, setAccountMovements] = useState<CashMovement[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [receivables, setReceivables] = useState<Receivable[]>([]);
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamError, setTeamError] = useState('');
   const [teamName, setTeamName] = useState('');
@@ -86,12 +88,13 @@ export default function App() {
     ...(can('installations:read') ? ['instalaciones' as View] : []),
     ...(can('inventory:read') ? ['inventario' as View] : []),
     ...(can('expenses:read') ? ['gastos' as View] : []),
+    ...(can('receivables:read') ? ['cobranza' as View] : []),
     ...(can('accounts:read') ? ['cuentas' as View] : []),
     ...(can('suppliers:read') ? ['proveedores' as View] : []),
     ...(can('purchases:read') ? ['compras' as View] : []),
     ...(can('team:manage') ? ['catalogo' as View, 'equipo' as View, 'historial' as View] : []),
   ]), [can, clientAccount]);
-  const title: Record<View, string> = { inicio: 'Resumen', clientes: 'Clientes', cotizaciones: 'Cotizaciones', seguimientos: 'Seguimientos', instalaciones: 'Instalaciones', inventario: 'Inventario', gastos: 'Gastos operativos', cuentas: 'Caja y bancos', proveedores: 'Proveedores', compras: 'Compras y cuentas por pagar', catalogo: 'Catálogo de paquetes', equipo: 'Equipo y accesos', historial: 'History cards' };
+  const title: Record<View, string> = { inicio: 'Resumen', clientes: 'Clientes', cotizaciones: 'Cotizaciones', seguimientos: 'Seguimientos', instalaciones: 'Instalaciones', inventario: 'Inventario', gastos: 'Gastos operativos', cobranza: 'Cuentas por cobrar', cuentas: 'Caja y bancos', proveedores: 'Proveedores', compras: 'Compras y cuentas por pagar', catalogo: 'Catálogo de paquetes', equipo: 'Equipo y accesos', historial: 'History cards' };
 
   const announce = (text: string, type: Notice['type'] = 'success') => {
     setNotice({ text, type });
@@ -164,6 +167,12 @@ export default function App() {
       if (can('accounts:read')) void request<FinancialAccount[]>('/accounts', accessToken).then(setAccounts)
         .catch(error => announce(error instanceof Error ? error.message : 'No se pudieron cargar las cuentas de pago.', 'error'));
     }
+    if (view === 'cobranza' && accessToken && can('receivables:read')) {
+      void request<Receivable[]>('/receivables', accessToken).then(setReceivables)
+        .catch(error => announce(error instanceof Error ? error.message : 'No se pudo cargar la cartera.', 'error'));
+      if (can('accounts:read')) void request<FinancialAccount[]>('/accounts', accessToken).then(setAccounts)
+        .catch(error => announce(error instanceof Error ? error.message : 'No se pudieron cargar las cuentas para cobranza.', 'error'));
+    }
   }, [view, accessToken, can]);
 
   useEffect(() => {
@@ -210,6 +219,14 @@ export default function App() {
     const payload = { name: String(data.get('name') || '').trim(), rfc: String(data.get('rfc') || '').trim(), phone: String(data.get('phone') || '').trim(), email: String(data.get('email') || '').trim(), payment_terms: String(data.get('payment_terms')), credit_days: Number(data.get('credit_days') || 0) };
     try { const row = await request<Supplier>('/suppliers', accessToken, { method: 'POST', body: JSON.stringify(payload) }); setSuppliers(rows => [...rows, row].sort((a,b)=>a.name.localeCompare(b.name))); form.reset(); announce('Proveedor guardado.'); }
     catch(error) { announce(error instanceof Error ? error.message : 'No se pudo guardar el proveedor.', 'error'); }
+  }
+
+  async function createReceivable(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!accessToken) return;
+    const form = event.currentTarget; const data = new FormData(form);
+    const payload = { customer_id: String(data.get('customer_id')), quote_id: String(data.get('quote_id') || '') || null, due_date: String(data.get('due_date')), amount: Number(data.get('amount')), installment_number: Number(data.get('installment_number') || 1), payment_method: String(data.get('payment_method') || 'Transferencia') };
+    try { const created = await request<Receivable>('/receivables', accessToken, { method: 'POST', body: JSON.stringify(payload) }); setReceivables(rows => [created, ...rows]); form.reset(); announce('Saldo por cobrar registrado.'); }
+    catch(error) { announce(error instanceof Error ? error.message : 'No se pudo registrar el saldo.', 'error'); }
   }
 
   async function createCustomer(event: FormEvent<HTMLFormElement>) {
@@ -317,7 +334,7 @@ export default function App() {
   if (!identity || !accessToken) { window.location.replace('/crm/login'); return null; }
   if (clientAccount) return <div className="client-redirect"><div className="brand-mark">A</div><p>Tu portal de cliente está en la aplicación móvil.</p><a href="/app/" className="button button-primary">Abrir mi portal →</a><button className="text-button" onClick={() => void logout()}>Cerrar sesión</button></div>;
 
-  const nav: Array<[View, string, string]> = [['inicio', '◫', 'Resumen'], ['clientes', '♙', 'Clientes'], ['cotizaciones', '▤', 'Cotizaciones'], ['seguimientos', '◷', 'Seguimientos'], ...(can('installations:read') ? [['instalaciones', '⌂', 'Instalaciones']] as Array<[View, string, string]> : []), ...(can('inventory:read') ? [['inventario', '▦', 'Inventario']] as Array<[View, string, string]> : []), ...(can('expenses:read') ? [['gastos', '$', 'Gastos']] as Array<[View, string, string]> : []), ...(can('accounts:read') ? [['cuentas', '▤', 'Caja / bancos']] as Array<[View, string, string]> : []), ...(can('suppliers:read') ? [['proveedores', '♧', 'Proveedores']] as Array<[View, string, string]> : []), ...(can('purchases:read') ? [['compras', '▤', 'Compras / CxP']] as Array<[View, string, string]> : []), ...(can('team:manage') ? [['catalogo', '⊞', 'Catálogo'], ['equipo', '♧', 'Equipo'], ['historial', '↺', 'History cards']] as Array<[View, string, string]> : [])];
+  const nav: Array<[View, string, string]> = [['inicio', '◫', 'Resumen'], ['clientes', '♙', 'Clientes'], ['cotizaciones', '▤', 'Cotizaciones'], ['seguimientos', '◷', 'Seguimientos'], ...(can('installations:read') ? [['instalaciones', '⌂', 'Instalaciones']] as Array<[View, string, string]> : []), ...(can('inventory:read') ? [['inventario', '▦', 'Inventario']] as Array<[View, string, string]> : []), ...(can('expenses:read') ? [['gastos', '$', 'Gastos']] as Array<[View, string, string]> : []), ...(can('receivables:read') ? [['cobranza', '↙', 'Cobranza']] as Array<[View, string, string]> : []), ...(can('accounts:read') ? [['cuentas', '▤', 'Caja / bancos']] as Array<[View, string, string]> : []), ...(can('suppliers:read') ? [['proveedores', '♧', 'Proveedores']] as Array<[View, string, string]> : []), ...(can('purchases:read') ? [['compras', '▤', 'Compras / CxP']] as Array<[View, string, string]> : []), ...(can('team:manage') ? [['catalogo', '⊞', 'Catálogo'], ['equipo', '♧', 'Equipo'], ['historial', '↺', 'History cards']] as Array<[View, string, string]> : [])];
   const visibleCustomers = customers.filter(item => `${item.name} ${item.city} ${item.email} ${item.phone}`.toLowerCase().includes(search.toLowerCase()));
 
   return <div className="crm-app">
@@ -346,6 +363,7 @@ export default function App() {
         {view === 'instalaciones' && <InstallationsView items={installations} customers={customers} team={team} canWrite={can('installations:write')} token={accessToken || ''} onRefresh={refresh} announce={announce} />}
         {view === 'inventario' && <InventoryView items={inventory} movements={inventoryMovements} canManage={can('inventory:manage')} canReadCosts={can('inventory:costs:read') || can('inventory:manage')} token={accessToken || ''} onRefresh={refresh} onMovements={setInventoryMovements} announce={announce} />}
         {view === 'gastos' && <ExpensesView items={expenses} installations={installations} accounts={accounts} canWrite={can('expenses:write')} onSubmit={createExpense} />}
+        {view === 'cobranza' && <ReceivablesView items={receivables} customers={customers} quotes={quotes} accounts={accounts} canWrite={can('receivables:write')} token={accessToken || ''} onCreate={createReceivable} onItems={setReceivables} onAccounts={setAccounts} announce={announce} />}
         {view === 'cuentas' && <AccountsView accounts={accounts} selectedId={selectedAccountId} onSelect={setSelectedAccountId} movements={accountMovements} canManage={can('accounts:manage')} canWrite={can('accounts:write')} onCreateAccount={createAccount} onCreateMovement={createCashMovement} onReverse={reverseCashMovement} />}
         {view === 'proveedores' && <SuppliersView items={suppliers} canWrite={can('suppliers:manage')} onSubmit={createSupplier} />}
         {view === 'compras' && <PurchasesView items={purchases} suppliers={suppliers} inventory={inventory} accounts={accounts} canWrite={can('purchases:write')} token={accessToken || ''} onItems={setPurchases} onSuppliers={setSuppliers} onAccounts={setAccounts} onInventory={setInventory} announce={announce} />}
@@ -368,7 +386,7 @@ export default function App() {
   </div>;
 }
 
-function headingDescription(view: View) { return ({ inicio: '', clientes: 'Consulta prospectos, contactos y actividad comercial.', cotizaciones: 'Prepara, descarga y comparte propuestas con folio.', seguimientos: 'Da continuidad a las conversaciones y registra cada contacto.', instalaciones: 'Asigna y consulta órdenes de trabajo.', inventario: 'Administra materiales, entradas y existencias.', gastos: 'Registra gastos operativos y directos por fecha y proyecto.', cuentas: 'Consulta saldos y registra movimientos de caja y bancos.', proveedores: 'Administra proveedores y sus condiciones de pago.', compras: 'Registra entradas de material, facturas y saldos por pagar.', catalogo: 'Administra paquetes, inversores, precios y formas de pago.', equipo: 'Usuarios y privilegios para cada área.', historial: 'Conserva relatos, fuentes y versiones de cada user story card.' })[view] || ''; }
+function headingDescription(view: View) { return ({ inicio: '', clientes: 'Consulta prospectos, contactos y actividad comercial.', cotizaciones: 'Prepara, descarga y comparte propuestas con folio.', seguimientos: 'Da continuidad a las conversaciones y registra cada contacto.', instalaciones: 'Asigna y consulta órdenes de trabajo.', inventario: 'Administra materiales, entradas y existencias.', gastos: 'Registra gastos operativos y directos por fecha y proyecto.', cobranza: 'Administra saldos, abonos recibidos y recordatorios a clientes.', cuentas: 'Consulta saldos y registra movimientos de caja y bancos.', proveedores: 'Administra proveedores y sus condiciones de pago.', compras: 'Registra entradas de material, facturas y saldos por pagar.', catalogo: 'Administra paquetes, inversores, precios y formas de pago.', equipo: 'Usuarios y privilegios para cada área.', historial: 'Conserva relatos, fuentes y versiones de cada user story card.' })[view] || ''; }
 
 function DashboardView({ data, customers, quotes, followups, can, onCustomer, onView, onComplete }: { data: Dashboard; customers: Customer[]; quotes: Quote[]; followups: FollowUp[]; can: (p: string) => boolean; onCustomer: (c: Customer) => void; onView: (v: View) => void; onComplete: (f: FollowUp) => void }) {
   const recent = [...quotes].slice(0, 4);
@@ -484,6 +502,40 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
       <div className="data-table-wrap"><table className="data-table"><thead><tr><th>FOLIO / PROVEEDOR</th><th>FACTURA / MATERIALES</th><th>FECHAS</th><th>TOTAL</th><th>PAGADO</th><th>SALDO</th><th>ESTADO</th><th/></tr></thead><tbody>{items.map(item => <tr key={item.id}><td><b>{item.folio}</b><small className="sub-cell">{item.supplier?.name || 'Proveedor'}</small></td><td>{item.invoice_number || 'Sin factura'}<small className="sub-cell">{item.lines.map(line => `${line.item_name} × ${line.quantity}`).join(' · ')}</small></td><td>{new Date(`${item.purchase_date}T12:00:00`).toLocaleDateString('es-MX')}<small className="sub-cell">{item.due_date ? `Vence ${new Date(`${item.due_date}T12:00:00`).toLocaleDateString('es-MX')}` : 'Contado'}</small></td><td><b>{money(Number(item.total))}</b></td><td>{money(Number(item.paid_amount))}</td><td><b>{money(Number(item.balance))}</b></td><td><span className={`status-chip ${item.status === 'paid' ? 'status-approved' : 'status-overdue'}`}>{item.status === 'paid' ? 'Pagada' : item.status === 'partially_paid' ? 'Pago parcial' : 'Pendiente'}</span></td><td>{canWrite && Number(item.balance) > 0 && <button className="button button-small button-outline" onClick={() => setPaymentPurchase(item)}>Registrar pago</button>}</td></tr>)}</tbody></table>{!items.length && <EmptyState title="Sin compras registradas" body="Al registrar una compra, sus renglones aumentan existencias y el saldo se vincula al proveedor."/>}</div>
     </section>
     {paymentPurchase && <Modal title={`Pago a ${paymentPurchase.supplier?.name || 'proveedor'}`} subtitle={`Saldo pendiente: ${money(Number(paymentPurchase.balance))}`} onClose={() => setPaymentPurchase(null)}><form className="form-grid" onSubmit={submitPayment}><Field label="Importe" name="amount" type="number" min="0.01" max={Number(paymentPurchase.balance)} step="0.01" required/><Field label="Fecha de pago" name="paid_on" type="date" defaultValue={today} required/><label className="field span-two"><span>Cuenta de salida</span><select name="account_id" required><option value="">Selecciona caja o banco</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name} · {money(Number(account.current_balance))}</option>)}</select></label><Field className="span-two" label="Referencia" name="reference" placeholder="Transferencia, recibo…"/><div className="modal-actions span-two"><button type="button" className="button button-outline" onClick={() => setPaymentPurchase(null)}>Cancelar</button><button className="button button-primary">Guardar pago</button></div></form></Modal>}
+  </>;
+}
+
+function ReceivablesView({ items, customers, quotes, accounts, canWrite, token, onCreate, onItems, onAccounts, announce }: { items: Receivable[]; customers: Customer[]; quotes: Quote[]; accounts: FinancialAccount[]; canWrite: boolean; token: string; onCreate: (event: FormEvent<HTMLFormElement>) => void; onItems: (rows: Receivable[]) => void; onAccounts: (rows: FinancialAccount[]) => void; announce: (message: string, type?: Notice['type']) => void }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [paymentReceivable, setPaymentReceivable] = useState<Receivable | null>(null);
+  const openBalance = items.reduce((sum, item) => sum + Number(item.balance), 0);
+  const overdueBalance = items.filter(item => item.status === 'overdue').reduce((sum, item) => sum + Number(item.balance), 0);
+
+  async function submitPayment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!paymentReceivable) return;
+    const form = event.currentTarget; const data = new FormData(form);
+    try {
+      await request<Receivable>(`/receivables/${paymentReceivable.id}/payments`, token, { method: 'POST', body: JSON.stringify({ amount: Number(data.get('amount')), account_id: String(data.get('account_id')), paid_on: String(data.get('paid_on')), reference: String(data.get('reference') || '') }) });
+      const [rows, accountRows] = await Promise.all([request<Receivable[]>('/receivables', token), request<FinancialAccount[]>('/accounts', token)]);
+      onItems(rows); onAccounts(accountRows); setPaymentReceivable(null); announce('Cobranza guardada y entrada aplicada a caja o banco.');
+    } catch(error) { announce(error instanceof Error ? error.message : 'No se pudo aplicar el pago.', 'error'); }
+  }
+
+  function shareReminder(item: Receivable) {
+    if (!item.customer?.phone) return;
+    const digits = item.customer.phone.replace(/\D/g, '');
+    const phone = digits.length === 10 ? `52${digits}` : digits;
+    const dateLabel = new Date(`${item.due_date}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'long' });
+    const situation = item.status === 'overdue' ? `está vencido desde el ${dateLabel}` : item.due_date === today ? 'vence el día de hoy' : `vence el ${dateLabel}`;
+    const message = `Hola ${item.customer.name}, te escribimos de Arco Energy para recordarte que tu pago de ${money(Number(item.balance))} ${situation}. Si ya realizaste el pago, compártenos el comprobante. ¡Gracias!`;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+  }
+
+  return <>
+    <div className="metric-grid"><Metric label="CARTERA ABIERTA" value={money(openBalance)} note={`${items.filter(item => item.balance > 0).length} saldos pendientes`} icon="$" tone="rose"/><Metric label="VENCIDO" value={money(overdueBalance)} note="Saldo con fecha vencida" icon="!" tone="amber"/><Metric label="CUENTAS REGISTRADAS" value={String(items.length)} note="Cuotas y saldos capturados" icon="↙" tone="blue"/></div>
+    {canWrite && <section className="surface-card table-surface purchase-entry"><div className="section-title"><div><span className="eyebrow">CARTERA DE CLIENTES</span><h2>Registrar saldo por cobrar</h2></div></div><p className="muted-copy">Captura la cuota acordada con el cliente. La integración automática con ventas y planes de financiamiento queda pendiente de definir con contabilidad.</p><form className="form-grid" onSubmit={onCreate}><label className="field"><span>Cliente</span><select name="customer_id" required defaultValue=""><option value="">Selecciona un cliente</option>{customers.map(item=><option key={item.id} value={item.id}>{item.name} · {item.city}</option>)}</select></label><label className="field"><span>Cotización asociada (opcional)</span><select name="quote_id" defaultValue=""><option value="">Sin cotización vinculada</option>{quotes.map(item=><option key={item.id} value={item.id}>{item.folio} · {item.customer?.name || 'Cliente'}</option>)}</select></label><Field label="Vencimiento" name="due_date" type="date" min={today} defaultValue={today} required/><Field label="Importe de la cuota (MXN)" name="amount" type="number" min="0.01" step="0.01" required/><Field label="Número de cuota" name="installment_number" type="number" min="1" step="1" defaultValue={1} required/><label className="field"><span>Forma de pago acordada</span><select name="payment_method" defaultValue="Transferencia"><option>Transferencia</option><option>Efectivo</option><option>Tarjeta</option><option>Otro</option></select></label><div className="modal-actions span-two"><button className="button button-primary" disabled={!customers.length}>Registrar saldo</button></div></form></section>}
+    <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">CUENTAS POR COBRAR</span><h2>{items.length} cuotas · {money(openBalance)} pendientes</h2></div></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>VENCIMIENTO / CLIENTE</th><th>COTIZACIÓN / FORMA DE PAGO</th><th>CUOTA</th><th>PAGADO / ABONOS</th><th>SALDO</th><th>ESTADO</th><th>ACCIONES</th></tr></thead><tbody>{items.map(item=><tr key={item.id}><td>{new Date(`${item.due_date}T12:00:00`).toLocaleDateString('es-MX')}<small className="sub-cell">{item.customer?.name || 'Cliente'}{item.customer?.phone ? ` · ${item.customer.phone}` : ''}</small></td><td>{item.quote_id ? quotes.find(quote => quote.id === item.quote_id)?.folio || 'Cotización vinculada' : 'Sin cotización'}<small className="sub-cell">{item.payment_method}</small></td><td>{item.installment_number}</td><td>{money(Number(item.paid_amount))}<small className="sub-cell">{(item.payments || []).map(payment => `${new Date(`${payment.paid_on}T12:00:00`).toLocaleDateString('es-MX')} · ${money(Number(payment.amount))} · ${payment.account_name}${payment.reference ? ` · ${payment.reference}` : ''}`).join(' | ') || 'Sin abonos'}</small></td><td><b>{money(Number(item.balance))}</b></td><td><span className={`status-chip ${item.status === 'paid' ? 'status-approved' : item.status === 'overdue' ? 'status-overdue' : item.status === 'partial' ? 'status-draft' : ''}`}>{item.status === 'paid' ? 'Pagada' : item.status === 'overdue' ? 'Vencida' : item.status === 'partial' ? 'Abono parcial' : 'Pendiente'}</span></td><td><div className="row-actions">{canWrite && item.balance > 0 && <button onClick={() => setPaymentReceivable(item)}>Registrar pago</button>}{canWrite && item.balance > 0 && item.customer?.phone && <button onClick={() => shareReminder(item)}>WhatsApp</button>}</div></td></tr>)}</tbody></table>{!items.length && <EmptyState title="Sin cuentas por cobrar" body="Registra una cuota acordada para comenzar el control y aplicar pagos recibidos."/>}</div></section>
+    {paymentReceivable && <Modal title={`Registrar pago · ${paymentReceivable.customer?.name || 'Cliente'}`} subtitle={`Saldo pendiente: ${money(Number(paymentReceivable.balance))}`} onClose={() => setPaymentReceivable(null)}><form className="form-grid" onSubmit={submitPayment}><Field label="Importe recibido" name="amount" type="number" min="0.01" max={Number(paymentReceivable.balance)} step="0.01" required/><Field label="Fecha de pago" name="paid_on" type="date" defaultValue={today} required/><label className="field span-two"><span>Cuenta que recibió el pago</span><select name="account_id" required defaultValue=""><option value="">Selecciona caja o banco</option>{accounts.map(account=><option key={account.id} value={account.id}>{account.name} · {money(Number(account.current_balance))}</option>)}</select></label><Field className="span-two" label="Referencia / comprobante (opcional)" name="reference" placeholder="Transferencia, recibo…"/><div className="modal-actions span-two"><button type="button" className="button button-outline" onClick={() => setPaymentReceivable(null)}>Cancelar</button><button className="button button-primary" disabled={!accounts.length}>Aplicar pago</button></div></form></Modal>}
   </>;
 }
 
