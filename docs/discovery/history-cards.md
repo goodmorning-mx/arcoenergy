@@ -524,3 +524,11 @@ En la PWA, cada instalación ahora muestra el material solicitado, consumido y p
 | Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
 | --- | --- | --- |
 | US-8 | Parcial funcional | PWA relaciona material solicitado por orden con existencia, reservas y disponibilidad; alerta de déficit de reservas globales. Pendiente asignar/priorizar faltantes por orden y notificar reabasto. |
+
+## Iteración 12 — alertas operativas del dashboard (2026-11-06)
+
+El CRM muestra artículos bajo el mínimo configurado, cuentas por cobrar vencidas o próximas a vencer en los siguientes 7 días y saldos de caja/bancos. Cada grupo de información aparece únicamente para identidades con el permiso correspondiente. El cálculo no añade reglas financieras nuevas. El dashboard continúa parcial: falta que administración y contador validen métricas, umbrales, gráficas y periodo formal del flujo de efectivo.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-19 | Parcial funcional | Dashboard presenta alertas de inventario/cobranza y saldos por permiso. Pendientes indicadores y umbrales acordados, gráficas y flujo de efectivo por periodo validado. |
