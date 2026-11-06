@@ -2,8 +2,30 @@
 
 - **Propósito:** conservar los hallazgos por stakeholder, fuente e iteración para poder revisar cómo evolucionan sin borrar lo que se dijo antes.
 - **Estado:** registro documental de descubrimiento; todavía no es una base de datos funcional ni un backlog aprobado.
+- **MUST — preservación literal:** todo hallazgo debe guardar el relato original literal del stakeholder (o una referencia durable al artefacto original cuando no sea texto), separado de la user story normalizada. Nunca reemplazar, corregir ni parafrasear el original al actualizar una tarjeta.
 - **Cuidado con la reconstrucción:** US-1 a US-34 se reconstituyen aquí a partir de mensajes, fuentes y los resúmenes disponibles en la conversación. Los IDs US-15 a US-32 se asignan a capacidades explícitas del Word del contador para recuperar el rango histórico, pero no se cuenta con una exportación de las tarjetas originales que confirme su título/texto exactos. Deben validarse en una próxima iteración.
 - **Regla de evolución:** agregar nuevas versiones/iteraciones relacionadas; no reemplazar la fuente original. Las reglas contables pendientes no se deben tratar como comportamiento aprobado.
+
+## MUST — conservar la voz original del stakeholder
+
+Este es un requisito obligatorio para el proceso de discovery y para el futuro modelo de datos:
+
+1. Guardar el **contenido literal** aportado por el stakeholder, sin normalizar su redacción. Para texto/audio transcrito, preservar el mensaje o transcripción fuente; para documentos, conservar el archivo original y registrar páginas/secciones o extractos literales con ubicación; para imágenes, conservar el artefacto y su referencia.
+2. Mantenerlo separado de la **interpretación**: user story, criterios de aceptación, reglas inferidas, preguntas y decisiones del equipo son datos derivados y deben enlazar al relato fuente que los sustenta.
+3. Registrar procedencia mínima: stakeholder/autor tal como se conoce, fecha/hora original si está disponible, canal o tipo de artefacto, identificador/ruta de fuente, iteración y versión de transcripción cuando aplique.
+4. No sobrescribir fuentes ni versiones previas. Las correcciones, aclaraciones y nuevas interpretaciones se agregan como eventos/versiones nuevas, enlazadas con la tarjeta anterior y su fuente.
+5. Marcar explícitamente lo incierto: transcripción dudosa, texto ilegible, fecha aproximada, atribución no confirmada o paráfrasis reconstruida. Nunca presentar una reconstrucción como cita literal.
+6. Aplicar permisos y retención adecuados a datos personales y documentos sensibles. Las referencias a archivos pueden apuntar a almacenamiento privado autorizado; no se deben publicar INE, teléfonos, direcciones ni audios sensibles en repositorios abiertos.
+
+### Campos mínimos que deberá soportar la base de datos
+
+- `source_artifact`: tipo, referencia durable, hash opcional, canal y ubicación exacta (página/minuto/mensaje) cuando corresponda.
+- `source_literal`: texto literal o transcripción original, con idioma, autor/atribución, fecha y estado de confianza.
+- `story_card`: necesidad normalizada, actor, valor, criterios, preguntas abiertas y estado.
+- `source_links`: relación entre una o más fuentes y cada tarjeta/versión, indicando si el vínculo es cita, paráfrasis, inferencia o validación explícita.
+- `iteration` y `revision`: fecha, stakeholder que validó, cambios introducidos y vínculo a la revisión anterior; historial append-only.
+
+La restricción del repositorio sobre datos sensibles no elimina este MUST: los originales deben quedar en un almacenamiento privado con control de acceso y la tarjeta debe conservar una referencia durable y verificable. En Markdown/Git se documentan las fuentes no sensibles o las ubicaciones autorizadas, no se publican datos personales.
 
 ## Iteración 1 — Requerimientos de Goito Profugo
 
@@ -307,4 +329,5 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 - Audios del contador: fuente de US-33 y US-34; audio y WAV procesados permanecen fuera del repositorio por privacidad.
 - Mensajes de Mario y fotografía de orden/solicitud de materiales: fuente de US-35 a US-38.
 - La forma exacta de las tarjetas US-1 a US-34 se recuperó de requisitos y resúmenes disponibles, no de una exportación histórica de tarjetas. Revisar en futuras iteraciones cualquier diferencia con lo dicho originalmente.
+- Para US-1 a US-34 el registro actual no contiene el relato literal completo; se debe recuperar y asociar desde las fuentes originales conforme al MUST anterior. No citar las reconstrucciones como palabras textuales.
 - No se persisten nombres, teléfonos, direcciones, INE ni archivos de clientes reales dentro de este registro.
