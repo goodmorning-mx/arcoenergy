@@ -117,7 +117,12 @@ jobs:
           smoke_render /app/login 'Iniciar sesión'
           smoke_render /crm/login 'Iniciar sesión'
       - name: Verify administrative sign-in alias
-        run: test "$(curl --silent --output /dev/null --write-out '%{redirect_url}' http://127.0.0.1:18081/login)" = 'http://127.0.0.1:18081/crm/login'
+        shell: bash
+        run: |
+          set -euo pipefail
+          headers="$(curl --silent --show-error --dump-header - --output /dev/null http://127.0.0.1:18081/login)"
+          grep -Eq '^HTTP/[^ ]+ 302' <<<"$headers"
+          grep -Eiq '^location: (https?://[^/]+)?/crm/login\r?$' <<<"$headers"
       - name: Verify routed PWA and CRM bundles
         shell: bash
         run: |
