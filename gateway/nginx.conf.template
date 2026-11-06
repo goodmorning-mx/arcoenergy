@@ -27,7 +27,11 @@ server {
   }
 
   location = /login {
-    return 302 /crm/login;
+    rewrite ^ /crm/login last;
+  }
+
+  location = /login/ {
+    rewrite ^ /crm/login last;
   }
 
   location /crm/ {
