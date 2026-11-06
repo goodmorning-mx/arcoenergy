@@ -12,6 +12,8 @@ Organizar lo aprendido en una propuesta de producto para Arco Energy: qué va en
 
 El registro de las tarjetas US-1 a US-38 está en [history-cards.md](history-cards.md). Las tarjetas US-1 a US-34 se reconstruyeron desde mensajes, fuentes y resúmenes disponibles y deben cotejarse con las tarjetas originales en una próxima iteración.
 
+**MUST de discovery:** preservar literalmente la voz del stakeholder y su fuente, separadas de la user story derivada; nunca sobrescribir versiones anteriores. El detalle obligatorio y los campos que deberá soportar la futura base de datos están definidos en la sección “MUST — conservar la voz original del stakeholder” de [history-cards.md](history-cards.md).
+
 ## Decisiones y dirección acordadas
 
 1. El producto se organiza en tres portales independientes:
