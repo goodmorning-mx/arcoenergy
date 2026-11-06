@@ -516,3 +516,11 @@ El CRM ya permitía filtrar el kardex por artículo y rango de fechas, pero no d
 | Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
 | --- | --- | --- |
 | US-27 | Funcional básico | CRM expone filtro por artículo/fecha y descarga CSV del conjunto cargado (hasta 500 movimientos de API). Costos se exportan solo con permiso. Pendientes paginación/volúmenes mayores y valoración histórica completa. |
+
+## Iteración 11 — existencias por orden para campo (2026-11-06)
+
+En la PWA, cada instalación ahora muestra el material solicitado, consumido y pendiente, junto con existencia física y reservas globales activas. La interfaz advierte cuando el total reservado supera la existencia física, de modo que el instalador pueda detectar una posible falta antes del trabajo. La señal es global al artículo porque el sistema aún no tiene una regla aprobada para repartir un faltante entre órdenes concurrentes.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-8 | Parcial funcional | PWA relaciona material solicitado por orden con existencia, reservas y disponibilidad; alerta de déficit de reservas globales. Pendiente asignar/priorizar faltantes por orden y notificar reabasto. |
