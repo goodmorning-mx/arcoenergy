@@ -907,19 +907,30 @@ def consume_inventory(data: StockInput, identity: AuthIdentity = Depends(require
     if Decimal(str(item.quantity)) < stock_out:
         raise HTTPException(409, "Existencia insuficiente para este consumo.")
     item.quantity = Decimal(str(item.quantity)) - stock_out
+    physical_issue = None
+    if stock_out > 0:
+        physical_issue = InventoryMovement(
+            item_id=data.item_id, installation_id=data.installation_id,
+            quantity=stock_out, movement_type="out",
+            work_order_material_id=material.id if material else None,
+            unit_cost=item.unit_cost, reason="Salida para consumo en orden de trabajo",
+            created_by=identity.email or "",
+        )
+        db.add(physical_issue); db.flush()
     movement = InventoryMovement(
         item_id=data.item_id, installation_id=data.installation_id,
-        quantity=stock_out if stock_out > 0 else data.quantity,
-        movement_type="out" if stock_out > 0 else "consumption",
+        quantity=data.quantity, movement_type="consumption",
+        related_movement_id=physical_issue.id if physical_issue else None,
         work_order_material_id=material.id if material else None,
-        unit_cost=item.unit_cost, reason=("Salida para consumo en orden de trabajo" if stock_out > 0 else "Consumo de material previamente apartado"),
+        unit_cost=item.unit_cost,
+        reason=(data.reason.strip() or "Consumo confirmado en orden de trabajo"),
         created_by=identity.email or "",
     )
     db.add(movement); db.commit(); db.refresh(movement)
     serialized_item = _serialize(item)
     if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
         serialized_item.pop("unit_cost", None)
-    return {"movement": _serialize(movement), "item": serialized_item}
+    return {"movement": _serialize(movement), "physical_issue": _serialize(physical_issue), "item": serialized_item}
 
 
 @router.post("/inventory/receive", status_code=201)
@@ -978,6 +989,22 @@ def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depend
         material.preissued_quantity = Decimal(str(material.preissued_quantity)) - Decimal(str(data.quantity))
         if source.reason.startswith("Salida para consumo"):
             material.consumed_quantity = Decimal(str(material.consumed_quantity)) - Decimal(str(data.quantity))
+            consumption = db.scalar(select(InventoryMovement).where(
+                InventoryMovement.related_movement_id == source.id,
+                InventoryMovement.movement_type == "consumption",
+            ).with_for_update())
+            if consumption is not None:
+                db.add(InventoryMovement(
+                    item_id=source.item_id,
+                    installation_id=source.installation_id,
+                    related_movement_id=consumption.id,
+                    work_order_material_id=material.id,
+                    quantity=data.quantity,
+                    movement_type="consumption_return",
+                    unit_cost=source.unit_cost,
+                    reason="Consumo corregido por devolución de sobrante",
+                    created_by=identity.email or "",
+                ))
     db.add(movement); db.commit(); db.refresh(movement)
     serialized_item = _serialize(item)
     serialized_movement = _serialize(movement)
@@ -1020,7 +1047,7 @@ def list_inventory_movements(
     result = []
     for movement, item_name, unit, returned_quantity in rows:
         line = _serialize(movement)
-        line.update({"item_name": item_name, "unit": unit, "signed_quantity": -float(movement.quantity) if movement.movement_type in {"out", "waste"} else (0.0 if movement.movement_type == "consumption" else float(movement.quantity))})
+        line.update({"item_name": item_name, "unit": unit, "signed_quantity": -float(movement.quantity) if movement.movement_type in {"out", "waste"} else (0.0 if movement.movement_type in {"consumption", "consumption_return"} else float(movement.quantity))})
         if movement.movement_type == "out":
             line["returnable_quantity"] = max(0.0, float(movement.quantity) - float(returned_quantity or 0))
         if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
@@ -1420,6 +1447,130 @@ def whatsapp_link(phone: str, message: str):
     digits = "".join(character for character in phone if character.isdigit())
     if len(digits) < 10: raise HTTPException(422, "El teléfono debe incluir al menos 10 dígitos.")
     return {"url": f"https://wa.me/{digits}?text={urlquote(message)}", "automatic_sending": False}
+
+
+@router.get("/reports/profitability", dependencies=[Depends(require_permissions(auth_service, "reports:read"))])
+def profitability_report(
+    month: str | None = None,
+    installation_id: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """Show a preliminary operating result using recorded sales, material-use events, and expenses."""
+    if month is not None:
+        try:
+            year_text, month_text = month.split("-", maxsplit=1)
+            year, month_number = int(year_text), int(month_text)
+            period_start = date(year, month_number, 1)
+        except (ValueError, TypeError):
+            raise HTTPException(422, "El periodo debe tener formato AAAA-MM.")
+        if len(year_text) != 4 or len(month_text) != 2 or not 2000 <= year <= 2200:
+            raise HTTPException(422, "El periodo debe tener formato AAAA-MM.")
+        period_end = date(year + (month_number == 12), 1 if month_number == 12 else month_number + 1, 1)
+        start_at = datetime.combine(period_start, datetime.min.time(), tzinfo=timezone.utc)
+        end_at = datetime.combine(period_end, datetime.min.time(), tzinfo=timezone.utc)
+    elif installation_id is None:
+        today = date.today()
+        period_start = date(today.year, today.month, 1)
+        period_end = date(today.year + (today.month == 12), 1 if today.month == 12 else today.month + 1, 1)
+        month = f"{today.year:04d}-{today.month:02d}"
+        start_at = datetime.combine(period_start, datetime.min.time(), tzinfo=timezone.utc)
+        end_at = datetime.combine(period_end, datetime.min.time(), tzinfo=timezone.utc)
+    else:
+        period_start = period_end = None
+        start_at = end_at = None
+
+    if installation_id and db.get(Installation, installation_id) is None:
+        raise HTTPException(404, "Proyecto u orden de trabajo no encontrado.")
+
+    grouped: dict[str | None, dict] = {}
+
+    def project_row(project_id: str | None) -> dict:
+        if project_id not in grouped:
+            installation = db.get(Installation, project_id) if project_id else None
+            customer = db.get(Customer, installation.customer_id) if installation else None
+            grouped[project_id] = {
+                "installation_id": project_id,
+                "folio": installation.folio if installation else None,
+                "project": customer.name if customer else ("Gastos sin proyecto" if project_id is None else "Proyecto"),
+                "city": customer.city if customer else "",
+                "sales": Decimal("0"),
+                "materials_cost": Decimal("0"),
+                "expenses": Decimal("0"),
+                "expenses_by_category": {},
+                "missing_cost_movements": 0,
+                "material_events": 0,
+            }
+        return grouped[project_id]
+
+    sales_query = select(Sale, Installation, Customer).join(Installation, Installation.id == Sale.installation_id).join(Customer, Customer.id == Sale.customer_id)
+    if installation_id:
+        sales_query = sales_query.where(Sale.installation_id == installation_id)
+    if start_at is not None and end_at is not None:
+        sales_query = sales_query.where(Sale.created_at >= start_at, Sale.created_at < end_at)
+    for sale, installation, customer in db.execute(sales_query).all():
+        row = project_row(installation.id)
+        row["project"] = customer.name
+        row["city"] = customer.city
+        row["sales"] += Decimal(sale.total)
+
+    material_query = select(InventoryMovement).where(InventoryMovement.movement_type.in_(["consumption", "consumption_return"]))
+    if installation_id:
+        material_query = material_query.where(InventoryMovement.installation_id == installation_id)
+    if start_at is not None and end_at is not None:
+        material_query = material_query.where(InventoryMovement.created_at >= start_at, InventoryMovement.created_at < end_at)
+    for movement in db.scalars(material_query).all():
+        row = project_row(movement.installation_id)
+        row["material_events"] += 1
+        if movement.unit_cost is None:
+            row["missing_cost_movements"] += 1
+            continue
+        quantity = Decimal(movement.quantity)
+        cost = quantity * Decimal(movement.unit_cost)
+        if movement.movement_type == "consumption_return":
+            row["materials_cost"] -= cost
+        else:
+            row["materials_cost"] += cost
+
+    expenses_query = select(ProjectExpense)
+    if installation_id:
+        expenses_query = expenses_query.where(ProjectExpense.installation_id == installation_id)
+    if period_start is not None and period_end is not None:
+        expenses_query = expenses_query.where(ProjectExpense.occurred_on >= period_start, ProjectExpense.occurred_on < period_end)
+    for expense in db.scalars(expenses_query).all():
+        row = project_row(expense.installation_id)
+        amount = Decimal(expense.amount)
+        row["expenses"] += amount
+        categories = row["expenses_by_category"]
+        categories[expense.category] = categories.get(expense.category, Decimal("0")) + amount
+
+    rows = []
+    for row in grouped.values():
+        known_material_cost = row["materials_cost"] if row["missing_cost_movements"] == 0 else None
+        rows.append({
+            **row,
+            "materials_cost": known_material_cost,
+            "preliminary_result": row["sales"] - known_material_cost - row["expenses"] if known_material_cost is not None else None,
+            "expenses_by_category": row["expenses_by_category"],
+        })
+    rows.sort(key=lambda row: (row["project"].casefold(), row["folio"] or ""))
+    missing_costs = sum(row["missing_cost_movements"] for row in rows)
+    sales_total = sum((row["sales"] for row in rows), Decimal("0"))
+    expenses_total = sum((row["expenses"] for row in rows), Decimal("0"))
+    material_cost_total = sum((row["materials_cost"] or Decimal("0") for row in rows), Decimal("0")) if missing_costs == 0 else None
+    return {
+        "period": month or (f"Proyecto · {installation_id}" if installation_id else "Todos los periodos"),
+        "basis": "Ventas por fecha de registro; costo de materiales por fecha de consumo confirmado; gastos por fecha capturada.",
+        "rows": rows,
+        "totals": {
+            "sales": sales_total,
+            "materials_cost": material_cost_total,
+            "expenses": expenses_total,
+            "preliminary_result": sales_total - material_cost_total - expenses_total if material_cost_total is not None else None,
+            "missing_cost_movements": missing_costs,
+        },
+        "returns_and_bonifications": {"recorded": False, "included": False},
+        "complete_financial_statement": False,
+    }
 
 
 @router.get("/dashboard", dependencies=[Depends(require_permissions(auth_service, "customers:read"))])

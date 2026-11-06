@@ -398,25 +398,25 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 | US-12 | Parcial | Catálogo, existencia y costo unitario; falta costo real por movimiento/proyecto. |
 | US-13 | Pendiente | Google Drive y políticas de carpetas/permisos. |
 | US-14 | Funcional en API y portales | Completar matriz de acceso por cada entidad/campo y pruebas de aislamiento. |
-| US-15–16, US-19 | Pendientes/parciales | Ventas contables, historial/aplicación de cobranza y alertas financieras; el resumen comercial actual no es estado financiero. |
+| US-15–16, US-19 | Parciales | Venta aceptada alimenta reporte preliminar; historial/aplicación de cobranza y alertas financieras siguen parciales. El resumen no es estado financiero formal. |
 | US-17 | Funcional básico | Administrador y contador registran gastos operativos/directos por fecha, categoría, proyecto opcional y comprobante enlazado. Falta afectar una cuenta de caja/banco, autorización y conciliación. |
 | US-18 | Funcional básico | Se crean cuentas de efectivo/banco con saldo inicial y se consultan saldos/reportes; falta conciliación bancaria y vincular automáticamente los cobros, pagos y gastos. |
 | US-20 | Parcial | Artículos con descripción, unidad, existencia, mínimo y costo; faltan categoría, marca, modelo, proveedor y QR. |
 | US-21–22 | Pendientes/parciales | Entrada individual de almacén disponible; faltan compra multirenglón, proveedor, factura/XML y OCR. |
 | US-23 | Funcional básico | El instalador devuelve contra una salida de su orden; el kardex enlaza ambos movimientos, limita el acumulado devuelto y repone existencias. Falta distinguir condición del material y aprobar costos de devolución. |
-| US-24 | Parcial | Orden solicita materiales y la PWA confirma consumo; existencias se descuentan una sola vez. Falta separar la entrega física de la solicitud y autorizar ajustes. |
+| US-24 | Parcial | La orden solicita material; la PWA confirma consumo sin doble descuento y el evento queda fechado/costeado. Falta separar entrega física y autorizar variaciones. |
 | US-25 | Pendiente | Lectura asistida de orden/solicitud escaneada. |
 | US-26 | Funcional básico | CRM y PWA señalan existencias por debajo del mínimo configurado; faltan notificaciones push y asignación de responsable de reabasto. |
-| US-27 | Funcional básico | Kardex con entradas/salidas firmadas, consumo confirmado, devoluciones, responsable, fecha y referencia; registra costo para nuevos movimientos y deja el costo histórico como desconocido cuando no se capturó. Acceso de instalador limitado a sus propias órdenes. Faltan filtros expuestos en UI y exportación. |
+| US-27 | Funcional básico | Kardex distingue salida física, consumo confirmado y corrección del consumo; conserva fecha y costo histórico. Acceso de instalador limitado a sus órdenes. Faltan filtros expuestos en UI y exportación. |
 | US-28–29 | Pendientes | Cámara QR/código de barras e informes de operación. |
 | US-30 | Funcional básico | Proveedores y condiciones contado/crédito con días; el saldo queda pendiente hasta enlazar entradas de compra y pagos. |
 | US-31 | Pendiente | Compras multirenglón, saldos por proveedor y pagos vinculados. |
 | US-32 | Parcial | Orden enlazada con cliente y cotización; falta entidad proyecto y folio comercial acordado. |
-| US-33, US-35 | Pendientes | Libro contable de doble partida y efectos relacionados automáticos; no se inventó contabilidad sin validar sus reglas. |
+| US-33, US-35 | Parciales | Hay un reporte operativo preliminar de ventas menos material consumido y gastos. Libro de doble partida y efectos contables completos requieren validar reglas con el contador. |
 | US-34 | Funcional básico | Entradas/salidas manuales de efectivo o banco, saldo derivado e historial; las operaciones comerciales aún no se enlazan automáticamente. |
 | US-36 | Parcial | Las entradas/salidas manuales se corrigen con reversa append-only; falta extender la corrección relacionada a compras, ventas, cobranza e inventario. |
 | US-37 | Pendiente | Comparación con cada pantalla del sistema legado; falta acceso al entorno de César. |
-| US-38 | Pendiente | Estado de resultados con fórmula compartida; definir devoluciones, impuestos, costo y corte contable con Mario/Josué. |
+| US-38 | Parcial | Reporte mensual y por proyecto con ventas, consumos, gastos y resultado preliminar. No incluye devoluciones de venta/bonificaciones ni impuestos y no sustituye cierre contable. |
 | US-39 | Parcial funcional | CRM de escritorio autenticado y flujos comerciales iniciales; falta el resto administrativo y financiero. |
 | US-40 | Parcial funcional | PWA autenticada con consulta de órdenes/inventario y captura de consumos/gastos; faltan flujos de cierre y trabajo offline. |
 | US-41 | Parcial funcional | Web pública y agente con catálogo aprobado; faltan credenciales y validación de experiencia de venta completa. |
@@ -467,7 +467,7 @@ Las funciones marcadas como pendientes se mantienen visibles en el backlog. Los 
 
 ## Iteración 7 — Reserva y consumo de materiales (2026-11-06)
 
-La Iteración 6 ya está desplegada en DEV. Esta revisión corrige el momento del descuento: crear una venta/orden solicita y reserva cantidades, mientras la confirmación en la PWA descuenta físicamente solo el consumo nuevo. La migración enlaza las líneas y movimientos previos y revierte el solapamiento de descuentos históricos que puede identificar. Las tarjetas fuente permanecen sin alteraciones; esta implementación es una versión añadida por el equipo, pendiente de validación del stakeholder.
+La Iteración 6 está desplegada en DEV. La corrección de la Iteración 7 quedó mergeada en `dev` y espera una operación manual de Factory para despliegue. Crear una venta/orden solicita y reserva cantidades, mientras la confirmación en la PWA descuenta físicamente solo el consumo nuevo. La migración enlaza las líneas y movimientos previos y revierte el solapamiento de descuentos históricos que puede identificar. Las tarjetas fuente permanecen sin alteraciones; esta implementación es una versión añadida por el equipo, pendiente de validación del stakeholder.
 
 | Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
 | --- | --- | --- |
@@ -483,3 +483,17 @@ La Iteración 6 ya está desplegada en DEV. Esta revisión corrige el momento de
 | US-29 | Parcial | La cantidad disponible considera reservas activas. Pendiente reporte gráfico y filtros/exportación. |
 | US-32 | Parcial | La orden foliada expone líneas solicitadas, consumidas y pendientes. Falta proyecto independiente y formato acordado. |
 | US-35 | Parcial | Reservas, consumos físicos, devoluciones y corrección de doble descuento conservan trazabilidad. Pendiente doble partida, costos finales y revisión con contador. |
+
+## Iteración 8 — Costeo preliminar por proyecto y mes (2026-11-06)
+
+La captura de cada consumo crea un evento fechado de costo sin producir otro descuento físico. Devoluciones de sobrantes ligadas a esa salida generan una corrección de costo. Un backfill idempotente conserva fecha y costo conocidos en el historial anterior. El reporte administra `ventas registradas − costo de materiales consumidos − gastos capturados`; señala faltantes de costo y declara fuera del cálculo las devoluciones de venta y bonificaciones. No se presenta como estado contable cerrado. Cada revisión conserva el relato fuente literal.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-15 | Funcional básico | Las ventas registradas se consultan en reporte mensual y por orden; se separan de los cobros de caja. Pendientes impuestos, pagos mixtos y reversas integrales. |
+| US-17 | Funcional básico | Reporte agrega gastos por fecha, orden y categoría. Pendientes autorización y conciliación. |
+| US-24 | Parcial | El consumo confirmado tiene evento de costo y fecha, desacoplado de la salida física; devoluciones ligadas corrigen el evento. Pendientes autorización y variaciones de materiales. |
+| US-27 | Funcional básico | Kardex diferencia cantidad física movida de material consumido para costeo; la corrección de consumo no duplica entrada/salida física. Pendientes filtros visibles y exportación. |
+| US-32 | Parcial | Reporte agrupa por folio de orden/proyecto y periodo mensual. Falta identidad de proyecto independiente y clave aprobada. |
+| US-35 | Parcial | Reporte enlaza ventas, consumo material fechado y gastos por proyecto. Doble partida, devoluciones/bonificaciones de venta, impuestos y conciliación siguen pendientes. |
+| US-38 | Parcial | CRM muestra ventas − costo consumido − gastos por mes o proyecto, con faltantes de costo visibles. Falta añadir devoluciones/bonificaciones, validar reglas contables y entregar estado formal. |
