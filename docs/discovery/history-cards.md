@@ -392,7 +392,7 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 | US-4 | Funcional básico | Agregar alertas/notificaciones y responsable asignado. |
 | US-5–6 | Pendientes | Plantillas legales, carga segura de INE, consentimiento, firma y proveedor biométrico. |
 | US-7 | Parcial | Asignación y visibilidad para instalador; falta notificación push/SMS/WhatsApp. |
-| US-8 | Parcial | Consulta de existencias reales; falta reservar/material requerido por orden y alerta de faltantes. |
+| US-8 | Parcial | Consulta de existencias reales y reservas por orden; falta alerta por faltantes de materiales requeridos. |
 | US-9–10 | Funcionales básicos | Consumo y gasto enlazados a orden; faltan evidencia/recibo, revisión y modo sin conexión. |
 | US-11 | Parcial | API de cuentas por cobrar y pagos; faltan agenda, avisos de pago y plantillas WhatsApp listas. |
 | US-12 | Parcial | Catálogo, existencia y costo unitario; falta costo real por movimiento/proyecto. |
@@ -404,10 +404,10 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 | US-20 | Parcial | Artículos con descripción, unidad, existencia, mínimo y costo; faltan categoría, marca, modelo, proveedor y QR. |
 | US-21–22 | Pendientes/parciales | Entrada individual de almacén disponible; faltan compra multirenglón, proveedor, factura/XML y OCR. |
 | US-23 | Funcional básico | El instalador devuelve contra una salida de su orden; el kardex enlaza ambos movimientos, limita el acumulado devuelto y repone existencias. Falta distinguir condición del material y aprobar costos de devolución. |
-| US-24 | Parcial | Consumo y devolución vinculados a la orden; falta diferenciar cantidades solicitadas, entregadas y consumidas con autorización previa. |
+| US-24 | Parcial | Orden solicita materiales y la PWA confirma consumo; existencias se descuentan una sola vez. Falta separar la entrega física de la solicitud y autorizar ajustes. |
 | US-25 | Pendiente | Lectura asistida de orden/solicitud escaneada. |
 | US-26 | Funcional básico | CRM y PWA señalan existencias por debajo del mínimo configurado; faltan notificaciones push y asignación de responsable de reabasto. |
-| US-27 | Funcional básico | Kardex con entradas/salidas firmadas, responsable, fecha y referencia; registra costo para nuevos movimientos y deja el costo histórico como desconocido cuando no se capturó. Acceso de instalador limitado a sus propias órdenes. Faltan filtros expuestos en UI y exportación. |
+| US-27 | Funcional básico | Kardex con entradas/salidas firmadas, consumo confirmado, devoluciones, responsable, fecha y referencia; registra costo para nuevos movimientos y deja el costo histórico como desconocido cuando no se capturó. Acceso de instalador limitado a sus propias órdenes. Faltan filtros expuestos en UI y exportación. |
 | US-28–29 | Pendientes | Cámara QR/código de barras e informes de operación. |
 | US-30 | Funcional básico | Proveedores y condiciones contado/crédito con días; el saldo queda pendiente hasta enlazar entradas de compra y pagos. |
 | US-31 | Pendiente | Compras multirenglón, saldos por proveedor y pagos vinculados. |
@@ -464,3 +464,22 @@ Cada tarjeta conserva las versiones previas; el relato fuente y su procedencia n
 | US-35 | Parcial | Venta aceptada actualiza ingreso o cartera, salida de inventario por orden y folios relacionados en transacción. No hay todavía doble partida ni todas las reglas fiscales/contables. |
 
 Las funciones marcadas como pendientes se mantienen visibles en el backlog. Los bloqueos de esta iteración no autorizan inventar precios, documentos legales, tratamiento biométrico, reglas contables ni credenciales de servicios externos.
+
+## Iteración 7 — Reserva y consumo de materiales (2026-11-06)
+
+La Iteración 6 ya está desplegada en DEV. Esta revisión corrige el momento del descuento: crear una venta/orden solicita y reserva cantidades, mientras la confirmación en la PWA descuenta físicamente solo el consumo nuevo. La migración enlaza las líneas y movimientos previos y revierte el solapamiento de descuentos históricos que puede identificar. Las tarjetas fuente permanecen sin alteraciones; esta implementación es una versión añadida por el equipo, pendiente de validación del stakeholder.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-7 | Parcial | La PWA muestra folio y estado de material solicitado/consumido en órdenes asignadas. Pendiente notificación push/mensajería y confirmación de cuadrilla. |
+| US-8 | Parcial | Existencia física, reservado y disponible se distinguen. Pendiente alerta de faltantes por orden y notificación. |
+| US-9 | Parcial | Consumo confirmado queda ligado a la orden y la existencia solo se descuenta una vez; se limita a cantidades de la solicitud. Pendientes evidencia, revisión, modo sin conexión y reglas para variaciones. |
+| US-12 | Parcial | El inventario presenta reservas abiertas junto a disponibilidad física. Falta costeo final por proyecto. |
+| US-15 | Funcional básico | La venta reserva materiales sin volver a descontarlos; contado/crédito, folios y orden se conservan. Pendientes reglas contables/fiscales y reversa integral. |
+| US-20 | Parcial | CRM y PWA muestran existencia física, reserva y disponibilidad; faltan campos de marca/modelo/categoría y escáner. |
+| US-24 | Parcial | Solicitud, reserva, consumo confirmado, devolución y salida física quedan diferenciados en la orden/kardex. Pendiente entrega/autorización y ajustes por material dañado. |
+| US-26 | Funcional básico | No se permite confirmar un material no solicitado ni exceder la cantidad restante de la orden. Pendientes alertas de reabasto. |
+| US-27 | Funcional básico | El kardex separa salida física de confirmación de consumo sin nueva salida; reserva no cambia el saldo físico. Pendientes filtros en UI/exportación. |
+| US-29 | Parcial | La cantidad disponible considera reservas activas. Pendiente reporte gráfico y filtros/exportación. |
+| US-32 | Parcial | La orden foliada expone líneas solicitadas, consumidas y pendientes. Falta proyecto independiente y formato acordado. |
+| US-35 | Parcial | Reservas, consumos físicos, devoluciones y corrección de doble descuento conservan trazabilidad. Pendiente doble partida, costos finales y revisión con contador. |
