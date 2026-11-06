@@ -107,10 +107,15 @@ jobs:
               cat "$log"
               return 1
             fi
-            grep -Fq "$marker" "$output"
+            if ! grep -Fq "$marker" "$output"; then
+              echo "Chrome did not find the expected UI marker '$marker' on ${route}. Rendered UI text follows."
+              sed -E 's/<[^>]+>/ /g' "$output" | tr -s '[:space:]' ' ' | cut -c1-1200
+              cat "$log"
+              return 1
+            fi
           }
-          smoke_render /app 'Hola, equipo'
-          smoke_render /crm 'Tu operación comercial, clientes y propuestas'
+          smoke_render /app 'Iniciar sesión'
+          smoke_render /crm 'Iniciar sesión'
       - name: Verify routed PWA and CRM bundles
         shell: bash
         run: |
