@@ -31,6 +31,8 @@ La restricción del repositorio sobre datos sensibles no elimina este MUST: los 
 
 **Stakeholder:** Goito Profugo. **Fuente:** mensajes de WhatsApp compartidos en esta conversación. Las tarjetas reflejan su solicitud; sus criterios no implican que la funcionalidad exista.
 
+Fuente literal recuperada: [mensajes de WhatsApp de Goito](sources/goito-profugo-whatsapp-2026-10-26.md).
+
 ### US-1 — Cotizar paquetes solares manualmente
 
 Como vendedor, quiero cotizar desde celular o computadora eligiendo un paquete de paneles, para generar una propuesta con los datos vigentes del negocio.
@@ -140,6 +142,8 @@ Como administrador, quiero que cada usuario tenga privilegios para que vea y eje
 ## Iteración 2 — Solicitud del contador en Word/PDF
 
 **Stakeholder:** contador (Mario Groso identificado posteriormente en la conversación). **Fuentes:** `COMENTARIOS Y MEJORAS PARA EL SISTEMA DE ARCO ENERGY.docx` y `MEJORAS AL SISTEMA ARCO ENERGY.pdf`, documento de comentarios sobre el borrador Base44. El PDF se revisó como contenido equivalente del Word.
+
+Fuentes literales recuperadas: [Word original](sources/contador-comentarios-mejoras-original.docx), [PDF original](sources/contador-mejoras-original.pdf) y [transcripción textual del Word](sources/contador-comentarios-mejoras-transcripcion.md).
 
 ### US-15 — Registrar ventas
 
@@ -292,7 +296,9 @@ Como administrador/contador, quiero registrar proyectos con código único para 
 
 ## Iteración 3 — Audio del contador
 
-**Stakeholder:** contador, identificado en el hilo como remitente de los audios de WhatsApp. **Fuentes:** tres OGG de WhatsApp enviados el 2 de noviembre de 2026. Transcripción local guardada fuera del repositorio; se registran aquí los hallazgos, no el audio ni la transcripción literal completa.
+**Stakeholder:** contador, identificado en el hilo como remitente de los audios de WhatsApp. **Fuentes:** tres OGG de WhatsApp enviados el 2 de noviembre de 2026.
+
+Fuente/transcripción automática versionada: [transcripciones de los audios](sources/contador-whatsapp-audio-transcripts-2026-11-02.md). Los OGG originales permanecen en el equipo del solicitante y sus hashes están registrados allí.
 
 ### US-33 — Reflejar efectos relacionados de una operación
 
@@ -329,5 +335,6 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 - Audios del contador: fuente de US-33 y US-34; audio y WAV procesados permanecen fuera del repositorio por privacidad.
 - Mensajes de Mario y fotografía de orden/solicitud de materiales: fuente de US-35 a US-38.
 - La forma exacta de las tarjetas US-1 a US-34 se recuperó de requisitos y resúmenes disponibles, no de una exportación histórica de tarjetas. Revisar en futuras iteraciones cualquier diferencia con lo dicho originalmente.
-- Para US-1 a US-34 el registro actual no contiene el relato literal completo; se debe recuperar y asociar desde las fuentes originales conforme al MUST anterior. No citar las reconstrucciones como palabras textuales.
+- Los relatos textuales de Goito y del Word del contador ya están recuperados. Para US-1 a US-32 falta cotejar la asignación exacta de cada fragmento a los IDs históricos; el texto de las cards es una síntesis derivada, no una cita.
+- Para US-33 y US-34 hay transcripciones ASR de los audios, no transcripción humana validada. Los OGG originales se identifican por hash y ruta local, sin subir audio de voz al repositorio.
 - No se persisten nombres, teléfonos, direcciones, INE ni archivos de clientes reales dentro de este registro.
