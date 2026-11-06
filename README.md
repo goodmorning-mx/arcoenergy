@@ -7,7 +7,7 @@ Solar sales and field operations for the ArcoEnergy team. The DEV product has th
 - Desktop CRM: `/crm/` — separate React app using `gm-auth`.
 - Shared FastAPI service: `/api/` — PostgreSQL, authentication, role permissions and ArcoEnergy domain endpoints.
 
-The database supports customer records, sequential quote folios and PDF downloads, activity notes and follow-ups, installation assignments, inventory movements, project expenses and receivables. Static sample screens are clearly labeled as demonstration data; pricing and equipment mappings in the API catalog are provisional.
+The product uses authenticated user accounts and organization data; it does not seed sample customers, quotes, inventory or installations. Pricing and equipment mappings must be entered and approved by ArcoEnergy before commercial quotes can be issued.
 
 ## Integrations with pending configuration
 
@@ -24,6 +24,8 @@ docker compose --profile hybrid up --build
 - Site: <http://localhost:18081>
 - PWA: <http://localhost:18081/app/>
 - CRM: <http://localhost:18081/crm/>
+- CRM sign-in: <http://localhost:18081/crm/login> (also available at `/login`)
+- PWA sign-in: <http://localhost:18081/app/login>
 - API: <http://localhost:18081/api/health>
 
 Compose is for local development. DEV/PROD are separately managed Factory and Coolify resources. The product manifest in the Factory repository owns the hybrid routes, app resources, module pins and generated runtime bindings.

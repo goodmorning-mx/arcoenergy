@@ -114,8 +114,9 @@ jobs:
               return 1
             fi
           }
-          smoke_render /app 'Iniciar sesión'
-          smoke_render /crm 'Iniciar sesión'
+          smoke_render /app/login 'Iniciar sesión'
+          smoke_render /crm/login 'Iniciar sesión'
+          smoke_render /login 'Iniciar sesión'
       - name: Verify routed PWA and CRM bundles
         shell: bash
         run: |

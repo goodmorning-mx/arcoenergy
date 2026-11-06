@@ -26,6 +26,14 @@ server {
     return 301 /crm/;
   }
 
+  location = /login {
+    rewrite ^ /crm/login last;
+  }
+
+  location = /login/ {
+    rewrite ^ /crm/login last;
+  }
+
   location /crm/ {
     rewrite ^/crm/(.*)$ /$1 break;
     proxy_pass ${CRM_UPSTREAM}${DOLLAR}uri${DOLLAR}is_args${DOLLAR}args;

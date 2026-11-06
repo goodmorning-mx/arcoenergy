@@ -18,14 +18,14 @@ class FakeSession:
         return self.quote
 
     def add(self, _row):
-        raise AssertionError("demo status changes must not create activity")
+        raise AssertionError("unapproved quote changes must not create activity")
 
     def commit(self):
         self.committed = True
 
 
-def test_demo_quote_cannot_be_advanced_to_commercial_status() -> None:
-    quote = SimpleNamespace(is_demo=True)
+def test_unapproved_quote_cannot_be_advanced_to_commercial_status() -> None:
+    quote = SimpleNamespace(pricing_approved=False)
     session = FakeSession(quote)
 
     with pytest.raises(HTTPException) as error:
@@ -49,7 +49,7 @@ def test_public_agent_quotes_only_from_approved_package(monkeypatch, approved: b
         panel_count=8, panel_brand="DemoSolar", panel_watts=600,
         panel_unit_price=1000, structure_price=2000, structure_name="Estructura demo",
         inverter_options=[{"name": "Inversor 5 kW", "price_mxn": 3000}],
-        default_inverter="Inversor 5 kW", payment_methods=["Contado"], enabled=True, is_demo=not approved,
+        default_inverter="Inversor 5 kW", payment_methods=["Contado"], enabled=True, pricing_approved=approved,
     )
 
     class PackageRows:
@@ -87,7 +87,7 @@ def test_unapproved_catalog_package_cannot_create_quote() -> None:
             return SimpleNamespace(id="customer-1")
 
         def scalar(self, _query):
-            return SimpleNamespace(is_demo=True)
+            return SimpleNamespace(pricing_approved=False)
 
     with pytest.raises(HTTPException) as error:
         create_quote(QuoteInput(customer_id="customer-1", panel_count=8), FakeDB())

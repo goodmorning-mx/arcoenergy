@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from io import BytesIO
+from typing import Literal
 from urllib.parse import quote as urlquote
 from uuid import uuid4
 
@@ -22,7 +23,7 @@ from gm_auth.models import memberships, users
 from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
-from app.models import Activity, Customer, FollowUp, HistoryCard, Installation, InventoryItem, InventoryMovement, ProjectExpense, Quote, QuotePackage, Receivable
+from app.models import Activity, CashMovement, Customer, FinancialAccount, FollowUp, HistoryCard, Installation, InventoryItem, InventoryMovement, ProjectExpense, Quote, QuotePackage, Receivable, Supplier
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 
 settings = get_settings()
@@ -172,7 +173,7 @@ def _agent_registry(audience: str) -> ToolRegistry:
                 rows = db.scalars(select(QuotePackage).where(QuotePackage.enabled.is_(True)).order_by(QuotePackage.panel_count)).all()
                 result = {
                     "available_panel_counts": [row.panel_count for row in rows],
-                    "pricing_approved": bool(rows) and all(not row.is_demo for row in rows),
+                    "pricing_approved": bool(rows) and all(row.pricing_approved for row in rows),
                     "note": "No estimes ni inventes precios. Si el paquete elegido no está aprobado, pide los datos de contacto para que el equipo prepare la propuesta.",
                 }
                 if panel_count is None:
@@ -180,7 +181,7 @@ def _agent_registry(audience: str) -> ToolRegistry:
                 package = next((row for row in rows if row.panel_count == panel_count), None)
                 if package is None:
                     return {**result, "quote": None, "note": "No hay un paquete activo para esa cantidad de paneles."}
-                if package.is_demo:
+                if not package.pricing_approved:
                     return {**result, "pricing_approved": False, "quote": None, "note": "El precio de este paquete aún no está aprobado. No proporciones una cantidad; ofrece que el equipo prepare la propuesta."}
                 result["pricing_approved"] = True
                 option = next((item for item in package.inverter_options if item.get("name") == inverter), None) if inverter else next((item for item in package.inverter_options if item.get("name") == package.default_inverter), None)
@@ -219,7 +220,7 @@ def _agent_registry(audience: str) -> ToolRegistry:
                 rows = db.scalars(select(QuotePackage).where(QuotePackage.enabled.is_(True)).order_by(QuotePackage.panel_count)).all()
                 return [{"panel_count": row.panel_count, "panel_brand": row.panel_brand, "panel_watts": row.panel_watts,
                          "inverters": row.inverter_options, "default_inverter": row.default_inverter,
-                         "pricing_approved": not row.is_demo} for row in rows]
+                         "pricing_approved": row.pricing_approved} for row in rows]
 
         registry.register(crm_summary)
         registry.register(crm_catalog)
@@ -323,6 +324,38 @@ class ExpenseInput(BaseModel):
     occurred_on: date = Field(default_factory=date.today)
 
 
+class FinancialAccountInput(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    account_type: Literal["cash", "bank"]
+    opening_balance: Decimal = Field(ge=0)
+    opening_balance_date: date
+
+
+class CashMovementInput(BaseModel):
+    account_id: str
+    direction: Literal["in", "out"]
+    amount: Decimal = Field(gt=0)
+    category: str = Field(min_length=2, max_length=80)
+    description: str = Field(min_length=2, max_length=2000)
+    occurred_on: date = Field(default_factory=date.today)
+
+
+class SupplierInput(BaseModel):
+    name: str = Field(min_length=2, max_length=180)
+    rfc: str = Field(default="", max_length=20)
+    phone: str = Field(default="", max_length=40)
+    email: str = Field(default="", max_length=180)
+    payment_terms: Literal["cash", "credit"] = "cash"
+    credit_days: int = Field(default=0, ge=0, le=365)
+
+    @field_validator("credit_days")
+    @classmethod
+    def credit_days_required_for_credit_terms(cls, value: int, info):
+        if info.data.get("payment_terms") == "credit" and value < 1:
+            raise ValueError("Indica los días de crédito acordados con el proveedor.")
+        return value
+
+
 class ReceivableInput(BaseModel):
     customer_id: str
     due_date: date
@@ -394,10 +427,9 @@ def catalog(db: Session = Depends(get_db)):
             "system_kw": round(row.panel_count * row.panel_watts / 1000, 2),
             "inverter": row.default_inverter,
             "price_mxn": Decimal(row.panel_unit_price) * row.panel_count + Decimal(row.structure_price) + inverter_price,
-            "catalog_status": "pending_approval" if row.is_demo else "approved",
+            "catalog_status": "approved" if row.pricing_approved else "pending_approval",
         })
     return {
-        "demo": False,
         "packages": packages,
         "payment_methods": ["Contado", "Financiamiento", "Plan 24"],
         "catalog_note": "Configura los precios y condiciones comerciales vigentes antes de cotizar.",
@@ -422,7 +454,7 @@ def update_catalog_package(panel_count: int, data: QuotePackageInput, identity: 
     row.default_inverter = data.default_inverter.strip()
     row.payment_methods = data.payment_methods
     row.enabled = data.enabled
-    row.is_demo = not data.approved_prices
+    row.pricing_approved = data.approved_prices
     row.updated_by = identity.email
     db.commit(); db.refresh(row)
     return _serialize(row)
@@ -493,7 +525,7 @@ def create_quote(data: QuoteInput, db: Session = Depends(get_db)):
     package = db.scalar(select(QuotePackage).where(QuotePackage.panel_count == data.panel_count, QuotePackage.enabled.is_(True)))
     if package is None:
         raise HTTPException(422, "No hay un paquete activo para esta cantidad de paneles.")
-    if package.is_demo:
+    if not package.pricing_approved:
         raise HTTPException(409, "El paquete requiere aprobación comercial antes de generar una cotización.")
     inverter = data.inverter or package.default_inverter
     inverter_option = next((item for item in package.inverter_options if item.get("name") == inverter), None)
@@ -523,7 +555,7 @@ def create_quote(data: QuoteInput, db: Session = Depends(get_db)):
         inverter_cost=inverter_cost,
         total=total,
         status="draft",
-        is_demo=package.is_demo,
+        pricing_approved=package.pricing_approved,
     )
     db.add(row); db.flush()
     db.add(Activity(customer_id=customer.id, kind="cotización creada", note=f"Cotización {folio}, por ${total:,.2f} MXN.")); db.commit(); db.refresh(row)
@@ -542,7 +574,7 @@ def update_quote_status(quote_id: str, data: QuoteStatusInput, identity: AuthIde
         raise HTTPException(422, "Estado de cotización no reconocido.")
     row = db.get(Quote, quote_id)
     if row is None: raise HTTPException(404, "Cotización no encontrada.")
-    if row.is_demo and data.status != "draft":
+    if not row.pricing_approved and data.status != "draft":
         raise HTTPException(409, "Aprueba el paquete comercial antes de avanzar esta cotización.")
     row.status = data.status
     db.add(Activity(customer_id=row.customer_id, kind="cotización actualizada", note=f"{row.folio}: {data.status}.", created_by=identity.email))
@@ -554,7 +586,7 @@ def update_quote_status(quote_id: str, data: QuoteStatusInput, identity: AuthIde
 def quote_pdf(quote_id: str, db: Session = Depends(get_db)):
     row = db.get(Quote, quote_id)
     if not row: raise HTTPException(404, "Cotización no encontrada.")
-    if row.is_demo: raise HTTPException(409, "El paquete de esta cotización requiere aprobación antes de descargar el PDF.")
+    if not row.pricing_approved: raise HTTPException(409, "El paquete de esta cotización requiere aprobación antes de descargar el PDF.")
     customer = db.get(Customer, row.customer_id)
     try:
         from reportlab.lib.pagesizes import letter
@@ -787,6 +819,93 @@ def list_expenses(db: Session = Depends(get_db)):
     return result
 
 
+@router.get("/accounts", dependencies=[Depends(require_permissions(auth_service, "accounts:read"))])
+def list_financial_accounts(db: Session = Depends(get_db)):
+    result = []
+    for account in db.scalars(select(FinancialAccount).where(FinancialAccount.active.is_(True)).order_by(FinancialAccount.name)).all():
+        movements = db.scalars(select(CashMovement).where(CashMovement.account_id == account.id)).all()
+        balance = Decimal(account.opening_balance) + sum(
+            (Decimal(movement.amount) if movement.direction == "in" else -Decimal(movement.amount) for movement in movements),
+            Decimal("0"),
+        )
+        result.append({**_serialize(account), "current_balance": balance, "movement_count": len(movements)})
+    return result
+
+
+@router.post("/accounts", status_code=201, dependencies=[Depends(require_permissions(auth_service, "accounts:manage"))])
+def create_financial_account(data: FinancialAccountInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    row = FinancialAccount(**data.model_dump(), created_by=identity.email or "")
+    db.add(row); db.commit(); db.refresh(row)
+    return {**_serialize(row), "current_balance": Decimal(row.opening_balance), "movement_count": 0}
+
+
+@router.get("/accounts/{account_id}/movements", dependencies=[Depends(require_permissions(auth_service, "accounts:read"))])
+def list_account_movements(account_id: str, db: Session = Depends(get_db)):
+    account = db.get(FinancialAccount, account_id)
+    if account is None:
+        raise HTTPException(404, "Cuenta financiera no encontrada.")
+    movements = db.scalars(select(CashMovement).where(CashMovement.account_id == account_id).order_by(CashMovement.occurred_on.desc(), CashMovement.created_at.desc())).all()
+    return {
+        "account": _serialize(account),
+        "opening_balance": Decimal(account.opening_balance),
+        "opening_balance_date": account.opening_balance_date,
+        "movements": [_serialize(item) for item in movements],
+    }
+
+
+@router.post("/cash-movements", status_code=201, dependencies=[Depends(require_permissions(auth_service, "accounts:write"))])
+def create_cash_movement(data: CashMovementInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    account = db.get(FinancialAccount, data.account_id)
+    if account is None or not account.active:
+        raise HTTPException(404, "Selecciona una cuenta activa.")
+    row = CashMovement(**data.model_dump(), source_type="manual", created_by=identity.email or "")
+    db.add(row); db.commit(); db.refresh(row)
+    return _serialize(row)
+
+
+@router.post("/cash-movements/{movement_id}/reverse", status_code=201, dependencies=[Depends(require_permissions(auth_service, "accounts:write"))])
+def reverse_cash_movement(movement_id: str, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    original = db.scalar(select(CashMovement).where(CashMovement.id == movement_id).with_for_update())
+    if original is None:
+        raise HTTPException(404, "Movimiento de cuenta no encontrado.")
+    if original.reversal_of_id is not None:
+        raise HTTPException(409, "Una reversa no puede revertirse; registra un nuevo movimiento de corrección.")
+    if db.scalar(select(CashMovement.id).where(CashMovement.reversal_of_id == movement_id)):
+        raise HTTPException(409, "Este movimiento ya tiene una reversa registrada.")
+    reversal = CashMovement(
+        account_id=original.account_id,
+        direction="out" if original.direction == "in" else "in",
+        amount=original.amount,
+        category="Corrección",
+        description=f"Reversa del movimiento {original.id}: {original.description}",
+        occurred_on=date.today(),
+        source_type="reversal",
+        source_id=original.id,
+        reversal_of_id=original.id,
+        created_by=identity.email or "",
+    )
+    db.add(reversal); db.commit(); db.refresh(reversal)
+    return _serialize(reversal)
+
+
+@router.get("/suppliers", dependencies=[Depends(require_permissions(auth_service, "suppliers:read"))])
+def list_suppliers(db: Session = Depends(get_db)):
+    return [{**_serialize(row), "current_balance": Decimal("0")} for row in db.scalars(select(Supplier).order_by(Supplier.name)).all()]
+
+
+@router.post("/suppliers", status_code=201, dependencies=[Depends(require_permissions(auth_service, "suppliers:manage"))])
+def create_supplier(data: SupplierInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    values = data.model_dump()
+    values["name"] = values["name"].strip()
+    values["rfc"] = values["rfc"].strip().upper()
+    values["email"] = values["email"].strip().lower()
+    if values["payment_terms"] == "cash":
+        values["credit_days"] = 0
+    row = Supplier(**values, created_by=identity.email or "")
+    db.add(row); db.commit(); db.refresh(row)
+    return {**_serialize(row), "current_balance": Decimal("0")}
+
+
 @router.post("/receivables", status_code=201, dependencies=[Depends(require_permissions(auth_service, "receivables:write"))])
 def add_receivable(data: ReceivableInput, db: Session = Depends(get_db)):
     if not db.get(Customer, data.customer_id): raise HTTPException(404, "Cliente no encontrado.")
@@ -890,4 +1009,4 @@ def whatsapp_link(phone: str, message: str):
 @router.get("/dashboard", dependencies=[Depends(require_permissions(auth_service, "customers:read"))])
 def dashboard(db: Session = Depends(get_db)):
     active_quotes = Quote.status.in_(["draft", "sent"])
-    return {"customers": db.scalar(select(func.count()).select_from(Customer)) or 0, "quotes_open": db.scalar(select(func.count()).select_from(Quote).where(active_quotes)) or 0, "quotes_amount": float(db.scalar(select(func.coalesce(func.sum(Quote.total), 0)).where(active_quotes)) or 0), "installations_active": db.scalar(select(func.count()).select_from(Installation).where(Installation.status != "closed")) or 0, "receivables_open": float(db.scalar(select(func.coalesce(func.sum(Receivable.amount-Receivable.paid_amount), 0)).where(Receivable.status != "paid")) or 0), "demo_data": False}
+    return {"customers": db.scalar(select(func.count()).select_from(Customer)) or 0, "quotes_open": db.scalar(select(func.count()).select_from(Quote).where(active_quotes)) or 0, "quotes_amount": float(db.scalar(select(func.coalesce(func.sum(Quote.total), 0)).where(active_quotes)) or 0), "installations_active": db.scalar(select(func.count()).select_from(Installation).where(Installation.status != "closed")) or 0, "receivables_open": float(db.scalar(select(func.coalesce(func.sum(Receivable.amount-Receivable.paid_amount), 0)).where(Receivable.status != "paid")) or 0)}
