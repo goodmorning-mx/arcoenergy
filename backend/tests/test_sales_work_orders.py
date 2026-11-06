@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from gm_auth.models import AuthIdentity, memberships, users
 
 from app.models import Base, CashMovement, Customer, FinancialAccount, Installation, InventoryItem, InventoryMovement, Quote, Receivable, Sale, WorkOrderMaterial
-from app.product_api import InventoryReturnInput, SaleInput, SaleMaterialInput, StockInput, consume_inventory, create_sale, list_financial_accounts, return_inventory
+from app.product_api import InventoryReturnInput, SaleInput, SaleMaterialInput, StockInput, consume_inventory, create_sale, list_financial_accounts, profitability_report, return_inventory
 from app.roles import ROLE_PERMISSIONS
 from app import product_api
 
@@ -78,14 +78,21 @@ def test_installer_consumption_decrements_stock_once_and_cannot_exceed_order(mon
         db.add_all([customer, account, item]); db.flush(); quote.customer_id = customer.id; db.add(quote); db.commit()
         created = create_sale(SaleInput(quote_id=quote.id, sale_type="cash", account_id=account.id,
             lead_installer="field@example.test", materials=[SaleMaterialInput(item_id=item.id, quantity=8)]), admin, db)
-        consume_inventory(StockInput(item_id=item.id, quantity=3, installation_id=created["installation_id"]), installer, db)
+        consume_result = consume_inventory(StockInput(item_id=item.id, quantity=3, installation_id=created["installation_id"]), installer, db)
         assert db.get(InventoryItem, item.id).quantity == Decimal("9.00")
+        assert consume_result["movement"]["movement_type"] == "consumption"
+        assert consume_result["physical_issue"]["movement_type"] == "out"
+        assert profitability_report(installation_id=created["installation_id"], db=db)["totals"]["materials_cost"] == Decimal("2700.00")
+        return_inventory(InventoryReturnInput(out_movement_id=consume_result["physical_issue"]["id"], quantity=1), installer, db)
+        corrected = profitability_report(installation_id=created["installation_id"], db=db)
+        assert corrected["totals"]["materials_cost"] == Decimal("1800.00")
+        assert db.get(InventoryItem, item.id).quantity == Decimal("10.00")
         with pytest.raises(HTTPException) as error:
-            consume_inventory(StockInput(item_id=item.id, quantity=6, installation_id=created["installation_id"]), installer, db)
+            consume_inventory(StockInput(item_id=item.id, quantity=7, installation_id=created["installation_id"]), installer, db)
         assert error.value.status_code == 409
         material = db.scalars(select(WorkOrderMaterial).where(WorkOrderMaterial.installation_id == created["installation_id"])).one()
-        assert material.consumed_quantity == Decimal("3.00")
-        assert material.preissued_quantity == Decimal("3.00")
+        assert material.consumed_quantity == Decimal("2.00")
+        assert material.preissued_quantity == Decimal("2.00")
 
 
 def test_installation_material_confirmation_uses_already_issued_stock_without_second_deduction(monkeypatch) -> None:

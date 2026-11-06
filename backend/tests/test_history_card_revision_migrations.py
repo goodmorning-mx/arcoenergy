@@ -33,12 +33,14 @@ def test_accounting_and_sales_iterations_append_versions_without_changing_source
     migration_012 = load_migration("202611060012_accounting_card_revisions.py")
     migration_014 = load_migration("202611060014_sales_card_revisions.py")
     migration_016 = load_migration("202611060016_work_order_material_revisions.py")
+    migration_019 = load_migration("202611060019_profitability_card_revisions.py")
     with engine.begin() as connection:
         connection.execute(HistoryCard.__table__.insert(), records)
         with Operations.context(MigrationContext.configure(connection)):
             migration_012.upgrade()
             migration_014.upgrade()
             migration_016.upgrade()
+            migration_019.upgrade()
         total = connection.scalar(select(func.count()).select_from(HistoryCard))
         source = connection.scalar(select(HistoryCard.source_literal).where(HistoryCard.story_id == "US-15", HistoryCard.version == 1))
         versions = connection.execute(select(HistoryCard.version, HistoryCard.iteration, HistoryCard.source_literal)
@@ -47,15 +49,21 @@ def test_accounting_and_sales_iterations_append_versions_without_changing_source
             .where(HistoryCard.story_id.in_(["US-17", "US-18", "US-21", "US-34", "US-35"]))).all()
         material_versions = connection.execute(select(HistoryCard.version, HistoryCard.iteration, HistoryCard.source_literal)
             .where(HistoryCard.story_id == "US-9").order_by(HistoryCard.version)).all()
+        report_versions = connection.execute(select(HistoryCard.version, HistoryCard.iteration, HistoryCard.source_literal)
+            .where(HistoryCard.story_id == "US-38").order_by(HistoryCard.version)).all()
 
     assert len(records) == 42
-    assert total == 73
-    assert len(versions) == 3
+    assert total == 80
+    assert len(versions) == 4
     assert all(version.source_literal == source for version in versions)
     assert versions[1].iteration == "Iteración 6 · ventas y órdenes · 2026-11-06"
     assert versions[2].iteration == "Iteración 7 · reserva y consumo de materiales · 2026-11-06"
+    assert versions[3].iteration == "Iteración 8 · costeo preliminar por proyecto y mes · 2026-11-06"
     assert {story_id for story_id, _ in linked_versions} == {"US-17", "US-18", "US-21", "US-34", "US-35"}
 
     assert len(material_versions) == 2
     assert material_versions[0].source_literal == material_versions[1].source_literal
     assert material_versions[1].iteration == "Iteración 7 · reserva y consumo de materiales · 2026-11-06"
+    assert len(report_versions) == 2
+    assert report_versions[0].source_literal == report_versions[1].source_literal
+    assert report_versions[1].iteration == "Iteración 8 · costeo preliminar por proyecto y mes · 2026-11-06"
