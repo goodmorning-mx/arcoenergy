@@ -125,6 +125,7 @@ class InventoryMovement(Base):
     quantity: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     movement_type: Mapped[str] = mapped_column(String(20), default="in", nullable=False)
     unit_cost: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    related_movement_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     reason: Mapped[str] = mapped_column(String(180), default="")
     created_by: Mapped[str] = mapped_column(String(180), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
