@@ -398,7 +398,8 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 | US-12 | Parcial | Catálogo, existencia y costo unitario; falta costo real por movimiento/proyecto. |
 | US-13 | Pendiente | Google Drive y políticas de carpetas/permisos. |
 | US-14 | Funcional en API y portales | Completar matriz de acceso por cada entidad/campo y pruebas de aislamiento. |
-| US-15–19 | Pendientes/parciales | Contabilidad integrada, cuentas de efectivo/banco, gastos generales y alertas; el resumen comercial actual no es estado financiero. |
+| US-15–16, US-18–19 | Pendientes/parciales | Ventas contables, historial/aplicación de cobranza, cuentas de efectivo/banco y alertas financieras; el resumen comercial actual no es estado financiero. |
+| US-17 | Funcional básico | Administrador y contador registran gastos operativos/directos por fecha, categoría, proyecto opcional y comprobante enlazado. Falta afectar una cuenta de caja/banco, autorización y conciliación. |
 | US-20 | Parcial | Artículos con descripción, unidad, existencia, mínimo y costo; faltan categoría, marca, modelo, proveedor y QR. |
 | US-21–22 | Pendientes/parciales | Entrada individual de almacén disponible; faltan compra multirenglón, proveedor, factura/XML y OCR. |
 | US-23 | Funcional básico | El instalador devuelve contra una salida de su orden; el kardex enlaza ambos movimientos, limita el acumulado devuelto y repone existencias. Falta distinguir condición del material y aprobar costos de devolución. |

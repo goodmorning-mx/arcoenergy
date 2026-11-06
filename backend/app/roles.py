@@ -19,7 +19,7 @@ ROLE_PERMISSIONS = MappingProxyType({
     }),
     "contador": frozenset({
         "customers:read", "quotes:read", "installations:read",
-        "inventory:read", "inventory:costs:read", "expenses:read", "receivables:read", "receivables:write",
+        "inventory:read", "inventory:costs:read", "expenses:read", "expenses:write", "receivables:read", "receivables:write",
     }),
     "marketing": frozenset({
         "customers:read", "customers:write", "quotes:read", "quotes:write",

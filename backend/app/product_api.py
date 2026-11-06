@@ -315,11 +315,12 @@ class InventoryItemInput(BaseModel):
 
 
 class ExpenseInput(BaseModel):
-    installation_id: str
+    installation_id: str | None = None
     category: str = "Viáticos"
-    description: str = ""
+    description: str = Field(min_length=2, max_length=240)
     amount: Decimal = Field(gt=0)
     receipt_url: str = ""
+    occurred_on: date = Field(default_factory=date.today)
 
 
 class ReceivableInput(BaseModel):
@@ -764,17 +765,26 @@ def list_inventory_movements(
 
 @router.post("/expenses", status_code=201)
 def add_expense(data: ExpenseInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "expenses:write")), db: Session = Depends(get_db)):
-    installation = db.get(Installation, data.installation_id)
-    if not installation: raise HTTPException(404, "Instalación no encontrada.")
-    if "instalador" in identity.roles and installation.lead_installer.lower() != (identity.email or "").lower():
-        raise HTTPException(403, "Solo puedes registrar gastos en una orden asignada a tu cuenta.")
+    installation = db.get(Installation, data.installation_id) if data.installation_id else None
+    if data.installation_id and not installation: raise HTTPException(404, "Instalación no encontrada.")
+    if "instalador" in identity.roles and (installation is None or installation.lead_installer.lower() != (identity.email or "").lower()):
+        raise HTTPException(403, "Selecciona una orden asignada a tu cuenta para registrar gastos de campo.")
     row = ProjectExpense(**data.model_dump(), created_by=identity.email); db.add(row); db.commit(); db.refresh(row)
     return _serialize(row)
 
 
 @router.get("/expenses", dependencies=[Depends(require_permissions(auth_service, "expenses:read"))])
 def list_expenses(db: Session = Depends(get_db)):
-    return [_serialize(row) for row in db.scalars(select(ProjectExpense).order_by(ProjectExpense.created_at.desc())).all()]
+    rows = db.scalars(select(ProjectExpense).order_by(ProjectExpense.occurred_on.desc(), ProjectExpense.created_at.desc())).all()
+    result = []
+    for row in rows:
+        item = _serialize(row)
+        installation = db.get(Installation, row.installation_id) if row.installation_id else None
+        customer = db.get(Customer, installation.customer_id) if installation else None
+        item["project_customer"] = customer.name if customer else "Gasto operativo"
+        item["project_city"] = customer.city if customer else ""
+        result.append(item)
+    return result
 
 
 @router.post("/receivables", status_code=201, dependencies=[Depends(require_permissions(auth_service, "receivables:write"))])

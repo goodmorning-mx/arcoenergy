@@ -134,10 +134,11 @@ class InventoryMovement(Base):
 class ProjectExpense(Base):
     __tablename__ = "ae_expenses"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    installation_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    installation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     category: Mapped[str] = mapped_column(String(80), default="Viáticos")
     description: Mapped[str] = mapped_column(String(240), default="")
     amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    occurred_on: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
     receipt_url: Mapped[str] = mapped_column(Text, default="")
     created_by: Mapped[str] = mapped_column(String(180), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNo
 import { AgentChat } from '@goodmorning/gm-agent';
 import { useAuth } from '@goodmorning/gm-auth';
 
-type View = 'inicio' | 'clientes' | 'cotizaciones' | 'seguimientos' | 'instalaciones' | 'inventario' | 'catalogo' | 'equipo' | 'historial';
+type View = 'inicio' | 'clientes' | 'cotizaciones' | 'seguimientos' | 'instalaciones' | 'inventario' | 'gastos' | 'catalogo' | 'equipo' | 'historial';
 type Customer = { id: string; name: string; phone: string; email: string; city: string; address: string; status: string; source: string; created_at?: string };
 type Quote = { id: string; folio: string; customer_id: string; customer?: Customer; panel_count: number; panel_brand: string; panel_watts: number; inverter: string; payment_method: string; total: number; status: string; is_demo: boolean; installation_city: string; installation_address: string; created_at: string };
 type Package = { id: string; panel_count: number; panel_brand: string; panel_watts: number; panel_unit_price: number; structure_name: string; structure_price: number; inverter_options: Array<{ name: string; price_mxn: number }>; default_inverter: string; payment_methods: string[]; enabled: boolean; is_demo: boolean; price_mxn: number; system_kw: number };
@@ -12,6 +12,7 @@ type TeamMember = { id: string; name: string; email: string; roles: string[]; pe
 type Installation = { id: string; scheduled_at: string | null; lead_installer: string; status: string; notes: string; customer?: Customer; quote_id?: string | null };
 type InventoryItem = { id: string; name: string; unit: string; quantity: number; minimum_quantity: number; unit_cost: number };
 type InventoryMovement = { id: string; item_id: string; item_name: string; unit: string; quantity: number; signed_quantity: number; movement_type: string; unit_cost?: number | null; reason: string; created_by: string; created_at: string; installation_id?: string | null };
+type ProjectExpense = { id: string; installation_id: string | null; category: string; description: string; amount: number; receipt_url: string; occurred_on: string; created_by: string; project_customer: string; project_city: string };
 type Dashboard = { customers?: number; quotes_open?: number; quotes_amount?: number; installations_active?: number; receivables_open?: number };
 type CatalogPayload = { packages: Package[]; payment_methods: string[]; catalog_note: string; demo: boolean };
 type Notice = { type: 'success' | 'error' | 'info'; text: string };
@@ -56,6 +57,7 @@ export default function App() {
   const [installations, setInstallations] = useState<Installation[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [inventoryMovements, setInventoryMovements] = useState<InventoryMovement[]>([]);
+  const [expenses, setExpenses] = useState<ProjectExpense[]>([]);
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamError, setTeamError] = useState('');
   const [teamName, setTeamName] = useState('');
@@ -74,9 +76,10 @@ export default function App() {
     ...(can('quotes:read') ? ['cotizaciones' as View] : []),
     ...(can('installations:read') ? ['instalaciones' as View] : []),
     ...(can('inventory:read') ? ['inventario' as View] : []),
+    ...(can('expenses:read') ? ['gastos' as View] : []),
     ...(can('team:manage') ? ['catalogo' as View, 'equipo' as View, 'historial' as View] : []),
   ]), [can, clientAccount]);
-  const title: Record<View, string> = { inicio: 'Resumen', clientes: 'Clientes', cotizaciones: 'Cotizaciones', seguimientos: 'Seguimientos', instalaciones: 'Instalaciones', inventario: 'Inventario', catalogo: 'Catálogo de paquetes', equipo: 'Equipo y accesos', historial: 'History cards' };
+  const title: Record<View, string> = { inicio: 'Resumen', clientes: 'Clientes', cotizaciones: 'Cotizaciones', seguimientos: 'Seguimientos', instalaciones: 'Instalaciones', inventario: 'Inventario', gastos: 'Gastos operativos', catalogo: 'Catálogo de paquetes', equipo: 'Equipo y accesos', historial: 'History cards' };
 
   const announce = (text: string, type: Notice['type'] = 'success') => {
     setNotice({ text, type });
@@ -123,6 +126,21 @@ export default function App() {
       .then(setInventoryMovements)
       .catch(error => announce(error instanceof Error ? error.message : 'No se pudo cargar el kardex.', 'error'));
   }, [view, accessToken, can]);
+
+  useEffect(() => {
+    if (view !== 'gastos' || !accessToken || !can('expenses:read')) return;
+    void request<ProjectExpense[]>('/expenses', accessToken).then(setExpenses)
+      .catch(error => announce(error instanceof Error ? error.message : 'No se pudieron cargar los gastos.', 'error'));
+  }, [view, accessToken, can]);
+
+  async function createExpense(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!accessToken) return;
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const payload = { installation_id: String(data.get('installation_id') || '') || null, category: String(data.get('category') || 'Otro'), description: String(data.get('description') || '').trim(), amount: Number(data.get('amount')), occurred_on: String(data.get('occurred_on')), receipt_url: String(data.get('receipt_url') || '').trim() };
+    try { const created = await request<ProjectExpense>('/expenses', accessToken, { method: 'POST', body: JSON.stringify(payload) }); setExpenses(rows => [created, ...rows]); form.reset(); announce('Gasto registrado. La salida de efectivo se conciliará al completar el módulo de cuentas.'); }
+    catch(error) { announce(error instanceof Error ? error.message : 'No se pudo registrar el gasto.', 'error'); }
+  }
 
   async function createCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -229,7 +247,7 @@ export default function App() {
   if (!identity || !accessToken) { window.location.replace('/crm/login'); return null; }
   if (clientAccount) return <div className="client-redirect"><div className="brand-mark">A</div><p>Tu portal de cliente está en la aplicación móvil.</p><a href="/app/" className="button button-primary">Abrir mi portal →</a><button className="text-button" onClick={() => void logout()}>Cerrar sesión</button></div>;
 
-  const nav: Array<[View, string, string]> = [['inicio', '◫', 'Resumen'], ['clientes', '♙', 'Clientes'], ['cotizaciones', '▤', 'Cotizaciones'], ['seguimientos', '◷', 'Seguimientos'], ...(can('installations:read') ? [['instalaciones', '⌂', 'Instalaciones']] as Array<[View, string, string]> : []), ...(can('inventory:read') ? [['inventario', '▦', 'Inventario']] as Array<[View, string, string]> : []), ...(can('team:manage') ? [['catalogo', '⊞', 'Catálogo'], ['equipo', '♧', 'Equipo'], ['historial', '↺', 'History cards']] as Array<[View, string, string]> : [])];
+  const nav: Array<[View, string, string]> = [['inicio', '◫', 'Resumen'], ['clientes', '♙', 'Clientes'], ['cotizaciones', '▤', 'Cotizaciones'], ['seguimientos', '◷', 'Seguimientos'], ...(can('installations:read') ? [['instalaciones', '⌂', 'Instalaciones']] as Array<[View, string, string]> : []), ...(can('inventory:read') ? [['inventario', '▦', 'Inventario']] as Array<[View, string, string]> : []), ...(can('expenses:read') ? [['gastos', '$', 'Gastos']] as Array<[View, string, string]> : []), ...(can('team:manage') ? [['catalogo', '⊞', 'Catálogo'], ['equipo', '♧', 'Equipo'], ['historial', '↺', 'History cards']] as Array<[View, string, string]> : [])];
   const visibleCustomers = customers.filter(item => `${item.name} ${item.city} ${item.email} ${item.phone}`.toLowerCase().includes(search.toLowerCase()));
 
   return <div className="crm-app">
@@ -257,6 +275,7 @@ export default function App() {
         {view === 'seguimientos' && <FollowupsView items={followups} onComplete={completeFollowup} onCustomer={setSelectedCustomer} />}
         {view === 'instalaciones' && <InstallationsView items={installations} customers={customers} team={team} canWrite={can('installations:write')} token={accessToken || ''} onRefresh={refresh} announce={announce} />}
         {view === 'inventario' && <InventoryView items={inventory} movements={inventoryMovements} canManage={can('inventory:manage')} canReadCosts={can('inventory:costs:read') || can('inventory:manage')} token={accessToken || ''} onRefresh={refresh} onMovements={setInventoryMovements} announce={announce} />}
+        {view === 'gastos' && <ExpensesView items={expenses} installations={installations} canWrite={can('expenses:write')} onSubmit={createExpense} />}
         {view === 'catalogo' && <CatalogView catalog={catalog} onSave={savePackage} onLogin={() => window.location.assign('/crm/login')} />}
         {view === 'equipo' && <TeamView members={team} loading={teamLoading} error={teamError} name={teamName} email={teamEmail} password={teamPassword} role={teamRole} busy={teamBusy} isDemo={false} onName={setTeamName} onEmail={setTeamEmail} onPassword={setTeamPassword} onRole={setTeamRole} onSubmit={createMember} onUpdateRole={updateMemberRole} />}
         {view === 'historial' && <HistoryCardsView token={accessToken || ''} announce={announce} />}
@@ -276,7 +295,7 @@ export default function App() {
   </div>;
 }
 
-function headingDescription(view: View) { return ({ inicio: '', clientes: 'Consulta prospectos, contactos y actividad comercial.', cotizaciones: 'Prepara, descarga y comparte propuestas con folio.', seguimientos: 'Da continuidad a las conversaciones y registra cada contacto.', instalaciones: 'Asigna y consulta órdenes de trabajo.', inventario: 'Administra materiales, entradas y existencias.', catalogo: 'Administra paquetes, inversores, precios y formas de pago.', equipo: 'Usuarios y privilegios para cada área.', historial: 'Conserva relatos, fuentes y versiones de cada user story card.' })[view] || ''; }
+function headingDescription(view: View) { return ({ inicio: '', clientes: 'Consulta prospectos, contactos y actividad comercial.', cotizaciones: 'Prepara, descarga y comparte propuestas con folio.', seguimientos: 'Da continuidad a las conversaciones y registra cada contacto.', instalaciones: 'Asigna y consulta órdenes de trabajo.', inventario: 'Administra materiales, entradas y existencias.', gastos: 'Registra gastos operativos y directos por fecha y proyecto.', catalogo: 'Administra paquetes, inversores, precios y formas de pago.', equipo: 'Usuarios y privilegios para cada área.', historial: 'Conserva relatos, fuentes y versiones de cada user story card.' })[view] || ''; }
 
 function DashboardView({ data, customers, quotes, followups, can, onCustomer, onView, onComplete }: { data: Dashboard; customers: Customer[]; quotes: Quote[]; followups: FollowUp[]; can: (p: string) => boolean; onCustomer: (c: Customer) => void; onView: (v: View) => void; onComplete: (f: FollowUp) => void }) {
   const recent = [...quotes].slice(0, 4);
@@ -304,6 +323,14 @@ function QuotesView({ quotes, onCreate, onDownload, onShare, onMarkSent, canWrit
 function FollowupsView({ items, onComplete, onCustomer }: { items: FollowUp[]; onComplete: (f: FollowUp) => void; onCustomer: (c: Customer) => void }) {
   const today = new Date().toISOString().slice(0, 10);
   return <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">BITÁCORA COMERCIAL</span><h2>{items.length} próximos contactos</h2></div></div>{items.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>FECHA</th><th>CLIENTE</th><th>NOTA DE SEGUIMIENTO</th><th>ESTADO</th><th/></tr></thead><tbody>{items.map(item => <tr key={item.id}><td>{new Date(`${item.due_date}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}</td><td><button className="link-button" onClick={() => item.customer && onCustomer(item.customer)}>{item.customer?.name || 'Cliente'}</button><small className="sub-cell">{item.customer?.city}</small></td><td>{item.note || 'Retomar conversación'}</td><td><span className={`status-chip ${item.due_date <= today ? 'status-overdue' : 'status-sent'}`}>{item.due_date < today ? 'Vencido' : item.due_date === today ? 'Hoy' : 'Programado'}</span></td><td><button className="button button-small button-outline" onClick={() => onComplete(item)}>Completar</button></td></tr>)}</tbody></table></div> : <EmptyState title="No tienes seguimientos pendientes" body="Desde una ficha de cliente puedes programar una fecha y agregar una nota de bitácora."/>}</section>;
+}
+
+const expenseCategories = ['Nómina', 'Combustible', 'Impuestos', 'Intereses', 'Préstamos', 'Mantenimiento', 'Servicios', 'Viáticos', 'Materiales', 'Otro'];
+function ExpensesView({ items, installations, canWrite, onSubmit }: { items: ProjectExpense[]; installations: Installation[]; canWrite: boolean; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const month = today.slice(0, 7);
+  const monthTotal = items.filter(item => item.occurred_on.startsWith(month)).reduce((sum, item) => sum + Number(item.amount), 0);
+  return <div className="dashboard-grid"><section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">CONTROL DE GASTOS</span><h2>Gastos del mes</h2></div><strong>{money(monthTotal)}</strong></div>{canWrite&&<><p className="muted-copy">Registra gastos operativos o asígnalos a una instalación. El movimiento de caja/cuenta se enlazará al completar el módulo de cuentas.</p><form className="team-form" onSubmit={onSubmit}><h3>Nuevo gasto</h3><Field label="Fecha" name="occurred_on" type="date" defaultValue={today} required/><label className="field"><span>Categoría</span><select name="category" defaultValue="Otro" required>{expenseCategories.map(category=><option key={category}>{category}</option>)}</select></label><Field className="span-two" label="Descripción" name="description" required placeholder="Concepto y detalle del gasto"/><Field label="Importe (MXN)" name="amount" type="number" min="0.01" step="0.01" required/><label className="field"><span>Proyecto / instalación (opcional)</span><select name="installation_id" defaultValue=""><option value="">Gasto operativo general</option>{installations.map(item=><option key={item.id} value={item.id}>{item.customer?.name || 'Proyecto'} · {item.customer?.city || item.status}</option>)}</select></label><Field className="span-two" label="Enlace a comprobante (opcional)" name="receipt_url" type="url" placeholder="https://…"/><button className="button button-primary">Registrar gasto</button></form></>}</section><section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">BITÁCORA FINANCIERA</span><h2>{items.length} movimientos</h2></div></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>FECHA</th><th>CATEGORÍA / DESCRIPCIÓN</th><th>PROYECTO</th><th>RESPONSABLE</th><th>IMPORTE</th></tr></thead><tbody>{items.map(item=><tr key={item.id}><td>{new Date(`${item.occurred_on}T12:00:00`).toLocaleDateString('es-MX')}</td><td><b>{item.category}</b><small className="sub-cell">{item.description}{item.receipt_url&&<> · <a href={item.receipt_url} target="_blank" rel="noreferrer">Comprobante ↗</a></>}</small></td><td>{item.project_customer}<small className="sub-cell">{item.project_city || 'Operación general'}</small></td><td>{item.created_by}</td><td>{money(Number(item.amount))}</td></tr>)}</tbody></table>{!items.length&&<EmptyState title="Sin gastos registrados" body="Agrega gastos operativos y costos directos para llevar su historial por fecha y proyecto."/>}</div></section></div>;
 }
 
 function InventoryView({ items, movements, canManage, canReadCosts, token, onRefresh, onMovements, announce }: { items: InventoryItem[]; movements: InventoryMovement[]; canManage: boolean; canReadCosts: boolean; token: string; onRefresh: () => Promise<void>; onMovements: (rows: InventoryMovement[]) => void; announce: (message: string, type?: Notice['type']) => void }) {
