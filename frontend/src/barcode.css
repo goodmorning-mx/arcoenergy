@@ -1,0 +1,10 @@
+.barcode-lookup{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,1.2fr);align-items:center;gap:14px;margin-bottom:14px}
+.barcode-lookup small{color:#75857a;font-size:9px;font-weight:800;letter-spacing:.08em}
+.barcode-lookup h2{font:700 15px Manrope;margin:5px 0}
+.barcode-lookup p{font-size:10px;color:#829087;margin:5px 0}
+.barcode-lookup form{display:flex;gap:8px}
+.barcode-lookup input{flex:1;min-width:0;padding:10px 12px;border:1px solid #dfe5de;border-radius:8px;font:inherit;font-size:11px}
+.barcode-lookup .button{white-space:nowrap}
+.barcode-camera{grid-column:1/-1;width:min(100%,520px);max-height:340px;justify-self:center;object-fit:cover;border-radius:12px;background:#14271f}
+.barcode-notice{grid-column:1/-1;padding:10px 12px;border-radius:8px;background:#edf5ed;color:#266b49!important}
+@media(max-width:640px){.barcode-lookup{grid-template-columns:1fr;padding:16px}.barcode-lookup form{display:grid;grid-template-columns:1fr 1fr}.barcode-lookup form input{grid-column:1/-1}.barcode-lookup form button{padding:10px 6px;font-size:10px}}
