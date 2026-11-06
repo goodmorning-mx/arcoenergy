@@ -129,6 +129,58 @@ La reutilización del sistema para otros clientes es una dirección futura expre
 9. ¿Qué datos se almacenan localmente en la PWA y cuáles requieren conexión obligatoria?
 10. ¿Qué alcance concreto tiene la futura reutilización del sistema para otros negocios?
 
+## History cards registradas en esta iteración
+
+Estas tarjetas son registros de descubrimiento, no especificaciones contables aprobadas. Los criterios son iniciales y las dudas se mantienen visibles para las siguientes iteraciones.
+
+### US-35 — Registrar operaciones relacionadas y sus efectos
+
+- **Stakeholder:** Mario Groso, contador.
+- **Fuente:** Mensajes de WhatsApp del 5 de noviembre de 2026, 12:54–12:58 p. m.
+- **Necesidad:** Registrar ventas, ventas a crédito y compras de materiales haciendo visibles y consistentes los efectos relacionados en dinero, cuentas por cobrar/pagar e inventario.
+- **Reglas expresadas por el stakeholder:**
+  - Venta pagada en efectivo o transferencia: aumenta caja o banco, según el medio de pago, y produce salida de materiales del almacén mediante una orden de trabajo.
+  - Venta a crédito: aumenta el saldo por cobrar al cliente y disminuye el inventario/almacén.
+  - Compra de material a crédito: aumenta inventario y saldo por pagar al proveedor.
+  - Compra de material de contado: aumenta inventario y disminuye caja o banco, según el medio de pago.
+- **Criterios iniciales:** relacionar operación y movimientos afectados; identificar el medio de pago/cuenta; conservar la referencia a orden de trabajo en la salida ligada a una venta; poder consultar los efectos y su historial.
+- **Pendiente:** momento exacto del movimiento de inventario; costo de venta, impuestos, pagos parciales y reversas; esos detalles requieren definición del contador.
+
+### US-36 — Corregir movimientos relacionados conservando historial
+
+- **Stakeholder:** Mario Groso, contador.
+- **Fuente:** Mensajes de WhatsApp del 5 de noviembre de 2026, 1:00–1:01 p. m.; foto del formato de Orden de Trabajo/Solicitud de Materiales.
+- **Necesidad:** Corregir movimientos o pagos a proveedor incorrectos sin borrar al proveedor ni perder el historial de pagos relacionado. Antes de actuar, se debe poder entender qué otros registros se afectan.
+- **Criterios iniciales:**
+  - Permitir corregir el movimiento erróneo conservando trazabilidad del valor original, corrección, responsable y fecha.
+  - Mantener visibles las relaciones del movimiento con proveedor, pago, cuenta y demás registros afectados.
+  - Hacer consultables los efectos en paralelo de cada acción.
+- **Aclaración relacionada:** la salida de almacén asociada a una venta se realiza mediante una orden de trabajo.
+- **Evidencia operativa:** el formato en papel conecta, por folio de proyecto, la orden de trabajo con una solicitud de materiales y registra código, descripción, cantidad requerida, devoluciones y piezas dañadas.
+- **Pendiente:** definir cuándo se descuenta inventario (solicitud, entrega o consumo confirmado), y cómo se corrigen o contabilizan devoluciones y daños.
+
+### US-37 — Revisar el sistema actual sección por sección
+
+- **Stakeholder:** Mario Groso, contador.
+- **Fuente:** Mensajes de WhatsApp del 5 de noviembre de 2026, 1:04–1:06 p. m.; documento Word de comentarios y mejoras.
+- **Necesidad:** Revisar las pestañas y secciones del sistema actual de César, entender qué hace cada una y contrastarlas con la solicitud del Word para dejarlo igual o parecido a lo que el stakeholder necesita.
+- **Criterios iniciales:** documentar cada sección actual; registrar su función observada; vincular observaciones del Word con esa sección; separar lo existente, lo que se solicita cambiar y las preguntas por validar antes de diseñar acciones contables.
+- **Pendiente:** completar el recorrido con acceso al sistema actual y confirmar cada diferencia con Mario.
+
+### US-38 — Consultar control diario y resultado por proyecto o periodo
+
+- **Stakeholder:** Mario Groso, contador; el nivel de reporte también dependerá de solicitudes de Josué.
+- **Fuente:** Mensajes de WhatsApp del 5 de noviembre de 2026, 1:16 p. m.
+- **Necesidad:** Llevar control diario de efectivo, clientes/cobranza, valor de almacén y gastos; preparar costeo o estado de resultados por proyecto y por mes.
+- **Información diaria solicitada:**
+  - Efectivo disponible / flujo de efectivo.
+  - Cuánto deben los clientes y cuánto se ha cobrado.
+  - Valor del almacén disponible, considerando entradas y salidas.
+  - Gastos: cuánto, cuándo, dónde y en qué se gastó; control de fijos y variables.
+- **Fórmula expresada por Mario:** ventas (ingresos) − costo de venta del almacén − gastos operativos fijos y variables + devoluciones y bonificaciones = resultado del periodo o proyecto.
+- **Criterios iniciales:** consultar cifras diarias derivadas de registros trazables; filtrar costo/resultado por proyecto o mes; permitir llegar a los movimientos que componen cada cifra.
+- **Pendiente:** definir categorías, fechas de corte, tratamiento fiscal y contable, y cálculos con Mario/Josué antes de tomar la fórmula como política definitiva.
+
 ## Fuentes y procedencia
 
 - History cards anteriores US-1 a US-34 y retrospectiva de Goito/contador registradas en la conversación del proyecto.
