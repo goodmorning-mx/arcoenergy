@@ -334,6 +334,12 @@ class StockReceiptInput(BaseModel):
 
 class InventoryItemInput(BaseModel):
     name: str = Field(min_length=2, max_length=180)
+    description: str = Field(default="", max_length=1000)
+    category: str = Field(default="", max_length=100)
+    brand: str = Field(default="", max_length=100)
+    model: str = Field(default="", max_length=120)
+    supplier_id: str | None = None
+    barcode: str | None = Field(default=None, max_length=120)
     unit: str = Field(default="pieza", max_length=40)
     minimum_quantity: float = Field(default=0, ge=0)
     initial_quantity: float = Field(default=0, ge=0)
@@ -918,7 +924,14 @@ def list_inventory(identity: AuthIdentity = Depends(require_permissions(auth_ser
 
 @router.post("/inventory/items", status_code=201, dependencies=[Depends(require_permissions(auth_service, "inventory:manage"))])
 def create_inventory_item(data: InventoryItemInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
-    row = InventoryItem(name=data.name.strip(), unit=data.unit.strip(), quantity=data.initial_quantity, minimum_quantity=data.minimum_quantity, unit_cost=data.unit_cost)
+    if data.supplier_id and not db.get(Supplier, data.supplier_id):
+        raise HTTPException(422, "Selecciona un proveedor registrado.")
+    barcode = data.barcode.strip() if data.barcode else None
+    if barcode and db.scalar(select(InventoryItem.id).where(InventoryItem.barcode == barcode)):
+        raise HTTPException(409, "Ese código ya está asignado a otro artículo.")
+    row = InventoryItem(name=data.name.strip(), description=data.description.strip(), category=data.category.strip(),
+        brand=data.brand.strip(), model=data.model.strip(), supplier_id=data.supplier_id, barcode=barcode,
+        unit=data.unit.strip(), quantity=data.initial_quantity, minimum_quantity=data.minimum_quantity, unit_cost=data.unit_cost)
     db.add(row); db.flush()
     if data.initial_quantity:
         db.add(InventoryMovement(item_id=row.id, quantity=data.initial_quantity, movement_type="in", unit_cost=data.unit_cost, reason="existencia inicial", created_by=identity.email))

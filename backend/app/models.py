@@ -138,6 +138,12 @@ class InventoryItem(Base):
     __tablename__ = "ae_inventory"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     name: Mapped[str] = mapped_column(String(180), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    category: Mapped[str] = mapped_column(String(100), default="")
+    brand: Mapped[str] = mapped_column(String(100), default="")
+    model: Mapped[str] = mapped_column(String(120), default="")
+    supplier_id: Mapped[str | None] = mapped_column(ForeignKey("ae_suppliers.id"), nullable=True, index=True)
+    barcode: Mapped[str | None] = mapped_column(String(120), nullable=True, unique=True)
     unit: Mapped[str] = mapped_column(String(40), default="pieza")
     quantity: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     minimum_quantity: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
