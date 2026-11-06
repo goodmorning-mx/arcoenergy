@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 from gm_agent import AgentService, Conversation, Message, OpenAIProvider
 from gm_mcp import Permission, RequestContext, ToolRegistry, tool
@@ -21,7 +22,7 @@ from gm_auth.models import memberships, users
 from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
-from app.models import Activity, Customer, FollowUp, Installation, InventoryItem, InventoryMovement, ProjectExpense, Quote, QuotePackage, Receivable
+from app.models import Activity, Customer, FollowUp, HistoryCard, Installation, InventoryItem, InventoryMovement, ProjectExpense, Quote, QuotePackage, Receivable
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 
 settings = get_settings()
@@ -299,6 +300,14 @@ class StockReceiptInput(BaseModel):
     reason: str = "entrada de almacén"
 
 
+class InventoryItemInput(BaseModel):
+    name: str = Field(min_length=2, max_length=180)
+    unit: str = Field(default="pieza", max_length=40)
+    minimum_quantity: float = Field(default=0, ge=0)
+    initial_quantity: float = Field(default=0, ge=0)
+    unit_cost: Decimal = Field(default=Decimal("0"), ge=0)
+
+
 class ExpenseInput(BaseModel):
     installation_id: str
     category: str = "Viáticos"
@@ -331,6 +340,41 @@ class TeamRoleInput(BaseModel):
     role: str
 
 
+class HistoryCardInput(BaseModel):
+    story_id: str = Field(min_length=1, max_length=30)
+    version: int = Field(ge=1)
+    iteration: str = Field(min_length=1, max_length=80)
+    stakeholder: str = Field(min_length=1, max_length=180)
+    source_literal: str = Field(min_length=1)
+    source_type: str = Field(min_length=1, max_length=40)
+    source_reference: str = ""
+    normalized_story: str = Field(min_length=1)
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    unresolved_questions: list[str] = Field(default_factory=list)
+    linked_cards: list[str] = Field(default_factory=list)
+
+
+@router.get("/history-cards", dependencies=[Depends(require_permissions(auth_service, "team:manage"))])
+def list_history_cards(db: Session = Depends(get_db)):
+    return [_serialize(row) for row in db.scalars(select(HistoryCard).order_by(HistoryCard.story_id, HistoryCard.version)).all()]
+
+
+@router.post("/history-cards", status_code=201, dependencies=[Depends(require_permissions(auth_service, "team:manage"))])
+def append_history_card(data: HistoryCardInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    latest = db.scalar(select(func.max(HistoryCard.version)).where(HistoryCard.story_id == data.story_id)) or 0
+    if data.version != latest + 1:
+        raise HTTPException(409, f"La siguiente versión disponible para {data.story_id} es {latest + 1}.")
+    row = HistoryCard(**data.model_dump(), recorded_by=identity.email)
+    db.add(row)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, f"La siguiente versión disponible para {data.story_id} es {latest + 1}.")
+    db.refresh(row)
+    return _serialize(row)
+
+
 @router.get("/catalog", dependencies=[Depends(require_permissions(auth_service, "quotes:read"))])
 def catalog(db: Session = Depends(get_db)):
     rows = db.scalars(select(QuotePackage).order_by(QuotePackage.panel_count)).all()
@@ -346,10 +390,10 @@ def catalog(db: Session = Depends(get_db)):
             "catalog_status": "demo" if row.is_demo else "approved",
         })
     return {
-        "demo": any(row.is_demo for row in rows),
+        "demo": False,
         "packages": packages,
         "payment_methods": ["Contado", "Financiamiento", "Plan 24"],
-        "catalog_note": "Los precios marcados como demostración son ilustrativos. Solo un administrador puede confirmar precios comerciales vigentes.",
+        "catalog_note": "Configura los precios y condiciones comerciales vigentes antes de cotizar.",
     }
 
 
@@ -564,6 +608,11 @@ def update_followup(followup_id: str, data: FollowUpDoneInput, identity: AuthIde
 @router.post("/installations", status_code=201, dependencies=[Depends(require_permissions(auth_service, "installations:write"))])
 def create_installation(data: InstallationInput, db: Session = Depends(get_db)):
     if not db.get(Customer, data.customer_id): raise HTTPException(404, "Cliente no encontrado.")
+    if data.lead_installer:
+        with auth_service.engine.connect() as connection:
+            member = connection.execute(select(users.c.id).join(memberships, memberships.c.user_id == users.c.id).where(users.c.email == data.lead_installer.lower(), users.c.is_active.is_(True), memberships.c.organization_id == settings.organization_id, memberships.c.roles.contains(["instalador"]))).first()
+        if member is None:
+            raise HTTPException(422, "Selecciona una cuenta activa con rol de instalador.")
     row = Installation(customer_id=data.customer_id, quote_id=data.quote_id, scheduled_at=data.scheduled_at, lead_installer=data.lead_installer, notes=data.notes, checklist=[{"task":"Confirmar materiales","done":False},{"task":"Asignar cuadrilla","done":False},{"task":"Visita de instalación","done":False},{"task":"Registrar consumos","done":False},{"task":"Cerrar proyecto","done":False}])
     db.add(row); db.commit(); db.refresh(row)
     return _serialize(row)
@@ -587,8 +636,22 @@ def list_inventory(identity: AuthIdentity = Depends(require_permissions(auth_ser
     return rows
 
 
+@router.post("/inventory/items", status_code=201, dependencies=[Depends(require_permissions(auth_service, "inventory:manage"))])
+def create_inventory_item(data: InventoryItemInput, db: Session = Depends(get_db)):
+    row = InventoryItem(name=data.name.strip(), unit=data.unit.strip(), quantity=data.initial_quantity, minimum_quantity=data.minimum_quantity, unit_cost=data.unit_cost)
+    db.add(row); db.flush()
+    if data.initial_quantity:
+        db.add(InventoryMovement(item_id=row.id, quantity=data.initial_quantity, reason="existencia inicial"))
+    db.commit(); db.refresh(row)
+    return _serialize(row)
+
+
 @router.post("/inventory/consume", status_code=201)
 def consume_inventory(data: StockInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:write")), db: Session = Depends(get_db)):
+    if "instalador" in identity.roles:
+        installation = db.get(Installation, data.installation_id) if data.installation_id else None
+        if installation is None or installation.lead_installer.lower() != (identity.email or "").lower():
+            raise HTTPException(403, "Solo puedes registrar consumos en una orden asignada a tu cuenta.")
     item = db.get(InventoryItem, data.item_id)
     if not item: raise HTTPException(404, "Artículo no encontrado.")
     if float(item.quantity) < data.quantity: raise HTTPException(409, "Existencia insuficiente para este consumo.")
@@ -600,21 +663,24 @@ def consume_inventory(data: StockInput, identity: AuthIdentity = Depends(require
     return {"movement": _serialize(movement), "item": serialized_item}
 
 
-@router.post("/inventory/receive", status_code=201, dependencies=[Depends(require_permissions(auth_service, "inventory:manage"))])
-def receive_inventory(data: StockReceiptInput, db: Session = Depends(get_db)):
+@router.post("/inventory/receive", status_code=201)
+def receive_inventory(data: StockReceiptInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:manage")), db: Session = Depends(get_db)):
     item = db.get(InventoryItem, data.item_id)
     if not item: raise HTTPException(404, "Artículo no encontrado.")
     item.quantity = float(item.quantity) + data.quantity
     item.unit_cost = data.unit_cost
-    movement = InventoryMovement(item_id=data.item_id, quantity=data.quantity, reason=data.reason)
+    movement = InventoryMovement(item_id=data.item_id, quantity=data.quantity, reason=data.reason, created_by=identity.email)
     db.add(movement); db.commit(); db.refresh(movement)
     return {"movement": _serialize(movement), "item": _serialize(item)}
 
 
-@router.post("/expenses", status_code=201, dependencies=[Depends(require_permissions(auth_service, "expenses:write"))])
-def add_expense(data: ExpenseInput, db: Session = Depends(get_db)):
-    if not db.get(Installation, data.installation_id): raise HTTPException(404, "Instalación no encontrada.")
-    row = ProjectExpense(**data.model_dump()); db.add(row); db.commit(); db.refresh(row)
+@router.post("/expenses", status_code=201)
+def add_expense(data: ExpenseInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "expenses:write")), db: Session = Depends(get_db)):
+    installation = db.get(Installation, data.installation_id)
+    if not installation: raise HTTPException(404, "Instalación no encontrada.")
+    if "instalador" in identity.roles and installation.lead_installer.lower() != (identity.email or "").lower():
+        raise HTTPException(403, "Solo puedes registrar gastos en una orden asignada a tu cuenta.")
+    row = ProjectExpense(**data.model_dump(), created_by=identity.email); db.add(row); db.commit(); db.refresh(row)
     return _serialize(row)
 
 
@@ -726,4 +792,4 @@ def whatsapp_link(phone: str, message: str):
 @router.get("/dashboard", dependencies=[Depends(require_permissions(auth_service, "customers:read"))])
 def dashboard(db: Session = Depends(get_db)):
     active_quotes = Quote.status.in_(["draft", "sent"])
-    return {"customers": db.scalar(select(func.count()).select_from(Customer)) or 0, "quotes_open": db.scalar(select(func.count()).select_from(Quote).where(active_quotes)) or 0, "quotes_amount": float(db.scalar(select(func.coalesce(func.sum(Quote.total), 0)).where(active_quotes)) or 0), "installations_active": db.scalar(select(func.count()).select_from(Installation).where(Installation.status != "closed")) or 0, "receivables_open": float(db.scalar(select(func.coalesce(func.sum(Receivable.amount-Receivable.paid_amount), 0)).where(Receivable.status != "paid")) or 0), "demo_data": True}
+    return {"customers": db.scalar(select(func.count()).select_from(Customer)) or 0, "quotes_open": db.scalar(select(func.count()).select_from(Quote).where(active_quotes)) or 0, "quotes_amount": float(db.scalar(select(func.coalesce(func.sum(Quote.total), 0)).where(active_quotes)) or 0), "installations_active": db.scalar(select(func.count()).select_from(Installation).where(Installation.status != "closed")) or 0, "receivables_open": float(db.scalar(select(func.coalesce(func.sum(Receivable.amount-Receivable.paid_amount), 0)).where(Receivable.status != "paid")) or 0), "demo_data": False}
