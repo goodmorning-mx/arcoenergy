@@ -399,8 +399,8 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 | US-13 | Pendiente | Google Drive y políticas de carpetas/permisos. |
 | US-14 | Funcional en API y portales | Completar matriz de acceso por cada entidad/campo y pruebas de aislamiento. |
 | US-15–16, US-19 | Pendientes/parciales | Ventas contables, historial/aplicación de cobranza y alertas financieras; el resumen comercial actual no es estado financiero. |
-| US-17 | Funcional básico | Administrador y contador registran gastos operativos/directos por fecha, categoría, proyecto opcional y comprobante enlazado. Falta afectar una cuenta de caja/banco, autorización y conciliación. |
-| US-18 | Funcional básico | Se crean cuentas de efectivo/banco con saldo inicial y se consultan saldos/reportes; los pagos a proveedor ya afectan automáticamente la cuenta; faltan enlazar ventas, cobranza, gastos y conciliación bancaria. |
+| US-17 | Funcional básico | Administrador y contador registran gastos operativos/directos por fecha, categoría, proyecto opcional y comprobante enlazado; el gasto descuenta la cuenta seleccionada. Falta autorización y conciliación bancaria. |
+| US-18 | Funcional básico | Se crean cuentas de efectivo/banco con saldo inicial y se consultan saldos/reportes; pagos a proveedores y gastos administrativos enlazan sus salidas; faltan ventas, cobranza y conciliación bancaria. |
 | US-20 | Parcial | Artículos con descripción, unidad, existencia, mínimo y costo; faltan categoría, marca, modelo, proveedor y QR. |
 | US-21 | Funcional básico | Compra multirenglón con proveedor y referencia de factura; cada renglón aumenta almacén y conserva costo por movimiento; faltan captura XML y OCR de factura. |
 | US-22 | Pendiente | Lectura automática de factura XML/PDF y conciliación de datos antes de registrar. |
