@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Date, DateTime, Integer, JSON, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -45,7 +45,7 @@ class QuotePackage(Base):
     default_inverter: Mapped[str] = mapped_column(String(120), default="")
     payment_methods: Mapped[list] = mapped_column(JSON, default=lambda: ["Contado", "Financiamiento", "Plan 24"])
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    is_demo: Mapped[bool] = mapped_column(Boolean, default=False)
+    pricing_approved: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_by: Mapped[str] = mapped_column(String(180), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
@@ -68,7 +68,7 @@ class Quote(Base):
     inverter_cost: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     total: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     status: Mapped[str] = mapped_column(String(40), default="draft")
-    is_demo: Mapped[bool] = mapped_column(Boolean, default=False)
+    pricing_approved: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
@@ -140,6 +140,49 @@ class ProjectExpense(Base):
     amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     occurred_on: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
     receipt_url: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(180), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class FinancialAccount(Base):
+    __tablename__ = "ae_financial_accounts"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    account_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    opening_balance: Mapped[float] = mapped_column(Numeric(14, 2), default=0, nullable=False)
+    opening_balance_date: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(180), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class CashMovement(Base):
+    __tablename__ = "ae_cash_movements"
+    __table_args__ = (UniqueConstraint("reversal_of_id", name="uq_ae_cash_movement_reversal"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    account_id: Mapped[str] = mapped_column(ForeignKey("ae_financial_accounts.id"), nullable=False, index=True)
+    direction: Mapped[str] = mapped_column(String(10), nullable=False)
+    amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    category: Mapped[str] = mapped_column(String(80), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    occurred_on: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(40), default="manual", nullable=False)
+    source_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    reversal_of_id: Mapped[str | None] = mapped_column(ForeignKey("ae_cash_movements.id"), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(180), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class Supplier(Base):
+    __tablename__ = "ae_suppliers"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    name: Mapped[str] = mapped_column(String(180), nullable=False)
+    rfc: Mapped[str] = mapped_column(String(20), default="")
+    phone: Mapped[str] = mapped_column(String(40), default="")
+    email: Mapped[str] = mapped_column(String(180), default="")
+    payment_terms: Mapped[str] = mapped_column(String(20), default="cash", nullable=False)
+    credit_days: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_by: Mapped[str] = mapped_column(String(180), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 

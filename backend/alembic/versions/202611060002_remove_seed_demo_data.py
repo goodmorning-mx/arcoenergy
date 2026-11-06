@@ -4,8 +4,8 @@ Revision ID: 202611060002
 Revises: 202611060001
 """
 from alembic import op
-from sqlalchemy import delete, select
-from app.models import InventoryItem, InventoryMovement, QuotePackage
+from sqlalchemy import delete, inspect, select, text
+from app.models import InventoryItem, InventoryMovement
 
 revision = "202611060002"
 down_revision = "202611060001"
@@ -25,7 +25,13 @@ SEED_NAMES = (
 def upgrade() -> None:
     bind = op.get_bind()
     # Verified DEV contents were all provisional packages with no quote history.
-    bind.execute(delete(QuotePackage).where(QuotePackage.is_demo.is_(True)))
+    # Migration 001 creates a pricing_approved column on fresh installs. Use
+    # SQL here instead of importing a current model into a historical migration.
+    columns = {column["name"] for column in inspect(bind).get_columns("ae_quote_packages")}
+    if "pricing_approved" in columns:
+        bind.execute(text("DELETE FROM ae_quote_packages WHERE pricing_approved = FALSE"))
+    elif "is_demo" in columns:
+        bind.execute(text("DELETE FROM ae_quote_packages WHERE is_demo = TRUE"))
     # Keep any item that acquired stock, a cost, a minimum, or movement history.
     used = select(InventoryMovement.item_id).where(InventoryMovement.item_id == InventoryItem.id).exists()
     bind.execute(delete(InventoryItem).where(
