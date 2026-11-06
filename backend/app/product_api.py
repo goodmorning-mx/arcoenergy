@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from io import BytesIO
 from urllib.parse import quote as urlquote
@@ -643,7 +643,7 @@ def create_inventory_item(data: InventoryItemInput, identity: AuthIdentity = Dep
     row = InventoryItem(name=data.name.strip(), unit=data.unit.strip(), quantity=data.initial_quantity, minimum_quantity=data.minimum_quantity, unit_cost=data.unit_cost)
     db.add(row); db.flush()
     if data.initial_quantity:
-        db.add(InventoryMovement(item_id=row.id, quantity=data.initial_quantity, reason="existencia inicial", created_by=identity.email))
+        db.add(InventoryMovement(item_id=row.id, quantity=data.initial_quantity, movement_type="in", unit_cost=data.unit_cost, reason="existencia inicial", created_by=identity.email))
     db.commit(); db.refresh(row)
     return _serialize(row)
 
@@ -658,7 +658,7 @@ def consume_inventory(data: StockInput, identity: AuthIdentity = Depends(require
     if not item: raise HTTPException(404, "Artículo no encontrado.")
     if float(item.quantity) < data.quantity: raise HTTPException(409, "Existencia insuficiente para este consumo.")
     item.quantity = float(item.quantity) - data.quantity
-    movement = InventoryMovement(**data.model_dump()); db.add(movement); db.commit(); db.refresh(movement)
+    movement = InventoryMovement(**data.model_dump(), movement_type="out", unit_cost=item.unit_cost, created_by=identity.email); db.add(movement); db.commit(); db.refresh(movement)
     serialized_item = _serialize(item)
     if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
         serialized_item.pop("unit_cost", None)
@@ -671,9 +671,44 @@ def receive_inventory(data: StockReceiptInput, identity: AuthIdentity = Depends(
     if not item: raise HTTPException(404, "Artículo no encontrado.")
     item.quantity = float(item.quantity) + data.quantity
     item.unit_cost = data.unit_cost
-    movement = InventoryMovement(item_id=data.item_id, quantity=data.quantity, reason=data.reason, created_by=identity.email)
+    movement = InventoryMovement(item_id=data.item_id, quantity=data.quantity, movement_type="in", unit_cost=data.unit_cost, reason=data.reason, created_by=identity.email)
     db.add(movement); db.commit(); db.refresh(movement)
     return {"movement": _serialize(movement), "item": _serialize(item)}
+
+
+@router.get("/inventory/movements")
+def list_inventory_movements(
+    item_id: str | None = None,
+    from_date: date | None = None,
+    to_date: date | None = None,
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:read")),
+    db: Session = Depends(get_db),
+):
+    if from_date and to_date and from_date > to_date:
+        raise HTTPException(422, "La fecha inicial debe ser anterior a la fecha final.")
+    query = select(InventoryMovement, InventoryItem.name, InventoryItem.unit).join(
+        InventoryItem, InventoryItem.id == InventoryMovement.item_id
+    )
+    if item_id:
+        query = query.where(InventoryMovement.item_id == item_id)
+    if from_date:
+        query = query.where(InventoryMovement.created_at >= datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc))
+    if to_date:
+        query = query.where(InventoryMovement.created_at < datetime.combine(to_date + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc))
+    if "instalador" in identity.roles:
+        query = query.join(Installation, Installation.id == InventoryMovement.installation_id).where(
+            Installation.lead_installer == identity.email
+        )
+    query = query.order_by(InventoryMovement.created_at.desc()).limit(500)
+    rows = db.execute(query).all()
+    result = []
+    for movement, item_name, unit in rows:
+        line = _serialize(movement)
+        line.update({"item_name": item_name, "unit": unit, "signed_quantity": -float(movement.quantity) if movement.movement_type in {"out", "waste"} else float(movement.quantity)})
+        if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
+            line.pop("unit_cost", None)
+        result.append(line)
+    return result
 
 
 @router.post("/expenses", status_code=201)
