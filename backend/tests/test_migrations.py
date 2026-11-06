@@ -5,6 +5,14 @@ from unittest.mock import patch
 import pytest
 
 from app import migrations
+from app.models import InventoryMovement
+
+
+def test_inventory_movement_foreign_key_names_fit_postgresql_identifier_limit() -> None:
+    names = [constraint.name for constraint in InventoryMovement.__table__.foreign_key_constraints if constraint.name]
+
+    assert names
+    assert all(len(name) <= 63 for name in names)
 
 
 class FakeResult:

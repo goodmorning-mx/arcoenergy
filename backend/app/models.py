@@ -161,7 +161,7 @@ class InventoryMovement(Base):
     unit_cost: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     related_movement_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     purchase_line_id: Mapped[str | None] = mapped_column(ForeignKey("ae_purchase_lines.id"), nullable=True, index=True)
-    work_order_material_id: Mapped[str | None] = mapped_column(ForeignKey("ae_work_order_materials.id"), nullable=True, index=True)
+    work_order_material_id: Mapped[str | None] = mapped_column(ForeignKey("ae_work_order_materials.id", name="fk_ae_inv_movements_work_order_material"), nullable=True, index=True)
     reason: Mapped[str] = mapped_column(String(180), default="")
     created_by: Mapped[str] = mapped_column(String(180), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
