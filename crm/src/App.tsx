@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNo
 import { AgentChat } from '@goodmorning/gm-agent';
 import { useAuth } from '@goodmorning/gm-auth';
 
-type View = 'inicio' | 'clientes' | 'cotizaciones' | 'seguimientos' | 'instalaciones' | 'inventario' | 'gastos' | 'cuentas' | 'proveedores' | 'catalogo' | 'equipo' | 'historial';
+type View = 'inicio' | 'clientes' | 'cotizaciones' | 'seguimientos' | 'instalaciones' | 'inventario' | 'gastos' | 'cuentas' | 'proveedores' | 'compras' | 'catalogo' | 'equipo' | 'historial';
 type Customer = { id: string; name: string; phone: string; email: string; city: string; address: string; status: string; source: string; created_at?: string };
 type Quote = { id: string; folio: string; customer_id: string; customer?: Customer; panel_count: number; panel_brand: string; panel_watts: number; inverter: string; payment_method: string; total: number; status: string; pricing_approved: boolean; installation_city: string; installation_address: string; created_at: string };
 type Package = { id: string; panel_count: number; panel_brand: string; panel_watts: number; panel_unit_price: number; structure_name: string; structure_price: number; inverter_options: Array<{ name: string; price_mxn: number }>; default_inverter: string; payment_methods: string[]; enabled: boolean; pricing_approved: boolean; price_mxn: number; system_kw: number };
@@ -16,12 +16,13 @@ type ProjectExpense = { id: string; installation_id: string | null; category: st
 type FinancialAccount = { id: string; name: string; account_type: 'cash' | 'bank'; opening_balance: number; opening_balance_date: string; current_balance: number; movement_count: number };
 type CashMovement = { id: string; account_id: string; direction: 'in' | 'out'; amount: number; category: string; description: string; occurred_on: string; source_type: string; source_id: string | null; reversal_of_id: string | null; created_by: string };
 type Supplier = { id: string; name: string; rfc: string; phone: string; email: string; payment_terms: 'cash' | 'credit'; credit_days: number; active: boolean; current_balance: number };
+type Purchase = { id: string; folio: string; supplier_id: string; supplier?: { id: string; name: string }; invoice_number: string; payment_terms: 'cash' | 'credit'; purchase_date: string; due_date: string | null; total: number; paid_amount: number; balance: number; status: string; lines: Array<{ id: string; item_name: string; quantity: number; unit_cost: number; line_total: number }> };
 type Dashboard = { customers?: number; quotes_open?: number; quotes_amount?: number; installations_active?: number; receivables_open?: number };
 type CatalogPayload = { packages: Package[]; payment_methods: string[]; catalog_note: string };
 type Notice = { type: 'success' | 'error' | 'info'; text: string };
 
 const apiBase = '/api/v1';
-const money = (amount: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(amount || 0);
+const money = (amount: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 2 }).format(amount || 0);
 const initials = (name: string) => name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
 const roleLabel: Record<string, string> = { admin: 'Administrador', administrador: 'Administrador', contador: 'Contador', marketing: 'Marketing', instalador: 'Instalador', cliente: 'Cliente' };
 const roleOptions = [['administrador', 'Administrador'], ['contador', 'Contador'], ['marketing', 'Marketing'], ['instalador', 'Instalador'], ['cliente', 'Cliente']] as const;
@@ -65,6 +66,7 @@ export default function App() {
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const [accountMovements, setAccountMovements] = useState<CashMovement[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamError, setTeamError] = useState('');
   const [teamName, setTeamName] = useState('');
@@ -86,9 +88,10 @@ export default function App() {
     ...(can('expenses:read') ? ['gastos' as View] : []),
     ...(can('accounts:read') ? ['cuentas' as View] : []),
     ...(can('suppliers:read') ? ['proveedores' as View] : []),
+    ...(can('purchases:read') ? ['compras' as View] : []),
     ...(can('team:manage') ? ['catalogo' as View, 'equipo' as View, 'historial' as View] : []),
   ]), [can, clientAccount]);
-  const title: Record<View, string> = { inicio: 'Resumen', clientes: 'Clientes', cotizaciones: 'Cotizaciones', seguimientos: 'Seguimientos', instalaciones: 'Instalaciones', inventario: 'Inventario', gastos: 'Gastos operativos', cuentas: 'Caja y bancos', proveedores: 'Proveedores', catalogo: 'Catálogo de paquetes', equipo: 'Equipo y accesos', historial: 'History cards' };
+  const title: Record<View, string> = { inicio: 'Resumen', clientes: 'Clientes', cotizaciones: 'Cotizaciones', seguimientos: 'Seguimientos', instalaciones: 'Instalaciones', inventario: 'Inventario', gastos: 'Gastos operativos', cuentas: 'Caja y bancos', proveedores: 'Proveedores', compras: 'Compras y cuentas por pagar', catalogo: 'Catálogo de paquetes', equipo: 'Equipo y accesos', historial: 'History cards' };
 
   const announce = (text: string, type: Notice['type'] = 'success') => {
     setNotice({ text, type });
@@ -149,9 +152,15 @@ export default function App() {
         setSelectedAccountId(current => rows.some(row => row.id === current) ? current : rows[0]?.id || '');
       }).catch(error => announce(error instanceof Error ? error.message : 'No se pudieron cargar las cuentas.', 'error'));
     }
-    if (view === 'proveedores' && accessToken && can('suppliers:read')) {
+    if ((view === 'proveedores' || view === 'compras') && accessToken && can('suppliers:read')) {
       void request<Supplier[]>('/suppliers', accessToken).then(setSuppliers)
         .catch(error => announce(error instanceof Error ? error.message : 'No se pudieron cargar los proveedores.', 'error'));
+    }
+    if (view === 'compras' && accessToken && can('purchases:read')) {
+      void request<Purchase[]>('/purchases', accessToken).then(setPurchases)
+        .catch(error => announce(error instanceof Error ? error.message : 'No se pudieron cargar las compras.', 'error'));
+      if (can('accounts:read')) void request<FinancialAccount[]>('/accounts', accessToken).then(setAccounts)
+        .catch(error => announce(error instanceof Error ? error.message : 'No se pudieron cargar las cuentas de pago.', 'error'));
     }
   }, [view, accessToken, can]);
 
@@ -306,7 +315,7 @@ export default function App() {
   if (!identity || !accessToken) { window.location.replace('/crm/login'); return null; }
   if (clientAccount) return <div className="client-redirect"><div className="brand-mark">A</div><p>Tu portal de cliente está en la aplicación móvil.</p><a href="/app/" className="button button-primary">Abrir mi portal →</a><button className="text-button" onClick={() => void logout()}>Cerrar sesión</button></div>;
 
-  const nav: Array<[View, string, string]> = [['inicio', '◫', 'Resumen'], ['clientes', '♙', 'Clientes'], ['cotizaciones', '▤', 'Cotizaciones'], ['seguimientos', '◷', 'Seguimientos'], ...(can('installations:read') ? [['instalaciones', '⌂', 'Instalaciones']] as Array<[View, string, string]> : []), ...(can('inventory:read') ? [['inventario', '▦', 'Inventario']] as Array<[View, string, string]> : []), ...(can('expenses:read') ? [['gastos', '$', 'Gastos']] as Array<[View, string, string]> : []), ...(can('accounts:read') ? [['cuentas', '▤', 'Caja / bancos']] as Array<[View, string, string]> : []), ...(can('suppliers:read') ? [['proveedores', '♧', 'Proveedores']] as Array<[View, string, string]> : []), ...(can('team:manage') ? [['catalogo', '⊞', 'Catálogo'], ['equipo', '♧', 'Equipo'], ['historial', '↺', 'History cards']] as Array<[View, string, string]> : [])];
+  const nav: Array<[View, string, string]> = [['inicio', '◫', 'Resumen'], ['clientes', '♙', 'Clientes'], ['cotizaciones', '▤', 'Cotizaciones'], ['seguimientos', '◷', 'Seguimientos'], ...(can('installations:read') ? [['instalaciones', '⌂', 'Instalaciones']] as Array<[View, string, string]> : []), ...(can('inventory:read') ? [['inventario', '▦', 'Inventario']] as Array<[View, string, string]> : []), ...(can('expenses:read') ? [['gastos', '$', 'Gastos']] as Array<[View, string, string]> : []), ...(can('accounts:read') ? [['cuentas', '▤', 'Caja / bancos']] as Array<[View, string, string]> : []), ...(can('suppliers:read') ? [['proveedores', '♧', 'Proveedores']] as Array<[View, string, string]> : []), ...(can('purchases:read') ? [['compras', '▤', 'Compras / CxP']] as Array<[View, string, string]> : []), ...(can('team:manage') ? [['catalogo', '⊞', 'Catálogo'], ['equipo', '♧', 'Equipo'], ['historial', '↺', 'History cards']] as Array<[View, string, string]> : [])];
   const visibleCustomers = customers.filter(item => `${item.name} ${item.city} ${item.email} ${item.phone}`.toLowerCase().includes(search.toLowerCase()));
 
   return <div className="crm-app">
@@ -337,6 +346,7 @@ export default function App() {
         {view === 'gastos' && <ExpensesView items={expenses} installations={installations} canWrite={can('expenses:write')} onSubmit={createExpense} />}
         {view === 'cuentas' && <AccountsView accounts={accounts} selectedId={selectedAccountId} onSelect={setSelectedAccountId} movements={accountMovements} canManage={can('accounts:manage')} canWrite={can('accounts:write')} onCreateAccount={createAccount} onCreateMovement={createCashMovement} onReverse={reverseCashMovement} />}
         {view === 'proveedores' && <SuppliersView items={suppliers} canWrite={can('suppliers:manage')} onSubmit={createSupplier} />}
+        {view === 'compras' && <PurchasesView items={purchases} suppliers={suppliers} inventory={inventory} accounts={accounts} canWrite={can('purchases:write')} token={accessToken || ''} onItems={setPurchases} onSuppliers={setSuppliers} onAccounts={setAccounts} onInventory={setInventory} announce={announce} />}
         {view === 'catalogo' && <CatalogView catalog={catalog} onSave={savePackage} onLogin={() => window.location.assign('/crm/login')} />}
         {view === 'equipo' && <TeamView members={team} loading={teamLoading} error={teamError} name={teamName} email={teamEmail} password={teamPassword} role={teamRole} busy={teamBusy} onName={setTeamName} onEmail={setTeamEmail} onPassword={setTeamPassword} onRole={setTeamRole} onSubmit={createMember} onUpdateRole={updateMemberRole} />}
         {view === 'historial' && <HistoryCardsView token={accessToken || ''} announce={announce} />}
@@ -356,7 +366,7 @@ export default function App() {
   </div>;
 }
 
-function headingDescription(view: View) { return ({ inicio: '', clientes: 'Consulta prospectos, contactos y actividad comercial.', cotizaciones: 'Prepara, descarga y comparte propuestas con folio.', seguimientos: 'Da continuidad a las conversaciones y registra cada contacto.', instalaciones: 'Asigna y consulta órdenes de trabajo.', inventario: 'Administra materiales, entradas y existencias.', gastos: 'Registra gastos operativos y directos por fecha y proyecto.', cuentas: 'Consulta saldos y registra movimientos de caja y bancos.', proveedores: 'Administra proveedores y sus condiciones de pago.', catalogo: 'Administra paquetes, inversores, precios y formas de pago.', equipo: 'Usuarios y privilegios para cada área.', historial: 'Conserva relatos, fuentes y versiones de cada user story card.' })[view] || ''; }
+function headingDescription(view: View) { return ({ inicio: '', clientes: 'Consulta prospectos, contactos y actividad comercial.', cotizaciones: 'Prepara, descarga y comparte propuestas con folio.', seguimientos: 'Da continuidad a las conversaciones y registra cada contacto.', instalaciones: 'Asigna y consulta órdenes de trabajo.', inventario: 'Administra materiales, entradas y existencias.', gastos: 'Registra gastos operativos y directos por fecha y proyecto.', cuentas: 'Consulta saldos y registra movimientos de caja y bancos.', proveedores: 'Administra proveedores y sus condiciones de pago.', compras: 'Registra entradas de material, facturas y saldos por pagar.', catalogo: 'Administra paquetes, inversores, precios y formas de pago.', equipo: 'Usuarios y privilegios para cada área.', historial: 'Conserva relatos, fuentes y versiones de cada user story card.' })[view] || ''; }
 
 function DashboardView({ data, customers, quotes, followups, can, onCustomer, onView, onComplete }: { data: Dashboard; customers: Customer[]; quotes: Quote[]; followups: FollowUp[]; can: (p: string) => boolean; onCustomer: (c: Customer) => void; onView: (v: View) => void; onComplete: (f: FollowUp) => void }) {
   const recent = [...quotes].slice(0, 4);
@@ -401,7 +411,78 @@ function AccountsView({ accounts, selectedId, onSelect, movements, canManage, ca
 }
 
 function SuppliersView({ items, canWrite, onSubmit }: { items: Supplier[]; canWrite: boolean; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
-  return <div className="dashboard-grid"><section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">CATÁLOGO DE COMPRAS</span><h2>{items.length} proveedores</h2></div></div>{canWrite&&<form className="team-form" onSubmit={onSubmit}><h3>Nuevo proveedor</h3><Field className="span-two" label="Razón social / nombre" name="name" required/><Field label="RFC" name="rfc"/><Field label="Teléfono" name="phone" type="tel"/><Field label="Correo" name="email" type="email"/><label className="field"><span>Condiciones habituales</span><select name="payment_terms"><option value="cash">Contado</option><option value="credit">Crédito</option></select></label><Field label="Días de crédito" name="credit_days" type="number" min="0" max="365" defaultValue={0}/><button className="button button-primary">Guardar proveedor</button></form>}</section><section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">PROVEEDORES</span><h2>Condiciones comerciales</h2></div></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>PROVEEDOR</th><th>RFC / CONTACTO</th><th>CONDICIÓN</th><th>ESTADO</th></tr></thead><tbody>{items.map(item=><tr key={item.id}><td><b>{item.name}</b><small className="sub-cell">{item.email}</small></td><td>{item.rfc||'RFC pendiente'}<small className="sub-cell">{item.phone}</small></td><td>{item.payment_terms==='credit'?`Crédito · ${item.credit_days} días`:'Contado'}</td><td><span className={`status-chip ${item.active?'status-approved':'status-overdue'}`}>{item.active?'Activo':'Inactivo'}</span></td></tr>)}</tbody></table>{!items.length&&<EmptyState title="Sin proveedores registrados" body="Agrega los proveedores y sus condiciones para usarlos en compras."/>}</div><p className="muted-copy">Las compras y los saldos por proveedor se conectarán en el flujo de entradas de almacén.</p></section></div>;
+  return <div className="dashboard-grid"><section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">CATÁLOGO DE COMPRAS</span><h2>{items.length} proveedores</h2></div></div>{canWrite&&<form className="team-form" onSubmit={onSubmit}><h3>Nuevo proveedor</h3><Field className="span-two" label="Razón social / nombre" name="name" required/><Field label="RFC" name="rfc"/><Field label="Teléfono" name="phone" type="tel"/><Field label="Correo" name="email" type="email"/><label className="field"><span>Condiciones habituales</span><select name="payment_terms"><option value="cash">Contado</option><option value="credit">Crédito</option></select></label><Field label="Días de crédito" name="credit_days" type="number" min="0" max="365" defaultValue={0}/><button className="button button-primary">Guardar proveedor</button></form>}</section><section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">PROVEEDORES</span><h2>Condiciones comerciales</h2></div></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>PROVEEDOR</th><th>RFC / CONTACTO</th><th>CONDICIÓN</th><th>SALDO POR PAGAR</th><th>ESTADO</th></tr></thead><tbody>{items.map(item=><tr key={item.id}><td><b>{item.name}</b><small className="sub-cell">{item.email}</small></td><td>{item.rfc||'RFC pendiente'}<small className="sub-cell">{item.phone}</small></td><td>{item.payment_terms==='credit'?`Crédito · ${item.credit_days} días`:'Contado'}</td><td><b>{money(Number(item.current_balance))}</b></td><td><span className={`status-chip ${item.active?'status-approved':'status-overdue'}`}>{item.active?'Activo':'Inactivo'}</span></td></tr>)}</tbody></table>{!items.length&&<EmptyState title="Sin proveedores registrados" body="Agrega los proveedores y sus condiciones para usarlos en compras."/>}</div><p className="muted-copy">El saldo por pagar se calcula con las compras y los pagos vinculados.</p></section></div>;
+}
+
+function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token, onItems, onSuppliers, onAccounts, onInventory, announce }: { items: Purchase[]; suppliers: Supplier[]; inventory: InventoryItem[]; accounts: FinancialAccount[]; canWrite: boolean; token: string; onItems: (rows: Purchase[]) => void; onSuppliers: (rows: Supplier[]) => void; onAccounts: (rows: FinancialAccount[]) => void; onInventory: (rows: InventoryItem[]) => void; announce: (message: string, type?: Notice['type']) => void }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [lines, setLines] = useState([{ item_id: '', quantity: '1', unit_cost: '' }]);
+  const [paymentPurchase, setPaymentPurchase] = useState<Purchase | null>(null);
+  const [terms, setTerms] = useState<'cash' | 'credit'>('cash');
+  const [supplierId, setSupplierId] = useState('');
+  const [initialPayment, setInitialPayment] = useState('0');
+  const total = lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unit_cost || 0), 0);
+
+  async function reload() {
+    const [purchaseRows, supplierRows, accountRows, inventoryRows] = await Promise.all([
+      request<Purchase[]>('/purchases', token), request<Supplier[]>('/suppliers', token),
+      request<FinancialAccount[]>('/accounts', token), request<InventoryItem[]>('/inventory', token),
+    ]);
+    onItems(purchaseRows); onSuppliers(supplierRows); onAccounts(accountRows); onInventory(inventoryRows);
+  }
+
+  async function submitPurchase(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
+    try {
+      const purchase = await request<Purchase>('/purchases', token, { method: 'POST', body: JSON.stringify({
+        supplier_id: supplierId, invoice_number: String(data.get('invoice_number') || '').trim(), payment_terms: terms,
+        purchase_date: String(data.get('purchase_date')), due_date: String(data.get('due_date') || '') || null,
+        lines: lines.map(line => ({ item_id: line.item_id, quantity: Number(line.quantity), unit_cost: Number(line.unit_cost) })),
+        initial_payment: Number(data.get('initial_payment') || 0), payment_account_id: String(data.get('payment_account_id') || '') || null,
+        payment_reference: String(data.get('payment_reference') || '').trim(),
+      }) });
+      onItems([purchase, ...items]); form.reset(); setLines([{ item_id: '', quantity: '1', unit_cost: '' }]);
+      const [, supplierRows, accountRows, inventoryRows] = await Promise.all([
+        request<Purchase[]>('/purchases', token).then(onItems), request<Supplier[]>('/suppliers', token),
+        request<FinancialAccount[]>('/accounts', token), request<InventoryItem[]>('/inventory', token),
+      ]);
+      onSuppliers(supplierRows); onAccounts(accountRows); onInventory(inventoryRows);
+      announce(`Compra ${purchase.folio} registrada; el almacén y el saldo del proveedor se actualizaron.`);
+    } catch (error) { announce(error instanceof Error ? error.message : 'No se pudo registrar la compra.', 'error'); }
+  }
+
+  async function submitPayment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!paymentPurchase) return;
+    const form = event.currentTarget; const data = new FormData(form);
+    try {
+      const updated = await request<Purchase>(`/purchases/${paymentPurchase.id}/payments`, token, { method: 'POST', body: JSON.stringify({ amount: Number(data.get('amount')), account_id: String(data.get('account_id')), paid_on: String(data.get('paid_on')), reference: String(data.get('reference') || '') }) });
+      onItems(items.map(item => item.id === updated.id ? updated : item)); setPaymentPurchase(null); await reload(); announce(`Pago aplicado a ${updated.folio}; caja y saldo de proveedor actualizados.`);
+    } catch (error) { announce(error instanceof Error ? error.message : 'No se pudo registrar el pago.', 'error'); }
+  }
+
+  const supplier = suppliers.find(item => item.id === supplierId);
+  return <>
+    {canWrite && <section className="surface-card table-surface purchase-entry"><div className="section-title"><div><span className="eyebrow">ENTRADA DE ALMACÉN + CUENTAS POR PAGAR</span><h2>Registrar compra de materiales</h2></div></div>
+      <form className="form-grid" onSubmit={submitPurchase}>
+        <label className="field span-two"><span>Proveedor</span><select value={supplierId} onChange={event => { const value = event.target.value; setSupplierId(value); const selected = suppliers.find(row => row.id === value); setTerms(selected?.payment_terms || 'cash'); setInitialPayment(selected?.payment_terms === 'cash' ? String(total) : '0'); }} required><option value="">Selecciona proveedor</option>{suppliers.filter(item => item.active).map(item => <option key={item.id} value={item.id}>{item.name} · {item.payment_terms === 'credit' ? `Crédito ${item.credit_days} días` : 'Contado'}</option>)}</select>{!suppliers.length && <small className="muted-copy">Registra primero un proveedor en el apartado Proveedores.</small>}</label>
+        <Field label="Factura / referencia" name="invoice_number" placeholder="Folio de factura"/><Field label="Fecha de compra" name="purchase_date" type="date" defaultValue={today} required/>
+        <label className="field"><span>Forma acordada</span><select value={terms} onChange={event => { const value = event.target.value as 'cash' | 'credit'; setTerms(value); setInitialPayment(value === 'cash' ? String(total) : '0'); }}><option value="cash">Contado</option><option value="credit" disabled={!supplier?.credit_days}>Crédito</option></select></label>
+        {terms === 'credit' && <Field label="Fecha límite de pago" name="due_date" type="date" defaultValue={supplier?.credit_days ? new Date(Date.now() + supplier.credit_days * 86400000).toISOString().slice(0, 10) : ''} min={today}/>}
+        <div className="span-two purchase-lines"><div className="panel-head"><div><h3>Material recibido</h3><p>Los precios quedan guardados en cada movimiento del kardex.</p></div><button type="button" className="button button-outline" onClick={() => setLines(rows => [...rows, { item_id: '', quantity: '1', unit_cost: '' }])}>＋ Agregar artículo</button></div>
+          {lines.map((line, index) => <div className="purchase-line" key={index}><label className="field"><span>Artículo</span><select value={line.item_id} onChange={event => { const selectedItem = inventory.find(row => row.id === event.target.value); setLines(rows => rows.map((row, i) => i === index ? { ...row, item_id: event.target.value, unit_cost: row.unit_cost || String(selectedItem?.unit_cost || '') } : row)); }} required><option value="">Selecciona material</option>{inventory.map(item => <option key={item.id} value={item.id}>{item.name} · stock {item.quantity} {item.unit}</option>)}</select></label><Field label="Cantidad" type="number" min="0.01" step="0.01" value={line.quantity} onChange={value => setLines(rows => rows.map((row, i) => i === index ? { ...row, quantity: value } : row))} required/><Field label="Costo unitario MXN" type="number" min="0.01" step="0.01" value={line.unit_cost} onChange={value => setLines(rows => rows.map((row, i) => i === index ? { ...row, unit_cost: value } : row))} required/>{lines.length > 1 && <button type="button" className="icon-button" aria-label="Quitar artículo" onClick={() => setLines(rows => rows.filter((_, i) => i !== index))}>×</button>}</div>)}
+        </div>
+        <div className="quote-total span-two"><div><small>TOTAL DE COMPRA</small><strong>{money(total)}</strong><span>{lines.length} renglones de material</span></div></div>
+        <Field label={terms === 'cash' ? 'Importe pagado' : 'Anticipo (opcional)'} name="initial_payment" type="number" min="0" step="0.01" value={terms === 'cash' ? String(total) : initialPayment} onChange={setInitialPayment} required/>
+        <label className="field"><span>Cuenta de pago</span><select name="payment_account_id" required={terms === 'cash' || Number(initialPayment) > 0}><option value="">Selecciona una cuenta</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name} · {money(Number(account.current_balance))}</option>)}</select></label>
+        <Field label="Referencia del pago" name="payment_reference" placeholder="Transferencia, recibo…"/>
+        <div className="modal-actions span-two"><button className="button button-primary" disabled={!supplier || !inventory.length || !accounts.length}>Registrar compra</button></div>
+      </form>
+    </section>}
+    <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">COMPRAS REGISTRADAS</span><h2>{items.length} compras · {money(items.reduce((sum, item) => sum + Number(item.balance), 0))} por pagar</h2></div></div>
+      <div className="data-table-wrap"><table className="data-table"><thead><tr><th>FOLIO / PROVEEDOR</th><th>FACTURA / MATERIALES</th><th>FECHAS</th><th>TOTAL</th><th>PAGADO</th><th>SALDO</th><th>ESTADO</th><th/></tr></thead><tbody>{items.map(item => <tr key={item.id}><td><b>{item.folio}</b><small className="sub-cell">{item.supplier?.name || 'Proveedor'}</small></td><td>{item.invoice_number || 'Sin factura'}<small className="sub-cell">{item.lines.map(line => `${line.item_name} × ${line.quantity}`).join(' · ')}</small></td><td>{new Date(`${item.purchase_date}T12:00:00`).toLocaleDateString('es-MX')}<small className="sub-cell">{item.due_date ? `Vence ${new Date(`${item.due_date}T12:00:00`).toLocaleDateString('es-MX')}` : 'Contado'}</small></td><td><b>{money(Number(item.total))}</b></td><td>{money(Number(item.paid_amount))}</td><td><b>{money(Number(item.balance))}</b></td><td><span className={`status-chip ${item.status === 'paid' ? 'status-approved' : 'status-overdue'}`}>{item.status === 'paid' ? 'Pagada' : item.status === 'partially_paid' ? 'Pago parcial' : 'Pendiente'}</span></td><td>{canWrite && Number(item.balance) > 0 && <button className="button button-small button-outline" onClick={() => setPaymentPurchase(item)}>Registrar pago</button>}</td></tr>)}</tbody></table>{!items.length && <EmptyState title="Sin compras registradas" body="Al registrar una compra, sus renglones aumentan existencias y el saldo se vincula al proveedor."/>}</div>
+    </section>
+    {paymentPurchase && <Modal title={`Pago a ${paymentPurchase.supplier?.name || 'proveedor'}`} subtitle={`Saldo pendiente: ${money(Number(paymentPurchase.balance))}`} onClose={() => setPaymentPurchase(null)}><form className="form-grid" onSubmit={submitPayment}><Field label="Importe" name="amount" type="number" min="0.01" max={Number(paymentPurchase.balance)} step="0.01" required/><Field label="Fecha de pago" name="paid_on" type="date" defaultValue={today} required/><label className="field span-two"><span>Cuenta de salida</span><select name="account_id" required><option value="">Selecciona caja o banco</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name} · {money(Number(account.current_balance))}</option>)}</select></label><Field className="span-two" label="Referencia" name="reference" placeholder="Transferencia, recibo…"/><div className="modal-actions span-two"><button type="button" className="button button-outline" onClick={() => setPaymentPurchase(null)}>Cancelar</button><button className="button button-primary">Guardar pago</button></div></form></Modal>}
+  </>;
 }
 
 function InventoryView({ items, movements, canManage, canReadCosts, token, onRefresh, onMovements, announce }: { items: InventoryItem[]; movements: InventoryMovement[]; canManage: boolean; canReadCosts: boolean; token: string; onRefresh: () => Promise<void>; onMovements: (rows: InventoryMovement[]) => void; announce: (message: string, type?: Notice['type']) => void }) {

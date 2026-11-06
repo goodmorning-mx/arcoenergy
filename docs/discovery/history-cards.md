@@ -400,20 +400,21 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 | US-14 | Funcional en API y portales | Completar matriz de acceso por cada entidad/campo y pruebas de aislamiento. |
 | US-15–16, US-19 | Pendientes/parciales | Ventas contables, historial/aplicación de cobranza y alertas financieras; el resumen comercial actual no es estado financiero. |
 | US-17 | Funcional básico | Administrador y contador registran gastos operativos/directos por fecha, categoría, proyecto opcional y comprobante enlazado. Falta afectar una cuenta de caja/banco, autorización y conciliación. |
-| US-18 | Funcional básico | Se crean cuentas de efectivo/banco con saldo inicial y se consultan saldos/reportes; falta conciliación bancaria y vincular automáticamente los cobros, pagos y gastos. |
+| US-18 | Funcional básico | Se crean cuentas de efectivo/banco con saldo inicial y se consultan saldos/reportes; los pagos a proveedor ya afectan automáticamente la cuenta; faltan enlazar ventas, cobranza, gastos y conciliación bancaria. |
 | US-20 | Parcial | Artículos con descripción, unidad, existencia, mínimo y costo; faltan categoría, marca, modelo, proveedor y QR. |
-| US-21–22 | Pendientes/parciales | Entrada individual de almacén disponible; faltan compra multirenglón, proveedor, factura/XML y OCR. |
+| US-21 | Funcional básico | Compra multirenglón con proveedor y referencia de factura; cada renglón aumenta almacén y conserva costo por movimiento; faltan captura XML y OCR de factura. |
+| US-22 | Pendiente | Lectura automática de factura XML/PDF y conciliación de datos antes de registrar. |
 | US-23 | Funcional básico | El instalador devuelve contra una salida de su orden; el kardex enlaza ambos movimientos, limita el acumulado devuelto y repone existencias. Falta distinguir condición del material y aprobar costos de devolución. |
 | US-24 | Parcial | Consumo y devolución vinculados a la orden; falta diferenciar cantidades solicitadas, entregadas y consumidas con autorización previa. |
 | US-25 | Pendiente | Lectura asistida de orden/solicitud escaneada. |
 | US-26 | Funcional básico | CRM y PWA señalan existencias por debajo del mínimo configurado; faltan notificaciones push y asignación de responsable de reabasto. |
 | US-27 | Funcional básico | Kardex con entradas/salidas firmadas, responsable, fecha y referencia; registra costo para nuevos movimientos y deja el costo histórico como desconocido cuando no se capturó. Acceso de instalador limitado a sus propias órdenes. Faltan filtros expuestos en UI y exportación. |
 | US-28–29 | Pendientes | Cámara QR/código de barras e informes de operación. |
-| US-30 | Funcional básico | Proveedores y condiciones contado/crédito con días; el saldo queda pendiente hasta enlazar entradas de compra y pagos. |
-| US-31 | Pendiente | Compras multirenglón, saldos por proveedor y pagos vinculados. |
+| US-30 | Funcional básico | Proveedores y condiciones contado/crédito con días; el saldo se deriva de compras y pagos vinculados. |
+| US-31 | Funcional básico | Cuentas por pagar derivadas de compras; anticipos y pagos parciales/totales se vinculan a caja/banco y reducen el saldo del proveedor; falta conciliación y reversa enlazada. |
 | US-32 | Parcial | Orden enlazada con cliente y cotización; falta entidad proyecto y folio comercial acordado. |
 | US-33, US-35 | Pendientes | Libro contable de doble partida y efectos relacionados automáticos; no se inventó contabilidad sin validar sus reglas. |
-| US-34 | Funcional básico | Entradas/salidas manuales de efectivo o banco, saldo derivado e historial; las operaciones comerciales aún no se enlazan automáticamente. |
+| US-34 | Funcional básico | Entradas/salidas manuales de efectivo o banco y pagos a proveedor vinculados, con saldos derivados e historial; faltan enlazar ventas, cobranza y gastos. |
 | US-36 | Parcial | Las entradas/salidas manuales se corrigen con reversa append-only; falta extender la corrección relacionada a compras, ventas, cobranza e inventario. |
 | US-37 | Pendiente | Comparación con cada pantalla del sistema legado; falta acceso al entorno de César. |
 | US-38 | Pendiente | Estado de resultados con fórmula compartida; definir devoluciones, impuestos, costo y corte contable con Mario/Josué. |
