@@ -109,8 +109,8 @@ jobs:
             fi
             grep -Fq "$marker" "$output"
           }
-          smoke_render /app 'Hola, Luis'
-          smoke_render /crm 'El negocio va por buen camino'
+          smoke_render /app 'Hola, equipo'
+          smoke_render /crm 'Tu operación comercial, clientes y propuestas'
       - name: Verify routed PWA and CRM bundles
         shell: bash
         run: |
