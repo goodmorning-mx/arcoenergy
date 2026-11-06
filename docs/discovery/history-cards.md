@@ -404,8 +404,9 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 | US-23 | Pendiente | Devolución trazable de sobrantes y merma. |
 | US-24 | Parcial | Consumo por orden; falta orden de materiales completa y flujo de autorización. |
 | US-25 | Pendiente | Lectura asistida de orden/solicitud escaneada. |
-| US-26 | Parcial | Se puede identificar stock bajo; falta alerta activa. |
-| US-27–29 | Pendientes | Kardex consultable, cámara QR/código de barras e informes de operación. |
+| US-26 | Funcional básico | CRM y PWA señalan existencias por debajo del mínimo configurado; faltan notificaciones push y asignación de responsable de reabasto. |
+| US-27 | Funcional básico | Kardex con entradas/salidas firmadas, responsable, fecha y referencia; registra costo para nuevos movimientos y deja el costo histórico como desconocido cuando no se capturó. Acceso de instalador limitado a sus propias órdenes. Faltan filtros expuestos en UI y exportación. |
+| US-28–29 | Pendientes | Cámara QR/código de barras e informes de operación. |
 | US-30–31 | Pendientes | Proveedores, compras, saldos y pagos relacionados. |
 | US-32 | Parcial | Orden enlazada con cliente y cotización; falta entidad proyecto y folio comercial acordado. |
 | US-33–36 | Pendientes | Libro de movimientos vinculados y correcciones reversibles; no se inventó contabilidad sin validar sus reglas. |
