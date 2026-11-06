@@ -198,3 +198,15 @@ Estas tarjetas son registros de descubrimiento, no especificaciones contables ap
 ## Alcance de este documento
 
 Este archivo conserva el plan acordado y las propuestas de organización para retomarlas en un goal futuro. No cambia el runtime, no crea todavía pantallas funcionales y no equivale a aprobación de reglas contables, permisos detallados o integraciones externas.
+
+## Registro append-only de la entrega de Iteración 1
+
+- **Actualizado:** 6 de noviembre de 2026, como continuación del plan inicial que precede esta sección.
+- **Estado de entrega:** implementación local en curso en `feature/arcoenergy-iteration-1`; se conservará este registro y se actualizará el resultado final después del merge y del despliegue DEV.
+- **Tarjetas fuente:** US-1 (cotizador manual), US-3 (PDF/folio/WhatsApp/Drive), US-4 (seguimiento), US-39 (CRM de escritorio), US-40 (operación PWA), US-41 (web/agente) y US-42 (registro versionado), enlazadas a su lenguaje original en [history-cards.md](history-cards.md).
+- **Incluido en Iteración 1:** CRM administrativo con clientes/prospectos, bitácora, agenda de 3/7/15/30 días o fecha libre, cotizador manual de paquetes, configuración de catálogo por administrador, folio, PDF y paso manual a WhatsApp; PWA nativa con cotizador conectado al catálogo y consulta de instalaciones limitada al instalador asignado; sitio público SEO/GEO con formulario de prospecto con consentimiento y asistente `gm-agent`/`gm-mcp` que solo puede cotizar desde paquetes aprobados.
+- **Protecciones de alcance:** valores de semilla marcados como demo; el API impide avanzar cotizaciones demo a estados comerciales y el front no ofrece compartirlas; el agente no crea ni modifica datos; el cliente debe dar consentimiento para contacto; el instalador solo consulta trabajos asignados por correo.
+- **Módulos fijados en Factory:** `gm-auth@0.1.5`, `gm-pwa@0.1.5`, `gm-mcp@0.3.2`, `gm-billing@0.1.2` y `gm-agent@0.1.6`, con SHA según el registro de módulos de GoodMorning Factory.
+- **Verificación hasta esta revisión:** build de producción local para CRM, PWA y SEO; 22 pruebas backend aprobadas; contrato modular de Factory aprobado en 51 pruebas focalizadas; auditorías de producción limpias para CRM y sitio web después de actualizar Next.js; revisión visual en navegador a escritorio y móvil. El despliegue DEV todavía está pendiente.
+- **Pendiente antes de usar con prospectos reales:** completar datos legales del aviso de privacidad, confirmar/aprobar paquetes, verificar que el secreto administrado `goodmorning/openai-default` se inyecta en DEV y hacer recorrido de navegador contra rutas reales.
+- **Pendiente para otras iteraciones:** guardar cotizaciones y documentos en Drive; enviar WhatsApp automáticamente (la Iteración 1 solo abre un enlace cuando la propuesta está aprobada); extracción de recibos; contratos/firma; asignación/notificaciones/consumos de proyecto; contabilidad, caja, compras y fórmulas confirmadas por Mario/Josué; persistencia del historial del agente y base de datos de history cards append-only.

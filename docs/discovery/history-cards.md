@@ -328,12 +328,45 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 | US-37 | Revisar pestañas/secciones del sistema actual según el Word, documentar función y diferencias antes de implementar mejoras | Mario, WhatsApp 5 nov. 2026, 1:04–1:06 p. m. y Word |
 | US-38 | Consultar efectivo, clientes/cobranza, valor de almacén y gastos día con día; costeo/estado de resultados mensual y por proyecto | Mario, WhatsApp 5 nov. 2026, 1:16 p. m. |
 
+## Iteración 5 — Límites de portales, agente y evolución de discovery
+
+**Stakeholder:** dueño del producto Arco Energy (nombre no registrado). **Fuente:** conversación del proyecto del 6 de noviembre de 2026. Los relatos literales están en [requerimientos del dueño](sources/owner-product-brief-2026-11-06.md). Esta iteración define responsabilidades por portal y la conservación del aprendizaje; no reemplaza las tarjetas de Goito o Mario.
+
+### US-39 — Administrar el negocio desde un CRM de escritorio
+
+- **Relato literal:** “el CRM es el sistema de administracion es un panel dashboard para las computadoras y es el panel admin de todo.”
+- **Necesidad derivada:** como administrador del negocio, quiero un CRM pensado para computadora que concentre la administración del sistema.
+- **Criterios iniciales:** navegación propia de escritorio; administración por permisos; clientes, cotizaciones y seguimiento en la primera iteración. Los demás módulos administrativos se agregan cuando se validen con los stakeholders.
+- **Estado:** base de clientes, cotizaciones, seguimiento, catálogo y usuarios está implementada; reportes contables, inventario financiero, compras y costos permanecen pendientes de definición.
+
+### US-40 — Ejecutar trabajo operativo desde la PWA
+
+- **Relato literal:** “el PWA es una aplicacion mobile para las personas de campo y ademas un cliente para los empleados. donde se van a ejecutar ciertas mas que nada acciones porque es operativa.”
+- **Necesidad derivada:** como empleado de campo o usuario operativo, quiero una app móvil con acciones breves adecuadas a mi rol.
+- **Criterios iniciales:** aplicación PWA separada del CRM; autenticación y privilegios por rol; la información del cliente debe limitarse según permisos y asignaciones.
+- **Estado:** la experiencia móvil y el acceso autenticado se conservan; el cotizador manual toma el catálogo y los trabajos consultan instalaciones asignadas. Asignación, notificaciones, consumos por proyecto, viáticos y modo offline siguen pendientes.
+
+### US-41 — Orientar una cotización desde la web con un agente
+
+- **Relato literal:** “la web es una web donde vamos a cotizar por IA agentica; donde hablamos con una IA para que nos cotice paneles solares. a su vez este proyecto va a usar el MCP server y otros modulos de goodmorning-factry por lo que tambien ve a leerlos en nuestro github.”
+- **Necesidad derivada:** como visitante, quiero conversar con una IA desde el sitio público para entender opciones y solicitar una cotización solar.
+- **Criterios iniciales:** integrar los módulos `gm-agent` y `gm-mcp`; cotizar solo con un paquete aprobado; limitar las herramientas a información pública; no inventar precios ni crear registros; capturar contacto con consentimiento.
+- **Estado:** asistente consulta tamaños y devuelve total/inversor únicamente desde paquetes aprobados; la consulta directa del catálogo del CRM exige permiso. Formulario de prospecto con consentimiento. Requiere configurar la clave administrada de OpenAI en DEV; Drive, WhatsApp Business y carga de recibos no se declaran integrados.
+
+### US-42 — Conservar cada tarjeta como dato versionado por iteración
+
+- **Relato literal:** “lo vamos a hacer por iteraciones; asi que todo eso que tenemos ahora asi esta bien y las actualizaciones van a ser iteraciones historycards me entiendes” y “tienes que poner eso es un MUST”.
+- **Necesidad derivada:** como equipo que aprende con los usuarios, quiero conservar cada history user story card vinculada a su fuente y a su iteración para que el aprendizaje no se pierda.
+- **Criterios iniciales:** guardar voz original y fuente separadas de la historia normalizada; nuevas revisiones se agregan sin sobrescribir; registrar stakeholder, momento, canal, versión, incertidumbres y vínculos entre tarjetas.
+- **Estado:** MUST y campos mínimos documentados al inicio de este archivo. El repositorio conserva las tarjetas/fuentes en Markdown; un modelo de datos y una interfaz append-only para registrar iteraciones quedan para una iteración futura.
+
 ## Registro de fuentes y límites
 
 - Word/PDF: fuente de las tarjetas US-15 a US-32; el usuario indicó que ambos documentos se compartieron como materiales del contador.
 - Mensajes de Goito: fuente de las tarjetas US-1 a US-14.
 - Audios del contador: fuente de US-33 y US-34; audio y WAV procesados permanecen fuera del repositorio por privacidad.
 - Mensajes de Mario y fotografía de orden/solicitud de materiales: fuente de US-35 a US-38.
+- Requerimientos literales del dueño del producto del 6 de noviembre de 2026 en [owner-product-brief-2026-11-06.md](sources/owner-product-brief-2026-11-06.md).
 - La forma exacta de las tarjetas US-1 a US-34 se recuperó de requisitos y resúmenes disponibles, no de una exportación histórica de tarjetas. Revisar en futuras iteraciones cualquier diferencia con lo dicho originalmente.
 - Los relatos textuales de Goito y del Word del contador ya están recuperados. Para US-1 a US-32 falta cotejar la asignación exacta de cada fragmento a los IDs históricos; el texto de las cards es una síntesis derivada, no una cita.
 - Para US-33 y US-34 hay transcripciones ASR de los audios, no transcripción humana validada. Los OGG originales se identifican por hash y ruta local, sin subir audio de voz al repositorio.

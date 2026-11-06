@@ -7,10 +7,11 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
-    "postinstall": "npm --prefix node_modules/@goodmorning/gm-auth run build"
+    "postinstall": "npm --prefix node_modules/@goodmorning/gm-auth run build && npm --prefix node_modules/@goodmorning/gm-agent/frontend run build"
   },
   "dependencies": {
     "@goodmorning/gm-auth": "https://github.com/goodmorning-mx/gm-auth/archive/138d66cb44a94781e0d38d8afd1be2dbf718c294.tar.gz",
+    "@goodmorning/gm-agent": "https://github.com/goodmorning-mx/gm-agent/archive/06500d8c935ea2cbe5a146b4703f06e3fedceb7f.tar.gz",
     "@vitejs/plugin-react": "5.0.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",

@@ -7,4 +7,7 @@ alembic==1.16.4
 pytest==8.4.1
 httpx==0.28.1
 gm-auth @ git+https://github.com/goodmorning-mx/gm-auth.git@138d66cb44a94781e0d38d8afd1be2dbf718c294
+gm-mcp @ git+https://github.com/goodmorning-mx/gm-mcp.git@631dee26fc057d10a4cc09ff8f3f89dfaa8a08bc
+gm-billing @ git+https://github.com/goodmorning-mx/gm-billing.git@11a0beafe3c7618b0cfc472f4c5b8619c98d1aab
+gm-agent @ git+https://github.com/goodmorning-mx/gm-agent.git@06500d8c935ea2cbe5a146b4703f06e3fedceb7f
 reportlab==4.4.4

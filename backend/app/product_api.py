@@ -4,12 +4,16 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from io import BytesIO
 from urllib.parse import quote as urlquote
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session, sessionmaker
+from gm_agent import AgentService, Conversation, Message, OpenAIProvider
+from gm_mcp import Permission, RequestContext, ToolRegistry, tool
+from openai import AsyncOpenAI
 from gm_auth.dependencies import identity_dependency
 from gm_auth.models import AuthIdentity
 from gm_auth.models import memberships, users
@@ -17,13 +21,15 @@ from gm_auth.models import memberships, users
 from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
-from app.models import Activity, Customer, FollowUp, Installation, InventoryItem, InventoryMovement, ProjectExpense, Quote, Receivable
+from app.models import Activity, Customer, FollowUp, Installation, InventoryItem, InventoryMovement, ProjectExpense, Quote, QuotePackage, Receivable
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 
 settings = get_settings()
 engine = create_database_engine()
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 router = APIRouter(prefix="/v1", tags=["arcoenergy"])
+_agent_services: dict[str, AgentService] = {}
+_agent_conversations: dict[tuple[str, str], Conversation] = {}
 
 
 def require_permissions(service, *required: str):
@@ -76,10 +82,187 @@ class CustomerInput(BaseModel):
 class QuoteInput(BaseModel):
     customer_id: str
     panel_count: int = Field(ge=4, le=20)
-    panel_brand: str = "Jinko"
-    panel_watts: int = Field(default=610, ge=100, le=1000)
+    installation_address: str = ""
+    installation_city: str = ""
     inverter: str = ""
     payment_method: str = "Contado"
+
+
+class InverterOptionInput(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    price_mxn: Decimal = Field(ge=0)
+
+
+class QuotePackageInput(BaseModel):
+    panel_brand: str = Field(min_length=2, max_length=100)
+    panel_watts: int = Field(ge=100, le=1000)
+    panel_unit_price: Decimal = Field(ge=0)
+    structure_name: str = Field(min_length=2, max_length=120)
+    structure_price: Decimal = Field(ge=0)
+    inverter_options: list[InverterOptionInput] = Field(min_length=1, max_length=6)
+    default_inverter: str = Field(min_length=2, max_length=120)
+    payment_methods: list[str] = Field(min_length=1, max_length=6)
+    enabled: bool = True
+    approved_prices: bool = False
+
+    @field_validator("payment_methods")
+    @classmethod
+    def payment_methods_are_supported(cls, values: list[str]) -> list[str]:
+        supported = {"Contado", "Financiamiento", "Plan 24"}
+        cleaned = list(dict.fromkeys(value.strip() for value in values if value.strip()))
+        if not cleaned or not set(cleaned) <= supported:
+            raise ValueError("Usa una o más formas de pago predefinidas.")
+        return cleaned
+
+    @field_validator("inverter_options")
+    @classmethod
+    def inverter_names_are_unique(cls, values: list[InverterOptionInput]) -> list[InverterOptionInput]:
+        names = [value.name.strip().casefold() for value in values]
+        if len(names) != len(set(names)):
+            raise ValueError("No repitas el nombre de un inversor.")
+        return values
+
+    def validate_default_inverter(self) -> None:
+        if self.default_inverter not in {item.name for item in self.inverter_options}:
+            raise HTTPException(422, "El inversor predeterminado debe existir en las opciones del paquete.")
+
+
+class FollowUpDoneInput(BaseModel):
+    done: bool
+
+
+class QuoteStatusInput(BaseModel):
+    status: str
+
+
+class PublicLeadInput(BaseModel):
+    name: str = Field(min_length=2, max_length=180)
+    phone: str = Field(min_length=10, max_length=40)
+    email: str = Field(default="", max_length=180)
+    city: str = Field(min_length=2, max_length=120)
+    address: str = Field(default="", max_length=500)
+    privacy_consent: bool
+    website: str = Field(default="", max_length=200)
+
+    @field_validator("phone")
+    @classmethod
+    def phone_has_enough_digits(cls, value: str) -> str:
+        if sum(character.isdigit() for character in value) < 10:
+            raise ValueError("Captura un teléfono con al menos 10 dígitos.")
+        return value.strip()
+
+
+class AgentChatInput(BaseModel):
+    prompt: str = Field(default="", max_length=4000)
+    conversation_id: str | None = Field(default=None, max_length=80)
+
+
+def _agent_registry(audience: str) -> ToolRegistry:
+    registry = ToolRegistry()
+    if audience == "public":
+        @tool(
+            name="arcoenergy.public_system_sizes",
+            description="Consulta los tamaños de sistema activos. Si hay precios aprobados, puede preparar una cotización estimada para el número de paneles solicitado y un inversor configurado. Nunca devuelve precios demo.",
+            input_schema={"type": "object", "properties": {"panel_count": {"type": "integer", "minimum": 4, "maximum": 20}, "inverter": {"type": "string", "maxLength": 120}}, "additionalProperties": False},
+            permission=Permission.READ,
+        )
+        def public_system_sizes(*, context: RequestContext, panel_count: int | None = None, inverter: str = ""):
+            with SessionLocal() as db:
+                rows = db.scalars(select(QuotePackage).where(QuotePackage.enabled.is_(True)).order_by(QuotePackage.panel_count)).all()
+                result = {
+                    "available_panel_counts": [row.panel_count for row in rows],
+                    "pricing_approved": bool(rows) and all(not row.is_demo for row in rows),
+                    "note": "No estimes ni inventes precios. Si el paquete elegido no está aprobado, pide los datos de contacto para que el equipo prepare la propuesta.",
+                }
+                if panel_count is None:
+                    return result
+                package = next((row for row in rows if row.panel_count == panel_count), None)
+                if package is None:
+                    return {**result, "quote": None, "note": "No hay un paquete activo para esa cantidad de paneles."}
+                if package.is_demo:
+                    return {**result, "pricing_approved": False, "quote": None, "note": "El precio de este paquete aún no está aprobado. No proporciones una cantidad; ofrece que el equipo prepare la propuesta."}
+                result["pricing_approved"] = True
+                option = next((item for item in package.inverter_options if item.get("name") == inverter), None) if inverter else next((item for item in package.inverter_options if item.get("name") == package.default_inverter), None)
+                if option is None:
+                    return {**result, "quote": None, "available_inverters": [item.get("name") for item in package.inverter_options], "note": "El inversor solicitado no está configurado para este paquete."}
+                total = Decimal(package.panel_unit_price) * panel_count + Decimal(package.structure_price) + Decimal(str(option["price_mxn"]))
+                result["quote"] = {"panel_count": package.panel_count, "panel_brand": package.panel_brand, "panel_watts": package.panel_watts, "system_kw": round(package.panel_count * package.panel_watts / 1000, 2), "structure": package.structure_name, "inverter": option["name"], "total_mxn": str(total), "payment_methods": package.payment_methods, "note": "Estimación del catálogo aprobado, sujeta a evaluación técnica y propuesta formal del equipo."}
+                return result
+
+        registry.register(public_system_sizes)
+    else:
+        @tool(
+            name="arcoenergy.crm_summary",
+            description="Consulta conteos agregados de prospectos, cotizaciones y seguimientos abiertos; nunca devuelve datos personales.",
+            input_schema={"type": "object", "properties": {}, "additionalProperties": False},
+            permission=Permission.READ,
+            permissions={"customers:read"},
+        )
+        def crm_summary(*, context: RequestContext):
+            with SessionLocal() as db:
+                return {
+                    "customers": db.scalar(select(func.count()).select_from(Customer)) or 0,
+                    "quotes": db.scalar(select(func.count()).select_from(Quote)) or 0,
+                    "open_followups": db.scalar(select(func.count()).select_from(FollowUp).where(FollowUp.done.is_(False))) or 0,
+                }
+
+        @tool(
+            name="arcoenergy.crm_catalog",
+            description="Consulta paquetes, opciones de inversor y el estado de aprobación de precios de Arco Energy.",
+            input_schema={"type": "object", "properties": {}, "additionalProperties": False},
+            permission=Permission.READ,
+            permissions={"quotes:read"},
+        )
+        def crm_catalog(*, context: RequestContext):
+            with SessionLocal() as db:
+                rows = db.scalars(select(QuotePackage).where(QuotePackage.enabled.is_(True)).order_by(QuotePackage.panel_count)).all()
+                return [{"panel_count": row.panel_count, "panel_brand": row.panel_brand, "panel_watts": row.panel_watts,
+                         "inverters": row.inverter_options, "default_inverter": row.default_inverter,
+                         "pricing_approved": not row.is_demo} for row in rows]
+
+        registry.register(crm_summary)
+        registry.register(crm_catalog)
+    return registry
+
+
+def _agent_service(audience: str) -> AgentService:
+    if not settings.openai_api_key:
+        raise HTTPException(503, "El asistente no está configurado en este entorno.")
+    if audience not in _agent_services:
+        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        _agent_services[audience] = AgentService(OpenAIProvider(client), _agent_registry(audience))
+    return _agent_services[audience]
+
+
+async def _run_agent_chat(data: AgentChatInput, audience: str, owner: str, identity: AuthIdentity | None = None):
+    prompt = data.prompt.strip()
+    if not prompt:
+        raise HTTPException(422, "Escribe una pregunta para el asistente.")
+    service = _agent_service(audience)
+    conversation_id = data.conversation_id or str(uuid4())
+    key = (owner, conversation_id)
+    conversation = _agent_conversations.get(key)
+    if conversation is None:
+        conversation = Conversation(id=conversation_id)
+        conversation.messages.append(Message("system", (
+            "Eres el asistente de Arco Energy. Responde en español, con claridad y sin inventar datos, precios, ahorros, "
+            "especificaciones ni compromisos. Si la persona pide cotizar, pregunta cuántos paneles desea y consulta la herramienta para la cantidad e inversor. Usa las herramientas disponibles para datos actuales. Si el catálogo dice "
+            "que la cotización solicitada no está aprobada o usa datos de demostración, dilo con claridad y ofrece que el equipo prepare "
+            "una propuesta. No tienes permiso para crear ni modificar registros; solo puedes consultar datos permitidos."
+        )))
+        _agent_conversations[key] = conversation
+        if len(_agent_conversations) > 1000:
+            _agent_conversations.pop(next(iter(_agent_conversations)))
+    if identity:
+        context = RequestContext(identity.user_id, identity.organization_id, "arcoenergy", frozenset({"read", *identity.permissions}), roles=identity.roles)
+    else:
+        context = RequestContext(f"public:{conversation_id}", settings.organization_id, "arcoenergy", frozenset({"read"}), roles=frozenset({"prospect"}))
+    try:
+        response = await service.respond(conversation=conversation, prompt=prompt, context=context, model="gpt-4o-mini")
+    except Exception as exc:
+        # Do not expose provider messages, request payloads, or credentials to the browser.
+        raise HTTPException(502, "El asistente no pudo responder en este momento.") from exc
+    return {"conversationId": conversation.id, "content": response.content}
 
 
 class FollowUpInput(BaseModel):
@@ -148,16 +331,50 @@ class TeamRoleInput(BaseModel):
     role: str
 
 
-@router.get("/catalog")
-def catalog():
+@router.get("/catalog", dependencies=[Depends(require_permissions(auth_service, "quotes:read"))])
+def catalog(db: Session = Depends(get_db)):
+    rows = db.scalars(select(QuotePackage).order_by(QuotePackage.panel_count)).all()
     packages = []
-    for count in range(4, 21):
-        kw = count * 610 / 1000
-        inverter = "Growatt 3 kW" if kw <= 3.7 else "Growatt 5 kW" if kw <= 5.5 else "Huawei 6 kW" if kw <= 8 else "Huawei 10 kW"
-        panel_total = count * 13250
-        inverter_cost = 16800 if kw <= 3.7 else 22900 if kw <= 5.5 else 31900 if kw <= 8 else 44800
-        packages.append({"panel_count": count, "panel_brand": "Jinko", "panel_watts": 610, "system_kw": round(kw, 2), "inverter": inverter, "structure": "Estructura de aluminio", "price_mxn": panel_total + inverter_cost + 14900})
-    return {"demo": True, "packages": packages, "catalog_note": "Precios y equipos ilustrativos; confirmar el catálogo comercial antes de emitir propuestas a clientes."}
+    for row in rows:
+        selected = next((option for option in row.inverter_options if option.get("name") == row.default_inverter), None)
+        inverter_price = Decimal(str(selected.get("price_mxn", 0))) if selected else Decimal("0")
+        packages.append({
+            **_serialize(row),
+            "system_kw": round(row.panel_count * row.panel_watts / 1000, 2),
+            "inverter": row.default_inverter,
+            "price_mxn": Decimal(row.panel_unit_price) * row.panel_count + Decimal(row.structure_price) + inverter_price,
+            "catalog_status": "demo" if row.is_demo else "approved",
+        })
+    return {
+        "demo": any(row.is_demo for row in rows),
+        "packages": packages,
+        "payment_methods": ["Contado", "Financiamiento", "Plan 24"],
+        "catalog_note": "Los precios marcados como demostración son ilustrativos. Solo un administrador puede confirmar precios comerciales vigentes.",
+    }
+
+
+@router.put("/catalog/{panel_count}", dependencies=[Depends(require_permissions(auth_service, "team:manage"))])
+def update_catalog_package(panel_count: int, data: QuotePackageInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    if not 4 <= panel_count <= 20:
+        raise HTTPException(422, "El paquete debe tener de 4 a 20 paneles.")
+    data.validate_default_inverter()
+    row = db.scalar(select(QuotePackage).where(QuotePackage.panel_count == panel_count))
+    if row is None:
+        row = QuotePackage(panel_count=panel_count)
+        db.add(row)
+    row.panel_brand = data.panel_brand.strip()
+    row.panel_watts = data.panel_watts
+    row.panel_unit_price = data.panel_unit_price
+    row.structure_name = data.structure_name.strip()
+    row.structure_price = data.structure_price
+    row.inverter_options = [item.model_dump(mode="json") for item in data.inverter_options]
+    row.default_inverter = data.default_inverter.strip()
+    row.payment_methods = data.payment_methods
+    row.enabled = data.enabled
+    row.is_demo = not data.approved_prices
+    row.updated_by = identity.email
+    db.commit(); db.refresh(row)
+    return _serialize(row)
 
 
 @router.get("/customers", dependencies=[Depends(require_permissions(auth_service, "customers:read"))])
@@ -165,11 +382,34 @@ def list_customers(db: Session = Depends(get_db)):
     return [_serialize(row) for row in db.scalars(select(Customer).order_by(Customer.created_at.desc())).all()]
 
 
+@router.post("/public/leads", status_code=201)
+def create_public_lead(data: PublicLeadInput, db: Session = Depends(get_db)):
+    if data.website.strip():
+        return {"accepted": True}
+    if not data.privacy_consent:
+        raise HTTPException(422, "Necesitamos tu consentimiento para contactarte sobre esta solicitud.")
+    row = Customer(name=data.name.strip(), phone=data.phone, email=data.email.strip().lower(), city=data.city.strip(), address=data.address.strip(), source="public_web")
+    db.add(row); db.flush()
+    db.add(Activity(customer_id=row.id, kind="prospecto web", note="Solicitud recibida desde el sitio público."))
+    db.commit(); db.refresh(row)
+    return {"accepted": True, "reference": row.id}
+
+
+@router.post("/public/agent/chat")
+async def public_agent_chat(data: AgentChatInput):
+    return await _run_agent_chat(data, "public", "public-session")
+
+
+@router.post("/agent/chat", dependencies=[Depends(require_permissions(auth_service, "customers:read"))])
+async def internal_agent_chat(data: AgentChatInput, identity: AuthIdentity = Depends(identity_dependency(auth_service))):
+    return await _run_agent_chat(data, "internal", identity.user_id, identity)
+
+
 @router.post("/customers", status_code=201, dependencies=[Depends(require_permissions(auth_service, "customers:write"))])
-def create_customer(data: CustomerInput, db: Session = Depends(get_db)):
-    row = Customer(**data.model_dump())
+def create_customer(data: CustomerInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    row = Customer(**data.model_dump(), source="crm")
     db.add(row); db.commit(); db.refresh(row)
-    db.add(Activity(customer_id=row.id, kind="cliente creado", note="Registro inicial del cliente.")); db.commit()
+    db.add(Activity(customer_id=row.id, kind="cliente creado", note="Registro inicial del cliente.", created_by=identity.email)); db.commit()
     return _serialize(row)
 
 
@@ -180,10 +420,17 @@ def customer_activity(customer_id: str, db: Session = Depends(get_db)):
     return [_serialize(row) for row in rows]
 
 
+@router.get("/customers/{customer_id}", dependencies=[Depends(require_permissions(auth_service, "customers:read"))])
+def get_customer(customer_id: str, db: Session = Depends(get_db)):
+    row = db.get(Customer, customer_id)
+    if not row: raise HTTPException(404, "Cliente no encontrado.")
+    return _serialize(row)
+
+
 @router.post("/customers/{customer_id}/activity", status_code=201, dependencies=[Depends(require_permissions(auth_service, "customers:write"))])
-def add_customer_activity(customer_id: str, data: NoteInput, db: Session = Depends(get_db)):
+def add_customer_activity(customer_id: str, data: NoteInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
     if not db.get(Customer, customer_id): raise HTTPException(404, "Cliente no encontrado.")
-    row = Activity(customer_id=customer_id, kind=data.kind, note=data.note)
+    row = Activity(customer_id=customer_id, kind=data.kind, note=data.note, created_by=identity.email)
     db.add(row); db.commit(); db.refresh(row)
     return _serialize(row)
 
@@ -192,25 +439,63 @@ def add_customer_activity(customer_id: str, data: NoteInput, db: Session = Depen
 def create_quote(data: QuoteInput, db: Session = Depends(get_db)):
     customer = db.get(Customer, data.customer_id)
     if not customer: raise HTTPException(404, "Cliente no encontrado.")
-    kw = data.panel_count * data.panel_watts / 1000
-    expected_inverter = "Growatt 3 kW" if kw <= 3.7 else "Growatt 5 kW" if kw <= 5.5 else "Huawei 6 kW" if kw <= 8 else "Huawei 10 kW"
-    inverter = data.inverter or expected_inverter
-    inverter_cost = 16800 if kw <= 3.7 else 22900 if kw <= 5.5 else 31900 if kw <= 8 else 44800
-    panel_subtotal = Decimal(data.panel_count * 13250)
-    structure_cost = Decimal("14900")
-    total = panel_subtotal + Decimal(inverter_cost) + structure_cost
+    package = db.scalar(select(QuotePackage).where(QuotePackage.panel_count == data.panel_count, QuotePackage.enabled.is_(True)))
+    if package is None:
+        raise HTTPException(422, "No hay un paquete activo para esta cantidad de paneles.")
+    inverter = data.inverter or package.default_inverter
+    inverter_option = next((item for item in package.inverter_options if item.get("name") == inverter), None)
+    if inverter_option is None:
+        raise HTTPException(422, "Selecciona un inversor configurado para este paquete.")
+    if data.payment_method not in package.payment_methods:
+        raise HTTPException(422, "Selecciona una forma de pago disponible para este paquete.")
+    inverter_cost = Decimal(str(inverter_option["price_mxn"]))
+    panel_subtotal = Decimal(package.panel_unit_price) * data.panel_count
+    structure_cost = Decimal(package.structure_price)
+    total = panel_subtotal + inverter_cost + structure_cost
     sequence = db.execute(text("SELECT nextval('ae_quote_folio_seq')")).scalar_one()
     folio = f"AE-{datetime.now(timezone.utc).year}-{sequence:05d}"
-    row = Quote(folio=folio, customer_id=customer.id, panel_count=data.panel_count, panel_brand=data.panel_brand, panel_watts=data.panel_watts, inverter=inverter, payment_method=data.payment_method, panel_subtotal=panel_subtotal, structure_cost=structure_cost, inverter_cost=Decimal(inverter_cost), total=total)
+    row = Quote(
+        folio=folio,
+        customer_id=customer.id,
+        installation_address=data.installation_address.strip() or customer.address,
+        installation_city=data.installation_city.strip() or customer.city,
+        panel_count=data.panel_count,
+        panel_brand=package.panel_brand,
+        panel_watts=package.panel_watts,
+        structure_name=package.structure_name,
+        inverter=inverter,
+        payment_method=data.payment_method,
+        panel_subtotal=panel_subtotal,
+        structure_cost=structure_cost,
+        inverter_cost=inverter_cost,
+        total=total,
+        status="draft",
+        is_demo=package.is_demo,
+    )
     db.add(row); db.flush()
-    db.add(Activity(customer_id=customer.id, kind="cotización creada", note=f"Cotización {folio} por ${total:,.2f} MXN.")); db.commit(); db.refresh(row)
-    return {**_serialize(row), "demo_catalog": True}
+    mode = " (catálogo demo)" if package.is_demo else ""
+    db.add(Activity(customer_id=customer.id, kind="cotización creada", note=f"Cotización {folio}{mode}, por ${total:,.2f} MXN.")); db.commit(); db.refresh(row)
+    return {**_serialize(row), "demo_catalog": package.is_demo}
 
 
 @router.get("/quotes", dependencies=[Depends(require_permissions(auth_service, "quotes:read"))])
 def list_quotes(db: Session = Depends(get_db)):
     rows = db.scalars(select(Quote).order_by(Quote.created_at.desc())).all()
     return [{**_serialize(row), "customer": _serialize(db.get(Customer, row.customer_id))} for row in rows]
+
+
+@router.patch("/quotes/{quote_id}/status", dependencies=[Depends(require_permissions(auth_service, "quotes:write"))])
+def update_quote_status(quote_id: str, data: QuoteStatusInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    if data.status not in {"draft", "sent", "accepted", "declined"}:
+        raise HTTPException(422, "Estado de cotización no reconocido.")
+    row = db.get(Quote, quote_id)
+    if row is None: raise HTTPException(404, "Cotización no encontrada.")
+    if row.is_demo and data.status != "draft":
+        raise HTTPException(409, "Aprueba el catálogo comercial antes de avanzar una cotización de demostración.")
+    row.status = data.status
+    db.add(Activity(customer_id=row.customer_id, kind="cotización actualizada", note=f"{row.folio}: {data.status}.", created_by=identity.email))
+    db.commit(); db.refresh(row)
+    return _serialize(row)
 
 
 @router.get("/quotes/{quote_id}/pdf", dependencies=[Depends(require_permissions(auth_service, "quotes:read"))])
@@ -230,33 +515,50 @@ def quote_pdf(quote_id: str, db: Session = Depends(get_db)):
     pdf.setFont("Helvetica", 10); pdf.drawString(48, 723, "PROPUESTA DE SISTEMA SOLAR")
     pdf.drawRightString(564, 748, row.folio)
     pdf.setFillColorRGB(.09, .17, .14); pdf.setFont("Helvetica-Bold", 16); pdf.drawString(48, 600, customer.name if customer else "Cliente")
-    pdf.setFont("Helvetica", 10); pdf.drawString(48, 580, f"Instalación: {customer.city if customer else 'Por definir'}")
-    pdf.drawString(48, 540, f"{row.panel_count} paneles {row.panel_brand} de {row.panel_watts} W")
-    pdf.drawString(48, 520, f"Inversor: {row.inverter}")
-    pdf.drawString(48, 500, "Incluye estructura y propuesta de instalación.")
+    install_city = row.installation_city or (customer.city if customer else "Por definir")
+    install_address = row.installation_address or (customer.address if customer else "")
+    pdf.setFont("Helvetica", 10); pdf.drawString(48, 580, f"Instalación: {install_city}")
+    if install_address:
+        pdf.drawString(48, 562, f"Domicilio: {install_address[:85]}")
+    pdf.drawString(48, 535, f"{row.panel_count} paneles {row.panel_brand} de {row.panel_watts} W")
+    pdf.drawString(48, 515, f"Inversor: {row.inverter}")
+    pdf.drawString(48, 495, f"Forma de pago: {row.payment_method}")
     pdf.line(48, 465, 564, 465)
     pdf.setFont("Helvetica", 11); pdf.drawString(48, 435, "Paneles"); pdf.drawRightString(564, 435, f"${float(row.panel_subtotal):,.2f} MXN")
-    pdf.drawString(48, 412, "Estructura"); pdf.drawRightString(564, 412, f"${float(row.structure_cost):,.2f} MXN")
+    pdf.drawString(48, 412, row.structure_name); pdf.drawRightString(564, 412, f"${float(row.structure_cost):,.2f} MXN")
     pdf.drawString(48, 389, "Inversor"); pdf.drawRightString(564, 389, f"${float(row.inverter_cost):,.2f} MXN")
     pdf.setFont("Helvetica-Bold", 15); pdf.drawString(48, 345, "Inversión estimada")
     pdf.drawRightString(564, 345, f"${float(row.total):,.2f} MXN")
-    pdf.setFont("Helvetica", 8); pdf.setFillColorRGB(.4, .45, .42); pdf.drawString(48, 65, "Propuesta de demostración. Precios y configuración comercial pendientes de validar.")
+    pdf.setFont("Helvetica", 8); pdf.setFillColorRGB(.4, .45, .42)
+    disclaimer = "DEMOSTRACIÓN — precios ilustrativos; no enviar como propuesta comercial." if row.is_demo else "Propuesta comercial sujeta a validación final de alcance y condiciones."
+    pdf.drawString(48, 65, disclaimer)
     pdf.save(); buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{row.folio}.pdf"', "X-Drive-Status": "pending-configuration"})
 
 
 @router.post("/followups", status_code=201, dependencies=[Depends(require_permissions(auth_service, "customers:write"))])
-def create_followup(data: FollowUpInput, db: Session = Depends(get_db)):
+def create_followup(data: FollowUpInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
     if not db.get(Customer, data.customer_id): raise HTTPException(404, "Cliente no encontrado.")
-    row = FollowUp(**data.model_dump()); db.add(row); db.flush()
-    db.add(Activity(customer_id=row.customer_id, kind="seguimiento programado", note=f"{row.due_date}: {row.note}")); db.commit(); db.refresh(row)
+    row = FollowUp(**data.model_dump(), created_by=identity.email); db.add(row); db.flush()
+    db.add(Activity(customer_id=row.customer_id, kind="seguimiento programado", note=f"{row.due_date}: {row.note}", created_by=identity.email)); db.commit(); db.refresh(row)
     return _serialize(row)
 
 
 @router.get("/followups", dependencies=[Depends(require_permissions(auth_service, "customers:read"))])
 def list_followups(db: Session = Depends(get_db)):
     rows = db.scalars(select(FollowUp).where(FollowUp.done.is_(False)).order_by(FollowUp.due_date)).all()
-    return [_serialize(row) for row in rows]
+    return [{**_serialize(row), "customer": _serialize(db.get(Customer, row.customer_id))} for row in rows]
+
+
+@router.patch("/followups/{followup_id}", dependencies=[Depends(require_permissions(auth_service, "customers:write"))])
+def update_followup(followup_id: str, data: FollowUpDoneInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    row = db.get(FollowUp, followup_id)
+    if row is None: raise HTTPException(404, "Seguimiento no encontrado.")
+    row.done = data.done
+    if data.done:
+        db.add(Activity(customer_id=row.customer_id, kind="seguimiento completado", note=f"Seguimiento del {row.due_date}: {row.note}", created_by=identity.email))
+    db.commit(); db.refresh(row)
+    return _serialize(row)
 
 
 @router.post("/installations", status_code=201, dependencies=[Depends(require_permissions(auth_service, "installations:write"))])
@@ -267,9 +569,12 @@ def create_installation(data: InstallationInput, db: Session = Depends(get_db)):
     return _serialize(row)
 
 
-@router.get("/installations", dependencies=[Depends(require_permissions(auth_service, "installations:read"))])
-def list_installations(db: Session = Depends(get_db)):
-    rows = db.scalars(select(Installation).order_by(Installation.scheduled_at)).all()
+@router.get("/installations")
+def list_installations(identity: AuthIdentity = Depends(require_permissions(auth_service, "installations:read")), db: Session = Depends(get_db)):
+    query = select(Installation).order_by(Installation.scheduled_at)
+    if "instalador" in identity.roles:
+        query = query.where(Installation.lead_installer == identity.email)
+    rows = db.scalars(query).all()
     return [{**_serialize(row), "customer": _serialize(db.get(Customer, row.customer_id))} for row in rows]
 
 
@@ -420,4 +725,5 @@ def whatsapp_link(phone: str, message: str):
 
 @router.get("/dashboard", dependencies=[Depends(require_permissions(auth_service, "customers:read"))])
 def dashboard(db: Session = Depends(get_db)):
-    return {"customers": db.scalar(select(func.count()).select_from(Customer)) or 0, "quotes_open": db.scalar(select(func.count()).select_from(Quote).where(Quote.status == "sent")) or 0, "quotes_amount": float(db.scalar(select(func.coalesce(func.sum(Quote.total), 0)).where(Quote.status == "sent")) or 0), "installations_active": db.scalar(select(func.count()).select_from(Installation).where(Installation.status != "closed")) or 0, "receivables_open": float(db.scalar(select(func.coalesce(func.sum(Receivable.amount-Receivable.paid_amount), 0)).where(Receivable.status != "paid")) or 0), "demo_data": True}
+    active_quotes = Quote.status.in_(["draft", "sent"])
+    return {"customers": db.scalar(select(func.count()).select_from(Customer)) or 0, "quotes_open": db.scalar(select(func.count()).select_from(Quote).where(active_quotes)) or 0, "quotes_amount": float(db.scalar(select(func.coalesce(func.sum(Quote.total), 0)).where(active_quotes)) or 0), "installations_active": db.scalar(select(func.count()).select_from(Installation).where(Installation.status != "closed")) or 0, "receivables_open": float(db.scalar(select(func.coalesce(func.sum(Receivable.amount-Receivable.paid_amount), 0)).where(Receivable.status != "paid")) or 0), "demo_data": True}

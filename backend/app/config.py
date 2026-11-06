@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     organization_id: str = Field(default="arcoenergy", alias="ORGANIZATION_ID")
     google_drive_folder_id: str = Field(default="", alias="GOOGLE_DRIVE_FOLDER_ID")
     whatsapp_phone: str = Field(default="", alias="WHATSAPP_PHONE")
+    openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
