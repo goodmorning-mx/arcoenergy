@@ -10,6 +10,8 @@
 
 Organizar lo aprendido en una propuesta de producto para Arco Energy: qué va en el CRM, qué va en la PWA, qué va en la web pública, cómo encaja el agente y qué módulos `gm-*` pueden reutilizarse. Esta propuesta servirá como contexto para un goal futuro; no implica que los portales o integraciones ya estén implementados.
 
+El registro de las tarjetas US-1 a US-38 está en [history-cards.md](history-cards.md). Las tarjetas US-1 a US-34 se reconstruyeron desde mensajes, fuentes y resúmenes disponibles y deben cotejarse con las tarjetas originales en una próxima iteración.
+
 ## Decisiones y dirección acordadas
 
 1. El producto se organiza en tres portales independientes:
@@ -183,7 +185,7 @@ Estas tarjetas son registros de descubrimiento, no especificaciones contables ap
 
 ## Fuentes y procedencia
 
-- History cards anteriores US-1 a US-34 y retrospectiva de Goito/contador registradas en la conversación del proyecto.
+- Registro consolidado de history cards US-1 a US-38 en [history-cards.md](history-cards.md), reconstruido a partir de mensajes, documentos y audios compartidos en el proyecto.
 - Nuevas history cards de esta conversación: **US-35** movimientos contables relacionados; **US-36** corregir movimientos sin perder historial; aclaración de orden de trabajo y material; **US-37** revisar sistema por secciones conforme al Word; **US-38** controles diarios y resultados por proyecto/mes.
 - Mensajes de Mario Groso del 5 de noviembre de 2026 y foto del formato de Orden de Trabajo/Solicitud de Materiales.
 - Documentos previamente compartidos: `COMENTARIOS Y MEJORAS PARA EL SISTEMA DE ARCO ENERGY.docx` y `MEJORAS AL SISTEMA ARCO ENERGY.pdf`.
