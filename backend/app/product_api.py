@@ -1618,7 +1618,38 @@ def profitability_report(
     }
 
 
-@router.get("/dashboard", dependencies=[Depends(require_permissions(auth_service, "customers:read"))])
-def dashboard(db: Session = Depends(get_db)):
+@router.get("/dashboard")
+def dashboard(identity: AuthIdentity = Depends(require_permissions(auth_service, "customers:read")), db: Session = Depends(get_db)):
     active_quotes = Quote.status.in_(["draft", "sent"])
-    return {"customers": db.scalar(select(func.count()).select_from(Customer)) or 0, "quotes_open": db.scalar(select(func.count()).select_from(Quote).where(active_quotes)) or 0, "quotes_amount": float(db.scalar(select(func.coalesce(func.sum(Quote.total), 0)).where(active_quotes)) or 0), "installations_active": db.scalar(select(func.count()).select_from(Installation).where(Installation.status != "closed")) or 0, "receivables_open": float(db.scalar(select(func.coalesce(func.sum(Receivable.amount-Receivable.paid_amount), 0)).where(Receivable.status != "paid")) or 0)}
+    result = {
+        "customers": db.scalar(select(func.count()).select_from(Customer)) or 0,
+        "quotes_open": db.scalar(select(func.count()).select_from(Quote).where(active_quotes)) or 0,
+        "quotes_amount": float(db.scalar(select(func.coalesce(func.sum(Quote.total), 0)).where(active_quotes)) or 0),
+        "installations_active": db.scalar(select(func.count()).select_from(Installation).where(Installation.status != "closed")) or 0,
+        "receivables_open": 0.0,
+        "due_receivables": [],
+        "low_stock_items": [],
+        "account_balances": [],
+    }
+    if "receivables:read" in identity.permissions:
+        result["receivables_open"] = float(db.scalar(select(func.coalesce(func.sum(Receivable.amount-Receivable.paid_amount), 0)).where(Receivable.status != "paid")) or 0)
+        due_rows = db.execute(select(Receivable, Customer.name).join(Customer, Customer.id == Receivable.customer_id)
+            .where(Receivable.status != "paid", Receivable.due_date <= date.today() + timedelta(days=7))
+            .order_by(Receivable.due_date).limit(10)).all()
+        result["due_receivables"] = [{"id": row.id, "customer": name, "due_date": row.due_date, "balance": max(Decimal(row.amount) - Decimal(row.paid_amount), Decimal("0")), "status": "overdue" if row.due_date < date.today() else "due"} for row, name in due_rows]
+    if "inventory:read" in identity.permissions:
+        reserved = {item_id: Decimal(quantity or 0) for item_id, quantity in db.execute(
+            select(WorkOrderMaterial.item_id, func.sum(WorkOrderMaterial.requested_quantity - WorkOrderMaterial.preissued_quantity))
+            .join(Installation, Installation.id == WorkOrderMaterial.installation_id)
+            .where(Installation.status != "closed").group_by(WorkOrderMaterial.item_id)
+        ).all()}
+        inventory_items = db.scalars(select(InventoryItem).where(InventoryItem.minimum_quantity > 0).order_by(InventoryItem.name)).all()
+        result["low_stock_items"] = [{"id": item.id, "name": item.name, "unit": item.unit,
+            "available_quantity": max(Decimal(item.quantity) - reserved.get(item.id, Decimal("0")), Decimal("0")),
+            "minimum_quantity": Decimal(item.minimum_quantity)} for item in inventory_items
+            if max(Decimal(item.quantity) - reserved.get(item.id, Decimal("0")), Decimal("0")) <= Decimal(item.minimum_quantity)][:10]
+    if "accounts:read" in identity.permissions:
+        accounts = db.scalars(select(FinancialAccount).where(FinancialAccount.active.is_(True)).order_by(FinancialAccount.name)).all()
+        result["account_balances"] = [{"id": account.id, "name": account.name, "account_type": account.account_type,
+            "balance": Decimal(account.opening_balance) + sum((Decimal(row.amount) if row.direction == "in" else -Decimal(row.amount) for row in db.scalars(select(CashMovement).where(CashMovement.account_id == account.id)).all()), Decimal("0"))} for account in accounts]
+    return result
