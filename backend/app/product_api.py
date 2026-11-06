@@ -163,7 +163,7 @@ def _agent_registry(audience: str) -> ToolRegistry:
     if audience == "public":
         @tool(
             name="arcoenergy.public_system_sizes",
-            description="Consulta los tamaños de sistema activos. Si hay precios aprobados, puede preparar una cotización estimada para el número de paneles solicitado y un inversor configurado. Nunca devuelve precios demo.",
+            description="Consulta los tamaños de sistema activos. Si hay precios aprobados, puede preparar una cotización estimada para el número de paneles solicitado y un inversor configurado. Nunca devuelve precios no aprobados.",
             input_schema={"type": "object", "properties": {"panel_count": {"type": "integer", "minimum": 4, "maximum": 20}, "inverter": {"type": "string", "maxLength": 120}}, "additionalProperties": False},
             permission=Permission.READ,
         )
@@ -248,8 +248,8 @@ async def _run_agent_chat(data: AgentChatInput, audience: str, owner: str, ident
         conversation.messages.append(Message("system", (
             "Eres el asistente de Arco Energy. Responde en español, con claridad y sin inventar datos, precios, ahorros, "
             "especificaciones ni compromisos. Si la persona pide cotizar, pregunta cuántos paneles desea y consulta la herramienta para la cantidad e inversor. Usa las herramientas disponibles para datos actuales. Si el catálogo dice "
-            "que la cotización solicitada no está aprobada o usa datos de demostración, dilo con claridad y ofrece que el equipo prepare "
-            "una propuesta. No tienes permiso para crear ni modificar registros; solo puedes consultar datos permitidos."
+            "que el precio aún no está aprobado, dilo con claridad y ofrece que el equipo configure el precio comercial. "
+            "No tienes permiso para crear ni modificar registros; solo puedes consultar datos permitidos."
         )))
         _agent_conversations[key] = conversation
         if len(_agent_conversations) > 1000:
@@ -387,7 +387,7 @@ def catalog(db: Session = Depends(get_db)):
             "system_kw": round(row.panel_count * row.panel_watts / 1000, 2),
             "inverter": row.default_inverter,
             "price_mxn": Decimal(row.panel_unit_price) * row.panel_count + Decimal(row.structure_price) + inverter_price,
-            "catalog_status": "demo" if row.is_demo else "approved",
+            "catalog_status": "pending_approval" if row.is_demo else "approved",
         })
     return {
         "demo": False,
@@ -486,6 +486,8 @@ def create_quote(data: QuoteInput, db: Session = Depends(get_db)):
     package = db.scalar(select(QuotePackage).where(QuotePackage.panel_count == data.panel_count, QuotePackage.enabled.is_(True)))
     if package is None:
         raise HTTPException(422, "No hay un paquete activo para esta cantidad de paneles.")
+    if package.is_demo:
+        raise HTTPException(409, "El paquete requiere aprobación comercial antes de generar una cotización.")
     inverter = data.inverter or package.default_inverter
     inverter_option = next((item for item in package.inverter_options if item.get("name") == inverter), None)
     if inverter_option is None:
@@ -517,9 +519,8 @@ def create_quote(data: QuoteInput, db: Session = Depends(get_db)):
         is_demo=package.is_demo,
     )
     db.add(row); db.flush()
-    mode = " (catálogo demo)" if package.is_demo else ""
-    db.add(Activity(customer_id=customer.id, kind="cotización creada", note=f"Cotización {folio}{mode}, por ${total:,.2f} MXN.")); db.commit(); db.refresh(row)
-    return {**_serialize(row), "demo_catalog": package.is_demo}
+    db.add(Activity(customer_id=customer.id, kind="cotización creada", note=f"Cotización {folio}, por ${total:,.2f} MXN.")); db.commit(); db.refresh(row)
+    return _serialize(row)
 
 
 @router.get("/quotes", dependencies=[Depends(require_permissions(auth_service, "quotes:read"))])
@@ -535,7 +536,7 @@ def update_quote_status(quote_id: str, data: QuoteStatusInput, identity: AuthIde
     row = db.get(Quote, quote_id)
     if row is None: raise HTTPException(404, "Cotización no encontrada.")
     if row.is_demo and data.status != "draft":
-        raise HTTPException(409, "Aprueba el catálogo comercial antes de avanzar una cotización de demostración.")
+        raise HTTPException(409, "Aprueba el paquete comercial antes de avanzar esta cotización.")
     row.status = data.status
     db.add(Activity(customer_id=row.customer_id, kind="cotización actualizada", note=f"{row.folio}: {data.status}.", created_by=identity.email))
     db.commit(); db.refresh(row)
@@ -546,6 +547,7 @@ def update_quote_status(quote_id: str, data: QuoteStatusInput, identity: AuthIde
 def quote_pdf(quote_id: str, db: Session = Depends(get_db)):
     row = db.get(Quote, quote_id)
     if not row: raise HTTPException(404, "Cotización no encontrada.")
+    if row.is_demo: raise HTTPException(409, "El paquete de esta cotización requiere aprobación antes de descargar el PDF.")
     customer = db.get(Customer, row.customer_id)
     try:
         from reportlab.lib.pagesizes import letter
@@ -574,7 +576,7 @@ def quote_pdf(quote_id: str, db: Session = Depends(get_db)):
     pdf.setFont("Helvetica-Bold", 15); pdf.drawString(48, 345, "Inversión estimada")
     pdf.drawRightString(564, 345, f"${float(row.total):,.2f} MXN")
     pdf.setFont("Helvetica", 8); pdf.setFillColorRGB(.4, .45, .42)
-    disclaimer = "DEMOSTRACIÓN — precios ilustrativos; no enviar como propuesta comercial." if row.is_demo else "Propuesta comercial sujeta a validación final de alcance y condiciones."
+    disclaimer = "Propuesta comercial sujeta a validación final de alcance y condiciones."
     pdf.drawString(48, 65, disclaimer)
     pdf.save(); buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{row.folio}.pdf"', "X-Drive-Status": "pending-configuration"})
@@ -637,11 +639,11 @@ def list_inventory(identity: AuthIdentity = Depends(require_permissions(auth_ser
 
 
 @router.post("/inventory/items", status_code=201, dependencies=[Depends(require_permissions(auth_service, "inventory:manage"))])
-def create_inventory_item(data: InventoryItemInput, db: Session = Depends(get_db)):
+def create_inventory_item(data: InventoryItemInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
     row = InventoryItem(name=data.name.strip(), unit=data.unit.strip(), quantity=data.initial_quantity, minimum_quantity=data.minimum_quantity, unit_cost=data.unit_cost)
     db.add(row); db.flush()
     if data.initial_quantity:
-        db.add(InventoryMovement(item_id=row.id, quantity=data.initial_quantity, reason="existencia inicial"))
+        db.add(InventoryMovement(item_id=row.id, quantity=data.initial_quantity, reason="existencia inicial", created_by=identity.email))
     db.commit(); db.refresh(row)
     return _serialize(row)
 

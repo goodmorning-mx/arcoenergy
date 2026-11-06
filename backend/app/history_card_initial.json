@@ -1,0 +1,729 @@
+[
+  {
+    "story_id": "US-1",
+    "version": 1,
+    "iteration": "iteración 1 · 2026-10-26",
+    "stakeholder": "Goito Profugo",
+    "source_literal": "[11:11 p.m., 26/10/2026] Goito Profugo: .- cotizador desde tu celular, dos opciones. 1.1 yo le ingreso cada cierto tiempo los datos  de los paquetes de paneles desde 4 hasta 20 paneles, los precios, la marca y potencia de paneles, estructura siempre es la misma y dependiendo la cantidad de paneles ya predefinimos qué opción de inversor o inversor le ponemos, solo ingresamos, nombre del cliente, lugar de instalación , cantidad de paneles, qué inversor usamos y las formas de pago predefinidas también",
+    "source_type": "WhatsApp",
+    "source_reference": "docs/discovery/sources/goito-profugo-whatsapp-2026-10-26.md",
+    "normalized_story": "Como vendedor, quiero cotizar desde celular o computadora eligiendo un paquete de paneles, para generar una propuesta con los datos vigentes del negocio.",
+    "acceptance_criteria": [
+      "La administración puede actualizar periódicamente paquetes de 4 a 20 paneles, precio, marca y potencia.",
+      "La estructura se mantiene predefinida.",
+      "El vendedor captura cliente, lugar de instalación, cantidad de paneles, inversor y forma de pago predefinida.",
+      "La relación entre cantidad de paneles e inversor se configura/valida según las reglas del negocio."
+    ],
+    "unresolved_questions": [
+      "catálogo y fórmula de precio exactos; especificación de inversores por tamaño."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-2",
+    "version": 1,
+    "iteration": "iteración 1 · 2026-10-26",
+    "stakeholder": "Goito Profugo",
+    "source_literal": "[11:12 p.m., 26/10/2026] Goito Profugo: 1.2 cotizador automático donde le subimos el recibo en pdf y solo te hace el cálculo ( este es en modo avanzado ya más adelante",
+    "source_type": "WhatsApp",
+    "source_reference": "docs/discovery/sources/goito-profugo-whatsapp-2026-10-26.md",
+    "normalized_story": "Como vendedor, quiero subir el recibo en PDF para que el sistema calcule una propuesta automáticamente.",
+    "acceptance_criteria": [
+      "La carga del recibo inicia un cálculo y presenta el resultado para revisión."
+    ],
+    "unresolved_questions": [
+      "datos a extraer, fórmula técnica, validación humana y tratamiento de recibos ilegibles."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-3",
+    "version": 1,
+    "iteration": "iteración 1 · 2026-10-26",
+    "stakeholder": "Goito Profugo",
+    "source_literal": "[11:13 p.m., 26/10/2026] Goito Profugo: En cual sea de las dos opciones que sea desde una app o desde la computadora y se guarde foliado en un drive, al momento de que se genere en pdf en automático nos da la opción de enviarla vía WhatsApp al cliente ( esto es por que ya tenemos una conversación abierta con el cliente",
+    "source_type": "WhatsApp",
+    "source_reference": "docs/discovery/sources/goito-profugo-whatsapp-2026-10-26.md",
+    "normalized_story": "Como vendedor, quiero generar una cotización PDF con folio, guardarla en Drive y compartirla por WhatsApp con el cliente con quien ya tengo una conversación abierta.",
+    "acceptance_criteria": [
+      "Disponible desde app o computadora.",
+      "El PDF se genera automáticamente al terminar la cotización.",
+      "Se ofrece una acción para compartirlo por WhatsApp."
+    ],
+    "unresolved_questions": [
+      "formato del folio, estructura de Drive y si WhatsApp será enlace compartido o integración API."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-4",
+    "version": 1,
+    "iteration": "iteración 1 · 2026-10-26",
+    "stakeholder": "Goito Profugo",
+    "source_literal": "[11:14 p.m., 26/10/2026] Goito Profugo: 2.- seguimiento de clientes, este cliente te dice gracias la revisamos o algunos otros comentarios que hacen sospechar al vendedor que si sería bueno escribirle en 3 días, 7 días, 15 días, 30 días o abierta a comentarios del cliente y con opción a colocar comentarios como en bitácora",
+    "source_type": "WhatsApp",
+    "source_reference": "docs/discovery/sources/goito-profugo-whatsapp-2026-10-26.md",
+    "normalized_story": "Como vendedor, quiero programar cuándo volver a contactar a una persona después de sus comentarios sobre una propuesta y registrar notas de bitácora.",
+    "acceptance_criteria": [
+      "Opciones mencionadas: 3, 7, 15, 30 días o fecha/comentario abierto.",
+      "Registrar comentarios e historial de seguimiento."
+    ],
+    "unresolved_questions": [
+      "alertas, asignación de responsable y canales."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-5",
+    "version": 1,
+    "iteration": "iteración 1 · 2026-10-26",
+    "stakeholder": "Goito Profugo",
+    "source_literal": "[11:16 p.m., 26/10/2026] Goito Profugo: 3.- este cliente ya aceptó la propuesta, si se pudieran generar los contratos y pagarés con solo subirle fotos del ine del titular y del responsable solidario en caso de que será financiamiento\n\n[11:16 p.m., 26/10/2026] Goito Profugo: 3.- este cliente ya aceptó la propuesta, si se pudieran generar los contratos y pagarés con solo subirle fotos del ine del titular y del responsable solidario en caso de que será financiamiento",
+    "source_type": "WhatsApp",
+    "source_reference": "docs/discovery/sources/goito-profugo-whatsapp-2026-10-26.md",
+    "normalized_story": "Como administrador, quiero generar contrato y pagaré usando fotos del INE del titular y, para financiamiento, del responsable solidario.",
+    "acceptance_criteria": [
+      "La generación debe distinguir contado/financiamiento y titular/responsable solidario."
+    ],
+    "unresolved_questions": [
+      "plantillas, campos extraídos, revisión de identidad, privacidad y retención documental."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-6",
+    "version": 1,
+    "iteration": "iteración 1 · 2026-10-26",
+    "stakeholder": "Goito Profugo",
+    "source_literal": "[11:16 p.m., 26/10/2026] Goito Profugo: Si los puede firmar de manera electrónica así con el dedo y hacer escaneo facial para saber si es el que a todo dar, si no seguimos en físico",
+    "source_type": "WhatsApp",
+    "source_reference": "docs/discovery/sources/goito-profugo-whatsapp-2026-10-26.md",
+    "normalized_story": "Como cliente, quiero firmar en pantalla y realizar una verificación facial para poder formalizar el documento digitalmente; si no se completa, se conserva el proceso físico.",
+    "acceptance_criteria": [
+      "Firma táctil y verificación propuesta por el stakeholder.",
+      "Alternativa de firma física."
+    ],
+    "unresolved_questions": [
+      "proveedor, validez y consentimiento aplicables, controles antifraude y flujo de excepción. No se asume que el escaneo facial esté aprobado o implementado."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-7",
+    "version": 1,
+    "iteration": "iteración 1 · 2026-10-26",
+    "stakeholder": "Goito Profugo",
+    "source_literal": "[11:18 p.m., 26/10/2026] Goito Profugo: 4.- asignación de tareas para los instaladores, que se les notifique a los instaladores que ya hay una instalación(yo coordinador o administrador les puedo dar de comando a ellos) en tal lugar, nombre , número y correo del cliente",
+    "source_type": "WhatsApp",
+    "source_reference": "docs/discovery/sources/goito-profugo-whatsapp-2026-10-26.md",
+    "normalized_story": "Como coordinador/administrador, quiero asignar una instalación y notificar al equipo de campo con la ubicación y datos necesarios del cliente.",
+    "acceptance_criteria": [
+      "La asignación incluye lugar, nombre, teléfono y correo del cliente, según lo solicitado.",
+      "El instalador recibe notificación de que tiene una instalación."
+    ],
+    "unresolved_questions": [
+      "calendario, aceptación, estados y límites de acceso a datos del cliente."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-8",
+    "version": 1,
+    "iteration": "iteración 1 · 2026-10-26",
+    "stakeholder": "Goito Profugo",
+    "source_literal": "[11:18 p.m., 26/10/2026] Goito Profugo: 5.- los instaladores ya saben que hay una instalación de 20 paneles en Tampico con Abel Agundiz, ellos pueden revisar el stock desde la app para ver si todo está disponible",
+    "source_type": "WhatsApp",
+    "source_reference": "docs/discovery/sources/goito-profugo-whatsapp-2026-10-26.md",
+    "normalized_story": "Como instalador, quiero consultar el stock desde la app para saber si los materiales requeridos para una instalación están disponibles.",
+    "acceptance_criteria": [
+      "La consulta se relaciona con la instalación/orden y muestra disponibilidad de materiales."
+    ],
+    "unresolved_questions": [
+      "reserva de materiales y tratamiento de faltantes."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-9",
+    "version": 1,
+    "iteration": "iteración 1 · 2026-10-26",
+    "stakeholder": "Goito Profugo",
+    "source_literal": "[11:19 p.m., 26/10/2026] Goito Profugo: 6.- los instaladores instalan y gastan material, ellos mismos manualmente y al final del día descuentan inventario desde una app de manera muy intuitiva, en realidad usamos algunos 15 artículos como máximo",
+    "source_type": "WhatsApp",
+    "source_reference": "docs/discovery/sources/goito-profugo-whatsapp-2026-10-26.md",
+    "normalized_story": "Como instalador, quiero registrar desde la app el material gastado y al final del día confirmar las cantidades de manera intuitiva, para mantener el inventario actualizado.",
+    "acceptance_criteria": [
+      "Captura manual sencilla de materiales y cantidades.",
+      "Relación con instalación/proyecto."
+    ],
+    "unresolved_questions": [
+      "confirmar si el descuento se hace al entregar, consumir o aprobar el reporte."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-10",
+    "version": 1,
+    "iteration": "iteración 1 · 2026-10-26",
+    "stakeholder": "Goito Profugo",
+    "source_literal": "[11:20 p.m., 26/10/2026] Goito Profugo: 7.- los instaladores colocan los gastos de viaticos o algunos otros gastos en la app, para saber que en ese proyecto se gastó tanto",
+    "source_type": "WhatsApp",
+    "source_reference": "docs/discovery/sources/goito-profugo-whatsapp-2026-10-26.md",
+    "normalized_story": "Como instalador, quiero registrar viáticos y otros gastos en la app y asociarlos al proyecto.",
+    "acceptance_criteria": [
+      "Capturar importe, tipo y proyecto."
+    ],
+    "unresolved_questions": [
+      "comprobantes, categorías y flujo de aprobación."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-11",
+    "version": 1,
+    "iteration": "iteración 1 · 2026-10-26",
+    "stakeholder": "Goito Profugo",
+    "source_literal": "[11:22 p.m., 26/10/2026] Goito Profugo: 8.- el cliente aceptó pagos con financiamiento, bueno pues tenemos el control mediante una aplicación de quien nos debe, cuánto, de qué forma nos paga, con opción a un solo click el encargado de las cuentas le pueda enviar un mensaje predefinido de su pago está próximo, hoy es día de su pago, o pago atrasado",
+    "source_type": "WhatsApp",
+    "source_reference": "docs/discovery/sources/goito-profugo-whatsapp-2026-10-26.md",
+    "normalized_story": "Como encargado de cuentas, quiero consultar quién debe, cuánto, bajo qué forma paga y enviar mensajes predefinidos sobre pagos próximos, del día o atrasados.",
+    "acceptance_criteria": [
+      "Acceso rápido a mensajes de recordatorio.",
+      "Control de saldos y modalidad de pago."
+    ],
+    "unresolved_questions": [
+      "calendario, mora, plantillas y canal de envío."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-12",
+    "version": 1,
+    "iteration": "iteración 1 · 2026-10-26",
+    "stakeholder": "Goito Profugo",
+    "source_literal": "[11:22 p.m., 26/10/2026] Goito Profugo: 9.- nosotros como administradores llevar el control de materiales, costos directos",
+    "source_type": "WhatsApp",
+    "source_reference": "docs/discovery/sources/goito-profugo-whatsapp-2026-10-26.md",
+    "normalized_story": "Como administrador, quiero llevar el control de materiales y costos directos para conocer el costo de cada operación/proyecto.",
+    "acceptance_criteria": [],
+    "unresolved_questions": [
+      "método de costeo y relación con inventario/órdenes."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-13",
+    "version": 1,
+    "iteration": "iteración 1 · 2026-10-26",
+    "stakeholder": "Goito Profugo",
+    "source_literal": "[11:22 p.m., 26/10/2026] Goito Profugo: Que todo se vaya a un drive para almacenar todos los datos",
+    "source_type": "WhatsApp",
+    "source_reference": "docs/discovery/sources/goito-profugo-whatsapp-2026-10-26.md",
+    "normalized_story": "Como equipo, queremos que la información/documentación del sistema se almacene en Drive.",
+    "acceptance_criteria": [],
+    "unresolved_questions": [
+      "distinguir archivos/documentos de datos operacionales; definir permisos, estructura, sincronización, respaldo y fuente autoritativa."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-14",
+    "version": 1,
+    "iteration": "iteración 1 · 2026-10-26",
+    "stakeholder": "Goito Profugo",
+    "source_literal": "[11:23 p.m., 26/10/2026] Goito Profugo: Si todo fuera desde una app, cada usuario tendrá privilegios de ver información",
+    "source_type": "WhatsApp",
+    "source_reference": "docs/discovery/sources/goito-profugo-whatsapp-2026-10-26.md",
+    "normalized_story": "Como administrador, quiero que cada usuario tenga privilegios para que vea y ejecute solamente las funciones autorizadas.",
+    "acceptance_criteria": [],
+    "unresolved_questions": [
+      "matriz de permisos por rol y alcance por proyecto/organización."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-15",
+    "version": 1,
+    "iteration": "iteración 2 · discovery contador",
+    "stakeholder": "Contador (documento; autor identificado después como Mario Groso)",
+    "source_literal": "VENTAS\n\nPrimer lo que se busca añadir es un apartado para el registro de VENTAS en el cual se registren todos los ingresos teniendo en cuenta detalles como fecha del proyecto, nombre del cliente, código del proyecto, domicilio del proyecto, valor de la venta (con impuestos y subtotal), si la venta a crédito, de contado o parte del plan 24 (tanda de paneles solares).",
+    "source_type": "Documento Word/PDF",
+    "source_reference": "docs/discovery/sources/contador-comentarios-mejoras-original.docx; docs/discovery/sources/contador-mejoras-original.pdf",
+    "normalized_story": "Como contador/administrador, quiero registrar las ventas con sus datos principales, para llevar control de ingresos y proyectos vendidos.",
+    "acceptance_criteria": [
+      "Capturar fecha del proyecto, cliente, código y domicilio del proyecto.",
+      "Capturar subtotal, impuestos y valor de venta.",
+      "Registrar si es contado, crédito o parte del plan 24 (tanda de paneles)."
+    ],
+    "unresolved_questions": [
+      "reglas de impuestos, pagos mixtos y efecto exacto en inventario/cuentas."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-16",
+    "version": 1,
+    "iteration": "iteración 2 · discovery contador",
+    "stakeholder": "Contador (documento; autor identificado después como Mario Groso)",
+    "source_literal": "CLIENTES\n\nEn el apartado de clientes se busca manejar el tema de cuentas por cobrar, así como la cobranza para el control de las ventas a crédito, tandas, etc.\n\nSe busca que en este apartado nos aparezca cada cliente y su deuda al momento, aquí mismo en el botón de cada cliente nos debe permitir capturar la cobranza o los abonos de los clientes con un botón de “capturar pago” donde se nos despliegue un menú que nos indique el monto del pago, fecha en que fue realizado, si fue en efectivo o si entro en alguna de las cuentas de débito, etc. para que también se vea reflejado en el apartado de flujo de efectivo y en los reportes de las cuentas de débito o efectivo.",
+    "source_type": "Documento Word/PDF",
+    "source_reference": "docs/discovery/sources/contador-comentarios-mejoras-original.docx; docs/discovery/sources/contador-mejoras-original.pdf",
+    "normalized_story": "Como encargado de cobranza, quiero consultar cada cliente y su deuda actual y capturar pagos/abonos.",
+    "acceptance_criteria": [
+      "Capturar monto, fecha y si el pago fue efectivo o entró a una cuenta de débito.",
+      "Relacionar el pago con cliente/deuda.",
+      "El movimiento debe reflejarse en flujo de efectivo y reporte de cuenta correspondiente."
+    ],
+    "unresolved_questions": [
+      "aplicación de pagos a varias deudas, pagos parciales, mora y cancelaciones."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-17",
+    "version": 1,
+    "iteration": "iteración 2 · discovery contador",
+    "stakeholder": "Contador (documento; autor identificado después como Mario Groso)",
+    "source_literal": "GASTOS.\n\nNecesitamos un apartado donde podamos registrar para medir el control de los gastos que no correspondan a adquisición de mercancías como lo son la nómina, combustibles, impuestos, intereses, prestamos, mantenimientos, servicios, etc.\n\nEn este apartado buscamos un botón de “Añadir gasto” donde se capturen detalles como lo son: fecha, monto, descripción del gasto, categoría (nómina, combustible, etc.), cuenta con la que fue realizada o bien si fue pagada en efectivo, proyecto relacionado en caso de ser un gasto directo que se relacione con el código del proyecto, etc.",
+    "source_type": "Documento Word/PDF",
+    "source_reference": "docs/discovery/sources/contador-comentarios-mejoras-original.docx; docs/discovery/sources/contador-mejoras-original.pdf",
+    "normalized_story": "Como contador, quiero registrar gastos que no correspondan a adquisición de mercancías, para analizar costos y salidas de dinero.",
+    "acceptance_criteria": [
+      "Capturar fecha, monto, descripción y categoría (por ejemplo nómina, combustible, impuestos, intereses, préstamos, mantenimiento o servicios).",
+      "Asociar la cuenta o efectivo usado.",
+      "Asociar código de proyecto cuando sea gasto directo."
+    ],
+    "unresolved_questions": [
+      "catálogo final de categorías y aprobaciones."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-18",
+    "version": 1,
+    "iteration": "iteración 2 · discovery contador",
+    "stakeholder": "Contador (documento; autor identificado después como Mario Groso)",
+    "source_literal": "CUENTAS DE DEBITO Y EFECTIVO\n\nSe requiere este apartado para saber los montos de las cuentas de debito y efectivo que se tengan para poder tomar decisiones, así como poder aquí mismo ser redireccionado al reporte de cada una de las cuentas.",
+    "source_type": "Documento Word/PDF",
+    "source_reference": "docs/discovery/sources/contador-comentarios-mejoras-original.docx; docs/discovery/sources/contador-mejoras-original.pdf",
+    "normalized_story": "Como administrador/contador, quiero ver los saldos de cuentas de débito y efectivo y abrir el reporte de cada cuenta, para tomar decisiones de caja.",
+    "acceptance_criteria": [
+      "Mostrar cuentas y montos disponibles.",
+      "Permitir navegar al reporte de movimientos de cada cuenta."
+    ],
+    "unresolved_questions": [
+      "conciliación, saldos iniciales y permisos."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-19",
+    "version": 1,
+    "iteration": "iteración 2 · discovery contador",
+    "stakeholder": "Contador (documento; autor identificado después como Mario Groso)",
+    "source_literal": "DASHBOARD\n\nEl DASHBOARD está bien, aquí debemos de poder ver detalles importantes como lo son estatus del inventario, alertas por artículos con stock bajo, alertas de pagos y cobranzas que estén próximos a vencer, estatus de las cuentas de debido, etc.\n\nSería como el apartado de reportes, pero poniendo lo más importante, así como gráficas y áreas de oportunidad.",
+    "source_type": "Documento Word/PDF",
+    "source_reference": "docs/discovery/sources/contador-comentarios-mejoras-original.docx; docs/discovery/sources/contador-mejoras-original.pdf",
+    "normalized_story": "Como administrador/contador, quiero ver en el dashboard la información y alertas más relevantes del negocio.",
+    "acceptance_criteria": [
+      "Mostrar estado de inventario y artículos con stock bajo.",
+      "Mostrar pagos/cobranzas próximos a vencer.",
+      "Mostrar estatus de cuentas de débito.",
+      "Incluir gráficas, resumen de reportes y áreas de oportunidad."
+    ],
+    "unresolved_questions": [
+      "definición de indicadores, fórmulas y umbrales."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-20",
+    "version": 1,
+    "iteration": "iteración 2 · discovery contador",
+    "stakeholder": "Contador (documento; autor identificado después como Mario Groso)",
+    "source_literal": "INVENTARIO\n\nEn el apartado de INVENTARIO buscamos poder ver de manera sencilla la existencia de los artículos, así como poder tener un botón de alta de productos donde se le asigne un numero de clave y un código QR o de barras para poder identificarlos después con el scaner, dentro de ese botón se busca capturar el nombre del articulo, descripción, categoría, subcategoria (en caso de necesitarlo), marca, modelo, proveedor, unidad de medida, etc.\n\nUna buena idea también sería que las altas de productos puedan hacerse directamente cuando se registren en las entradas de inventario.",
+    "source_type": "Documento Word/PDF",
+    "source_reference": "docs/discovery/sources/contador-comentarios-mejoras-original.docx; docs/discovery/sources/contador-mejoras-original.pdf",
+    "normalized_story": "Como responsable de almacén, quiero registrar y consultar artículos con clave y datos descriptivos, para controlar existencias e identificarlos.",
+    "acceptance_criteria": [
+      "Capturar nombre, descripción, categoría/subcategoría, marca, modelo, proveedor y unidad de medida.",
+      "Asignar clave y código QR o de barras para identificación.",
+      "Permitir alta de un artículo desde el flujo de entrada si todavía no existe."
+    ],
+    "unresolved_questions": [
+      "unidades, conversiones, almacenes y política para códigos."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-21",
+    "version": 1,
+    "iteration": "iteración 2 · discovery contador",
+    "stakeholder": "Contador (documento; autor identificado después como Mario Groso)",
+    "source_literal": "ENTRADAS (DE INVETARIO)\n\nEn entradas es para poder dar de alta los artículos que entran a almacén y que compramos con los proveedores, para ello se debe registrar en el botón de “nueva entrada” con los datos de proveedor, nombre y código del artículo, factura relacionada (en caso de tener), costo unitario del producto, con qué tarjeta fue pagada o si fue pagada en efectivo o a crédito y por último la cantidad que entra al almacén y que permita añadir mas productos por orden de entrada.\n\nTambién requerimos un botón de “añadir articulo” en la “Nueva entrada” que nos permita capturar dos o más artículos en una sola orden de entrada.",
+    "source_type": "Documento Word/PDF",
+    "source_reference": "docs/discovery/sources/contador-comentarios-mejoras-original.docx; docs/discovery/sources/contador-mejoras-original.pdf",
+    "normalized_story": "Como responsable de almacén/contador, quiero registrar una entrada con proveedor, artículos y condiciones de pago para actualizar almacén y saldos relacionados.",
+    "acceptance_criteria": [
+      "Capturar proveedor, artículo/código, factura si existe, costo unitario, cantidad y medio/cuenta o crédito.",
+      "Agregar varios artículos en una misma orden de entrada.",
+      "Ofrecer alta de artículo desde el formulario."
+    ],
+    "unresolved_questions": [
+      "impuestos, fletes, descuentos y efecto contable detallado."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-22",
+    "version": 1,
+    "iteration": "iteración 2 · discovery contador",
+    "stakeholder": "Contador (documento; autor identificado después como Mario Groso)",
+    "source_literal": "Una buena idea es que en el botón de “Nueva entrada” nos permita leer directamente subiendo una factura, el XML, por fotografía de la factura.",
+    "source_type": "Documento Word/PDF",
+    "source_reference": "docs/discovery/sources/contador-comentarios-mejoras-original.docx; docs/discovery/sources/contador-mejoras-original.pdf",
+    "normalized_story": "Como responsable de almacén/contador, quiero cargar una factura (archivo/XML o fotografía) para facilitar el registro de los artículos recibidos.",
+    "acceptance_criteria": [
+      "La captura asistida presenta datos para revisión antes de confirmar la entrada."
+    ],
+    "unresolved_questions": [
+      "formatos, OCR, CFDI/XML y validación de cantidades/precios."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-23",
+    "version": 1,
+    "iteration": "iteración 2 · discovery contador",
+    "stakeholder": "Contador (documento; autor identificado después como Mario Groso)",
+    "source_literal": "Añadir un botón de devolución de artículos para cuando sobre de una instalación poder regresar los sobrantes y que estos no afecten al coste del proyecto.",
+    "source_type": "Documento Word/PDF",
+    "source_reference": "docs/discovery/sources/contador-comentarios-mejoras-original.docx; docs/discovery/sources/contador-mejoras-original.pdf",
+    "normalized_story": "Como instalador/responsable de almacén, quiero registrar artículos sobrantes devueltos después de una instalación para que regresen a existencias y no carguen indebidamente al costo del proyecto.",
+    "acceptance_criteria": [
+      "Asociar devolución con proyecto/orden y artículo/cantidad.",
+      "Conservar trazabilidad de la salida original y su devolución."
+    ],
+    "unresolved_questions": [
+      "condiciones del material y cálculo de costo."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-24",
+    "version": 1,
+    "iteration": "iteración 2 · discovery contador",
+    "stakeholder": "Contador (documento; autor identificado después como Mario Groso)",
+    "source_literal": "SALIDAS (DE INVENTARIO)\n\n>En salidas de inventario es para registrar las salidas de materiales de acuerdo a las ordenes de servicio que se vayan atendiendo, esto mediante el botón de nuevas salidas, en el cual se escribirán los datos del articulo que salió, la cantidad, el costo y relacionando el proyecto para el cuál será utilizado.",
+    "source_type": "Documento Word/PDF",
+    "source_reference": "docs/discovery/sources/contador-comentarios-mejoras-original.docx; docs/discovery/sources/contador-mejoras-original.pdf",
+    "normalized_story": "Como responsable de almacén, quiero registrar materiales que salen conforme a órdenes de servicio y asociarlos al proyecto para costearlo.",
+    "acceptance_criteria": [
+      "Capturar artículo, cantidad y costo asociado.",
+      "Relacionar la salida con orden de servicio/proyecto.",
+      "Permitir registrar devolución asociada."
+    ],
+    "unresolved_questions": [
+      "momento del descuento de stock y distinción entre material solicitado, entregado y consumido."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-25",
+    "version": 1,
+    "iteration": "iteración 2 · discovery contador",
+    "stakeholder": "Contador (documento; autor identificado después como Mario Groso)",
+    "source_literal": ">En el botón de “nueva salida” se debe poder cargar las salidas escaneando las ordenes de servicio, si se puede con fotografía o bien PDF ya que para dar salida a la mercancía y materiales de almacén se debe llenar antes un formulario hecho por el jefe de operaciones donde se mencione qué materiales salen, la cantidad y aquí mismo se nos mencionaría si las salidas fueron devueltas, aquí también estaría bien poner un botón de devoluciones.",
+    "source_type": "Documento Word/PDF",
+    "source_reference": "docs/discovery/sources/contador-comentarios-mejoras-original.docx; docs/discovery/sources/contador-mejoras-original.pdf",
+    "normalized_story": "Como responsable de almacén, quiero cargar o escanear la orden de servicio (fotografía o PDF) para iniciar el registro de materiales que salen y sus devoluciones.",
+    "acceptance_criteria": [
+      "La orden debe permitir revisar artículos y cantidades antes de confirmar."
+    ],
+    "unresolved_questions": [
+      "calidad de reconocimiento y aprobación del responsable."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-26",
+    "version": 1,
+    "iteration": "iteración 2 · discovery contador",
+    "stakeholder": "Contador (documento; autor identificado después como Mario Groso)",
+    "source_literal": ">Otra cosa que podemos añadir en este apartado o bien al capturar las salidas de material es que nos envíe notificaciones en caso de que el inventario de algún artículo esté por agotarse o en un nivel bajo para poder solicitar el nuevo articulo.",
+    "source_type": "Documento Word/PDF",
+    "source_reference": "docs/discovery/sources/contador-comentarios-mejoras-original.docx; docs/discovery/sources/contador-mejoras-original.pdf",
+    "normalized_story": "Como responsable de almacén, quiero recibir notificaciones cuando un artículo esté agotándose o tenga existencia baja para solicitar reposición.",
+    "acceptance_criteria": [
+      "Configurar/ver nivel de stock bajo.",
+      "Relacionar alerta con artículo y existencia."
+    ],
+    "unresolved_questions": [
+      "umbrales y destinatarios."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-27",
+    "version": 1,
+    "iteration": "iteración 2 · discovery contador",
+    "stakeholder": "Contador (documento; autor identificado después como Mario Groso)",
+    "source_literal": "KARDEX\n\nEs un historial de movimientos por producto, solo añadir un rango de fecha de “día tal a día tal” para que solo aparezcan movimientos de ese periodo.",
+    "source_type": "Documento Word/PDF",
+    "source_reference": "docs/discovery/sources/contador-comentarios-mejoras-original.docx; docs/discovery/sources/contador-mejoras-original.pdf",
+    "normalized_story": "Como responsable de almacén/contador, quiero revisar los movimientos históricos por producto y filtrar desde/hasta una fecha.",
+    "acceptance_criteria": [
+      "Mostrar movimientos del producto dentro del rango seleccionado."
+    ],
+    "unresolved_questions": [
+      "valoración y filtros adicionales."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-28",
+    "version": 1,
+    "iteration": "iteración 2 · discovery contador",
+    "stakeholder": "Contador (documento; autor identificado después como Mario Groso)",
+    "source_literal": "ESCANER\n\nEste botón o apartado se usa para poder leer con la cámara del teléfono por medio de QR o numero de código de barras o de producto para poder identificarlo  En inventario que al hacer o dar de alta un producto que el sistema le asigne un numero y código QR o de barras.",
+    "source_type": "Documento Word/PDF",
+    "source_reference": "docs/discovery/sources/contador-comentarios-mejoras-original.docx; docs/discovery/sources/contador-mejoras-original.pdf",
+    "normalized_story": "Como usuario de almacén/campo, quiero escanear QR o código de barras con la cámara del teléfono para identificar un artículo.",
+    "acceptance_criteria": [
+      "El código se asigna o registra al dar de alta el artículo.",
+      "La lectura lleva al artículo correspondiente."
+    ],
+    "unresolved_questions": [
+      "lectores soportados y funcionamiento sin conexión."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-29",
+    "version": 1,
+    "iteration": "iteración 2 · discovery contador",
+    "stakeholder": "Contador (documento; autor identificado después como Mario Groso)",
+    "source_literal": "REPORTES\n\nEn el apartado de reportes ocuparemos los siguientes reportes:\n\nSTOCK DISPONIBLE (En forma de grafica pastel)",
+    "source_type": "Documento Word/PDF",
+    "source_reference": "docs/discovery/sources/contador-comentarios-mejoras-original.docx; docs/discovery/sources/contador-mejoras-original.pdf",
+    "normalized_story": "Como administrador/contador, quiero consultar reportes de stock y actividad para revisar el estado del negocio.",
+    "acceptance_criteria": [
+      "Stock disponible en gráfica y tabla detallada.",
+      "Reportes de entradas, salidas, clientes, proveedores, proyectos/estatus y gastos varios."
+    ],
+    "unresolved_questions": [
+      "filtros, exportación y fórmulas de cada reporte."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-30",
+    "version": 1,
+    "iteration": "iteración 2 · discovery contador",
+    "stakeholder": "Contador (documento; autor identificado después como Mario Groso)",
+    "source_literal": "PROVEEDORES\n\nEn el apartado de proveedores vamos a ver el listado y estatus de los proveedores, ver cuál se pago de contado, cual es a crédito, los días de crédito y deudas pendientes)\n\n>Entre las mejoras vamos a poner un botón de “nuevo proveedor” como está para con ese poder registrar un nuevo proveedor",
+    "source_type": "Documento Word/PDF",
+    "source_reference": "docs/discovery/sources/contador-comentarios-mejoras-original.docx; docs/discovery/sources/contador-mejoras-original.pdf",
+    "normalized_story": "Como contador, quiero ver proveedores, estatus, condiciones de contado/crédito, días de crédito y saldos pendientes.",
+    "acceptance_criteria": [
+      "Listar y dar de alta proveedores."
+    ],
+    "unresolved_questions": [
+      "campos obligatorios y reglas de vencimiento."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-31",
+    "version": 1,
+    "iteration": "iteración 2 · discovery contador",
+    "stakeholder": "Contador (documento; autor identificado después como Mario Groso)",
+    "source_literal": ">Que en las ENTRADAS cuando se cargue por factura el ingreso de mercancías se actualice de manera entrelazada los valores de proveedores, o sea, si se carga una entrada de mercancía que es a crédito también afecte al proveedor que corresponda.\n\n>Añadir un botón de “pago a proveedores” para registrar el gasto que considere la fecha, el monto, cuenta con que se pago (tarjeta, efectivo o transferencia), etc.",
+    "source_type": "Documento Word/PDF",
+    "source_reference": "docs/discovery/sources/contador-comentarios-mejoras-original.docx; docs/discovery/sources/contador-mejoras-original.pdf",
+    "normalized_story": "Como contador, quiero que las entradas por compra se relacionen con el proveedor y registren si la compra fue a crédito o contado; también quiero registrar pagos a proveedores.",
+    "acceptance_criteria": [
+      "Entrada a crédito actualiza el saldo del proveedor correspondiente.",
+      "Pago registra fecha, monto y cuenta/medio (tarjeta, efectivo o transferencia)."
+    ],
+    "unresolved_questions": [
+      "pagos parciales, aplicación a facturas, correcciones y conciliación."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-32",
+    "version": 1,
+    "iteration": "iteración 2 · discovery contador",
+    "stakeholder": "Contador (documento; autor identificado después como Mario Groso)",
+    "source_literal": "PROYECTOS\n\nEn el apartado de proyectos se llevará el control de los proyectos que se estén realizando, al abrir o dar de alta un proyecto se debe generar un código que nos permita ligar el proyecto a los gastos y salidas de material del almacén para un mejor control y costeo de los proyectos.",
+    "source_type": "Documento Word/PDF",
+    "source_reference": "docs/discovery/sources/contador-comentarios-mejoras-original.docx; docs/discovery/sources/contador-mejoras-original.pdf",
+    "normalized_story": "Como administrador/contador, quiero registrar proyectos con código único para relacionar gastos y salidas de almacén y mejorar el costeo.",
+    "acceptance_criteria": [
+      "Alta de proyecto genera código/folio.",
+      "Gastos y materiales se vinculan al proyecto."
+    ],
+    "unresolved_questions": [
+      "formato del código, estados, cliente, orden e integración con ventas."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-33",
+    "version": 1,
+    "iteration": "iteración 2 · 2026-11-02",
+    "stakeholder": "Contador (remitente no confirmado)",
+    "source_literal": "```text\n[00:00-00:07] Por ejemplo, entradas alimentarios, pues va a afectar al alimentario, pero también nos va a afectar a lo que es el tema de proveedores,\n[00:07-00:11] o en caso de que sea, ¿cómo se llama?\n[00:11-00:17] En caso de que sea en efectivo o mediante transferencia, pues va a afectar las cuentas bancarias.\n[00:17-00:22] Ahí sí te pedías que si me le puedes agregar un sistema, ¿verdad?\n[00:22-00:27] Bueno, ahí vienen las mejoras, que es un control del efectivo.\n[00:27-00:34] Ocupamos un control de cuentas ahí, para poder apuntar los movimientos y todo el rollo de las cuentas,\n[00:34-00:38] para poder llevar un costeo más preciso en el sistema.\n```\n\nLa frase “entradas alimentarios” puede ser un error de reconocimiento y quizá diga “inventario”; no corregirla sin confirmación del hablante.",
+    "source_type": "WhatsApp audio ASR",
+    "source_reference": "docs/discovery/sources/contador-whatsapp-audio-transcripts-2026-11-02.md",
+    "normalized_story": "Como contador, quiero que al registrar una operación sus efectos relacionados se reflejen en las áreas correspondientes, para que el costeo y los saldos sean coherentes.",
+    "acceptance_criteria": [
+      "Una entrada de inventario debe relacionarse con el proveedor correspondiente.",
+      "Un pago en efectivo o transferencia afecta efectivo o cuenta bancaria, según el medio."
+    ],
+    "unresolved_questions": [],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-34",
+    "version": 1,
+    "iteration": "iteración 2 · 2026-11-02",
+    "stakeholder": "Contador (remitente no confirmado)",
+    "source_literal": "```text\n[00:00-00:10] lo que ya existe, ¿Verdad? Y ahorita es el que tenemos, está funcionando este y nada más creo\n[00:10-00:17] que le falta entrelazar las las opciones, ¿Verdad? O sea que se afecta aquí y también afecta\n[00:17-00:23] falta relacionar eso, por acaso de cuenta que lo de en temas por ejemplo\n```\n\nEl clip termina incompleto; no completar la frase por inferencia.\n\n```text\n[00:00-00:07] Por ejemplo, entradas alimentarios, pues va a afectar al alimentario, pero también nos va a afectar a lo que es el tema de proveedores,\n[00:07-00:11] o en caso de que sea, ¿cómo se llama?\n[00:11-00:17] En caso de que sea en efectivo o mediante transferencia, pues va a afectar las cuentas bancarias.\n[00:17-00:22] Ahí sí te pedías que si me le puedes agregar un sistema, ¿verdad?\n[00:22-00:27] Bueno, ahí vienen las mejoras, que es un control del efectivo.\n[00:27-00:34] Ocupamos un control de cuentas ahí, para poder apuntar los movimientos y todo el rollo de las cuentas,\n[00:34-00:38] para poder llevar un costeo más preciso en el sistema.\n```\n\nLa frase “entradas alimentarios” puede ser un error de reconocimiento y quizá diga “inventario”; no corregirla sin confirmación del hablante.",
+    "source_type": "WhatsApp audio ASR",
+    "source_reference": "docs/discovery/sources/contador-whatsapp-audio-transcripts-2026-11-02.md",
+    "normalized_story": "Como contador, quiero registrar movimientos de efectivo y cuentas para llevar control y costeo más preciso.",
+    "acceptance_criteria": [
+      "Registrar movimientos y cuenta afectada con detalle suficiente para consulta."
+    ],
+    "unresolved_questions": [],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-35",
+    "version": 1,
+    "iteration": "iteración 2 · 2026-11-05",
+    "stakeholder": "Mario Groso",
+    "source_literal": "[12:54 p.m., 5/11/2026] Mario Groso: pregunta: por ejemplo lo que estamos manejando son datos por así decirlo contable\n\n[12:55 p.m., 5/11/2026] Mario Groso: si sabes que cuando un dato se afecta este siempre afecta a otro (u otros a veces)\n\n[12:58 p.m., 5/11/2026] Mario Groso: porque por ejemplo, necesito principalmente registrar las siguientes cosas\n>VENTAS (Las ventas aumenta el saldo de las cuentas bancarias de debito o caja, depende si lo pagan en efectivo o transferencia y a su vez las ventas afectan al almacén porque se hace una salida de materiales para concretas estas ventas)\n>VENTAS A CREDITO (Las ventas a credito aumentan el saldo de clientes por cobrar y disminuyen también el inventario o almacen como en el caso anterior)\n>LAS COMPRAS DE MATERIAL (Las compras de material aumentan el saldo de INVENTARIOS o ALMACEN DE MP, y a su vez aumentan el valor de los proveedores cuando la compra es a crédito o disminuye el banco o caja cuando se compran al contado)\n\n[1:01 p.m., 5/11/2026] Mario Groso: si ocupamos ver qué afecta en paralelo cada acción que haga\n\n[1:01 p.m., 5/11/2026] Mario Groso: POOORQUE, al registrar una venta, yo tengo que darle salida al almacen mediante una ORDEN DE TRABAJO",
+    "source_type": "WhatsApp",
+    "source_reference": "docs/discovery/sources/mario-groso-whatsapp-2026-11-05.md",
+    "normalized_story": "** Registrar ventas, ventas a crédito y compras de materiales haciendo visibles y consistentes los efectos relacionados en dinero, cuentas por cobrar/pagar e inventario.",
+    "acceptance_criteria": [
+      "Venta pagada en efectivo o transferencia: aumenta caja o banco, según el medio de pago, y produce salida de materiales del almacén mediante una orden de trabajo.",
+      "Venta a crédito: aumenta el saldo por cobrar al cliente y disminuye el inventario/almacén.",
+      "Compra de material a crédito: aumenta inventario y saldo por pagar al proveedor.",
+      "Compra de material de contado: aumenta inventario y disminuye caja o banco, según el medio de pago."
+    ],
+    "unresolved_questions": [
+      "momento exacto del movimiento de inventario; costo de venta, impuestos, pagos parciales y reversas; esos detalles requieren definición del contador."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-36",
+    "version": 1,
+    "iteration": "iteración 2 · 2026-11-05",
+    "stakeholder": "Mario Groso",
+    "source_literal": "[1:00 p.m., 5/11/2026] Mario Groso: pero lo ideal no es borrar el proveedor, si no modificar o corregir el movimiento o pago a proveedor que esté incorrecto\n\n[1:01 p.m., 5/11/2026] Mario Groso: Por ejemplo si borras un proveedor \n¿Se borra el historial en los pagos?\npara este ejemplo vdd",
+    "source_type": "WhatsApp",
+    "source_reference": "docs/discovery/sources/mario-groso-whatsapp-2026-11-05.md",
+    "normalized_story": "** Corregir movimientos o pagos a proveedor incorrectos sin borrar al proveedor ni perder el historial de pagos relacionado. Antes de actuar, se debe poder entender qué otros registros se afectan.",
+    "acceptance_criteria": [
+      "Permitir corregir el movimiento erróneo conservando trazabilidad del valor original, corrección, responsable y fecha.",
+      "Mantener visibles las relaciones del movimiento con proveedor, pago, cuenta y demás registros afectados.",
+      "Hacer consultables los efectos en paralelo de cada acción."
+    ],
+    "unresolved_questions": [
+      "definir cuándo se descuenta inventario (solicitud, entrega o consumo confirmado), y cómo se corrigen o contabilizan devoluciones y daños."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-37",
+    "version": 1,
+    "iteration": "iteración 2 · 2026-11-05",
+    "stakeholder": "Mario Groso",
+    "source_literal": "[1:06 p.m., 5/11/2026] Mario Groso: por el momento atenderias lo que te mande en el word, que es una solicitud para poder dejar el sistema igual que lo que hizo Cesar donde te explico en qué consiste cada pestaña o sección del menu para que quede igual o parecido",
+    "source_type": "WhatsApp",
+    "source_reference": "docs/discovery/sources/mario-groso-whatsapp-2026-11-05.md",
+    "normalized_story": "** Revisar las pestañas y secciones del sistema actual de César, entender qué hace cada una y contrastarlas con la solicitud del Word para dejarlo igual o parecido a lo que el stakeholder necesita.",
+    "acceptance_criteria": [],
+    "unresolved_questions": [
+      "completar el recorrido con acceso al sistema actual y confirmar cada diferencia con Mario."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-38",
+    "version": 1,
+    "iteration": "iteración 2 · 2026-11-05",
+    "stakeholder": "Mario Groso",
+    "source_literal": "[1:16 p.m., 5/11/2026] Mario Groso: Porque día con día necesitamos llevar un control que nos permita ver lo siguiente:\n>Control de efectivo disponible (flujo de efectivo)\n>Control de clientes y cobranza (saber cuánto nos deben y  cuánto se ha cobrado)\n>Costeo de almacén (ver cuánto es el valor del almacén disponible de manera diaria, aquí se registran las entradas y salids de almacen)\n>Control de gastos fijos y variables (ver cuánto, cuándo, dónde y en qué se están yendo los gastos)\ny por ultimo y más importante vamos a estar ocupando hacer costeos o estados de resultados, por proyecto y por mes en general\nVENTAS (Ingresos)\n(- menos) costo de venta que es lo del almacen\n(- menos) gastos de operacion fijos y variables\n(+ mas) devoluciones y bonificaciones\n(= igual) resultado del periodo o por proyecto, dependiendo como pida la informacion josue\n\n[1:16 p.m., 5/11/2026] Mario Groso: Son un chingos  de datos pero ya le iremos dando forma, yendonos de apartado por apartado",
+    "source_type": "WhatsApp",
+    "source_reference": "docs/discovery/sources/mario-groso-whatsapp-2026-11-05.md",
+    "normalized_story": "** Llevar control diario de efectivo, clientes/cobranza, valor de almacén y gastos; preparar costeo o estado de resultados por proyecto y por mes.",
+    "acceptance_criteria": [
+      "Efectivo disponible / flujo de efectivo.",
+      "Cuánto deben los clientes y cuánto se ha cobrado.",
+      "Valor del almacén disponible, considerando entradas y salidas.",
+      "Gastos: cuánto, cuándo, dónde y en qué se gastó; control de fijos y variables."
+    ],
+    "unresolved_questions": [
+      "definir categorías, fechas de corte, tratamiento fiscal y contable, y cálculos con Mario/Josué antes de tomar la fórmula como política definitiva."
+    ],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-39",
+    "version": 1,
+    "iteration": "iteración 1 · 2026-11-06",
+    "stakeholder": "Dueño del producto (nombre no registrado)",
+    "source_literal": "mira; es un sistema empresarial el CRM es el sistema de administracion es un panel dashboard para las computadoras y es el panel admin de todo. el PWA es una aplicacion mobile para las personas de campo y ademas un cliente para los empleados. donde se van a ejecutar ciertas mas que nada acciones porque es operativa. la web es una web donde vamos a cotizar por IA agentica; donde hablamos con una IA para que nos cotice paneles solares. a su vez este proyecto va a usar el MCP server y otros modulos de goodmorning-factry por lo que tambien ve a leerlos en nuestro github. entonces primero dime que entiendes y que se te ocurre que hagamos",
+    "source_type": "Conversación del proyecto",
+    "source_reference": "docs/discovery/sources/owner-product-brief-2026-11-06.md",
+    "normalized_story": "** “el CRM es el sistema de administracion es un panel dashboard para las computadoras y es el panel admin de todo.",
+    "acceptance_criteria": [],
+    "unresolved_questions": [],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-40",
+    "version": 1,
+    "iteration": "iteración 1 · 2026-11-06",
+    "stakeholder": "Dueño del producto (nombre no registrado)",
+    "source_literal": "mira; es un sistema empresarial el CRM es el sistema de administracion es un panel dashboard para las computadoras y es el panel admin de todo. el PWA es una aplicacion mobile para las personas de campo y ademas un cliente para los empleados. donde se van a ejecutar ciertas mas que nada acciones porque es operativa. la web es una web donde vamos a cotizar por IA agentica; donde hablamos con una IA para que nos cotice paneles solares. a su vez este proyecto va a usar el MCP server y otros modulos de goodmorning-factry por lo que tambien ve a leerlos en nuestro github. entonces primero dime que entiendes y que se te ocurre que hagamos",
+    "source_type": "Conversación del proyecto",
+    "source_reference": "docs/discovery/sources/owner-product-brief-2026-11-06.md",
+    "normalized_story": "** “el PWA es una aplicacion mobile para las personas de campo y ademas un cliente para los empleados. donde se van a ejecutar ciertas mas que nada acciones porque es operativa.",
+    "acceptance_criteria": [],
+    "unresolved_questions": [],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-41",
+    "version": 1,
+    "iteration": "iteración 1 · 2026-11-06",
+    "stakeholder": "Dueño del producto (nombre no registrado)",
+    "source_literal": "mira; es un sistema empresarial el CRM es el sistema de administracion es un panel dashboard para las computadoras y es el panel admin de todo. el PWA es una aplicacion mobile para las personas de campo y ademas un cliente para los empleados. donde se van a ejecutar ciertas mas que nada acciones porque es operativa. la web es una web donde vamos a cotizar por IA agentica; donde hablamos con una IA para que nos cotice paneles solares. a su vez este proyecto va a usar el MCP server y otros modulos de goodmorning-factry por lo que tambien ve a leerlos en nuestro github. entonces primero dime que entiendes y que se te ocurre que hagamos",
+    "source_type": "Conversación del proyecto",
+    "source_reference": "docs/discovery/sources/owner-product-brief-2026-11-06.md",
+    "normalized_story": "** “la web es una web donde vamos a cotizar por IA agentica; donde hablamos con una IA para que nos cotice paneles solares. a su vez este proyecto va a usar el MCP server y otros modulos de goodmorning-factry por lo que tambien ve a leerlos en nuestro github.",
+    "acceptance_criteria": [],
+    "unresolved_questions": [],
+    "linked_cards": []
+  },
+  {
+    "story_id": "US-42",
+    "version": 1,
+    "iteration": "iteración 1 · 2026-11-06",
+    "stakeholder": "Dueño del producto (nombre no registrado)",
+    "source_literal": "> exacto entonces digamos toda esta iteracion como podrias resumirla en un archivo para que no se pierda el plan porque despues te voy a pedir como goal que lo termines.\n\n> acuerdate que toooodos los cambios deben ser commiteados y subidos merged a dev porque desarrollamos agile.\n\n> tienes que poner eso es un MUST\n\n> y recupera las que ya tenemos\n\n> lo vamos a hacer por iteraciones; asi que todo eso que tenemos ahora asi esta bien y las actualizaciones van a ser iteraciones historycards me entiendes\n\n**Nota de fidelidad:** se preservan las palabras tal como fueron enviadas, incluida ortografía, puntuación y fragmentos de contexto. Las tarjetas derivadas se mantienen separadas en `../history-cards.md`.",
+    "source_type": "Conversación del proyecto",
+    "source_reference": "docs/discovery/sources/owner-product-brief-2026-11-06.md",
+    "normalized_story": "** “lo vamos a hacer por iteraciones; asi que todo eso que tenemos ahora asi esta bien y las actualizaciones van a ser iteraciones historycards me entiendes” y “tienes que poner eso es un MUST”.",
+    "acceptance_criteria": [],
+    "unresolved_questions": [],
+    "linked_cards": []
+  }
+]

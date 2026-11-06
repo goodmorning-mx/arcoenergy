@@ -77,3 +77,19 @@ def test_public_agent_quotes_only_from_approved_package(monkeypatch, approved: b
     else:
         assert result["quote"] is None
         assert "total_mxn" not in result
+
+
+def test_unapproved_catalog_package_cannot_create_quote() -> None:
+    from app.product_api import QuoteInput, create_quote
+
+    class FakeDB:
+        def get(self, _model, _customer_id):
+            return SimpleNamespace(id="customer-1")
+
+        def scalar(self, _query):
+            return SimpleNamespace(is_demo=True)
+
+    with pytest.raises(HTTPException) as error:
+        create_quote(QuoteInput(customer_id="customer-1", panel_count=8), FakeDB())
+
+    assert error.value.status_code == 409

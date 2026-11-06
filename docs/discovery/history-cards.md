@@ -1,7 +1,7 @@
 # Arco Energy — Registro de history user story cards
 
 - **Propósito:** conservar los hallazgos por stakeholder, fuente e iteración para poder revisar cómo evolucionan sin borrar lo que se dijo antes.
-- **Estado:** registro documental de descubrimiento; todavía no es una base de datos funcional ni un backlog aprobado.
+- **Estado:** registro de discovery con fuentes preservadas en documentación y carga inicial versionada a la base de datos de ArcoEnergy; los relatos reconstruidos siguen marcados como tales y no equivalen a backlog aprobado.
 - **MUST — preservación literal:** todo hallazgo debe guardar el relato original literal del stakeholder (o una referencia durable al artefacto original cuando no sea texto), separado de la user story normalizada. Nunca reemplazar, corregir ni parafrasear el original al actualizar una tarjeta.
 - **Cuidado con la reconstrucción:** US-1 a US-34 se reconstituyen aquí a partir de mensajes, fuentes y los resúmenes disponibles en la conversación. Los IDs US-15 a US-32 se asignan a capacidades explícitas del Word del contador para recuperar el rango histórico, pero no se cuenta con una exportación de las tarjetas originales que confirme su título/texto exactos. Deben validarse en una próxima iteración.
 - **Regla de evolución:** agregar nuevas versiones/iteraciones relacionadas; no reemplazar la fuente original. Las reglas contables pendientes no se deben tratar como comportamiento aprobado.
@@ -380,8 +380,7 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 - El backend deja de insertar paquetes e inventario de ejemplo al iniciar. Una migración elimina solo los 17 paquetes `is_demo` identificados y artículos de semilla con costo/existencia/mínimo cero y sin movimientos.
 - CRM puede crear clientes, configurar paquetes comerciales, asignar órdenes a cuentas activas con rol de instalador y registrar artículos/entradas de almacén.
 - PWA consulta catálogo, órdenes e inventario del API; permite registrar consumo y gasto enlazados a una orden asignada.
-- Se crea el modelo append-only `ae_history_cards` y API administrativa versionada para conservar literal de fuente, normalización, criterios, preguntas e iteración.
-- Pendiente registrar la carga inicial de las tarjetas existentes dentro de `ae_history_cards`; las fuentes y tarjetas previas siguen preservadas en este archivo y sus referencias.
+- Se crea el modelo append-only `ae_history_cards`, una migración que carga las 42 tarjetas recuperadas/reconstruidas con sus fuentes y una pantalla administrativa para añadir versiones sin sobrescribir las anteriores.
 
 ### Estado por user story card al cierre de esta iteración
 
@@ -415,6 +414,6 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 | US-39 | Parcial funcional | CRM de escritorio autenticado y flujos comerciales iniciales; falta el resto administrativo y financiero. |
 | US-40 | Parcial funcional | PWA autenticada con consulta de órdenes/inventario y captura de consumos/gastos; faltan flujos de cierre y trabajo offline. |
 | US-41 | Parcial funcional | Web pública y agente con catálogo aprobado; faltan credenciales y validación de experiencia de venta completa. |
-| US-42 | Parcial | Esquema y API append-only agregados; falta cargar las tarjetas existentes y presentar UI de discovery/historial. |
+| US-42 | Funcional para registro/versiones | 42 tarjetas iniciales persistidas con fuente, vista administrativa e inserción append-only; cotejar reconstrucciones e incorporar futuras iteraciones. |
 
 Las funciones marcadas como pendientes se mantienen visibles en el backlog. Los bloqueos de esta iteración no autorizan inventar precios, documentos legales, tratamiento biométrico, reglas contables ni credenciales de servicios externos.
