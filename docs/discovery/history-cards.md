@@ -401,8 +401,8 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 | US-15–19 | Pendientes/parciales | Contabilidad integrada, cuentas de efectivo/banco, gastos generales y alertas; el resumen comercial actual no es estado financiero. |
 | US-20 | Parcial | Artículos con descripción, unidad, existencia, mínimo y costo; faltan categoría, marca, modelo, proveedor y QR. |
 | US-21–22 | Pendientes/parciales | Entrada individual de almacén disponible; faltan compra multirenglón, proveedor, factura/XML y OCR. |
-| US-23 | Pendiente | Devolución trazable de sobrantes y merma. |
-| US-24 | Parcial | Consumo por orden; falta orden de materiales completa y flujo de autorización. |
+| US-23 | Funcional básico | El instalador devuelve contra una salida de su orden; el kardex enlaza ambos movimientos, limita el acumulado devuelto y repone existencias. Falta distinguir condición del material y aprobar costos de devolución. |
+| US-24 | Parcial | Consumo y devolución vinculados a la orden; falta diferenciar cantidades solicitadas, entregadas y consumidas con autorización previa. |
 | US-25 | Pendiente | Lectura asistida de orden/solicitud escaneada. |
 | US-26 | Funcional básico | CRM y PWA señalan existencias por debajo del mínimo configurado; faltan notificaciones push y asignación de responsable de reabasto. |
 | US-27 | Funcional básico | Kardex con entradas/salidas firmadas, responsable, fecha y referencia; registra costo para nuevos movimientos y deja el costo histórico como desconocido cuando no se capturó. Acceso de instalador limitado a sus propias órdenes. Faltan filtros expuestos en UI y exportación. |

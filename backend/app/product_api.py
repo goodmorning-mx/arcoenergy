@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, aliased, sessionmaker
 from gm_agent import AgentService, Conversation, Message, OpenAIProvider
 from gm_mcp import Permission, RequestContext, ToolRegistry, tool
 from openai import AsyncOpenAI
@@ -291,6 +291,12 @@ class StockInput(BaseModel):
     quantity: float = Field(gt=0)
     reason: str = "consumo en instalación"
     installation_id: str | None = None
+
+
+class InventoryReturnInput(BaseModel):
+    out_movement_id: str
+    quantity: float = Field(gt=0)
+    reason: str = "Devolución de material sobrante"
 
 
 class StockReceiptInput(BaseModel):
@@ -676,6 +682,44 @@ def receive_inventory(data: StockReceiptInput, identity: AuthIdentity = Depends(
     return {"movement": _serialize(movement), "item": _serialize(item)}
 
 
+@router.post("/inventory/returns", status_code=201)
+def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:write")), db: Session = Depends(get_db)):
+    source = db.scalar(select(InventoryMovement).where(InventoryMovement.id == data.out_movement_id).with_for_update())
+    if source is None or source.movement_type != "out" or not source.installation_id:
+        raise HTTPException(404, "No se encontró una salida de instalación válida para devolver.")
+    if "instalador" in identity.roles:
+        installation = db.get(Installation, source.installation_id)
+        if installation is None or installation.lead_installer.lower() != (identity.email or "").lower():
+            raise HTTPException(403, "Solo puedes devolver material de una orden asignada a tu cuenta.")
+    returned = db.scalar(select(func.coalesce(func.sum(InventoryMovement.quantity), 0)).where(
+        InventoryMovement.related_movement_id == source.id,
+        InventoryMovement.movement_type == "return",
+    )) or 0
+    if Decimal(str(returned)) + Decimal(str(data.quantity)) > Decimal(str(source.quantity)):
+        raise HTTPException(409, "La cantidad devuelta excede el material retirado en esa salida.")
+    item = db.get(InventoryItem, source.item_id)
+    if item is None:
+        raise HTTPException(409, "El artículo de la salida ya no existe en el catálogo.")
+    item.quantity = Decimal(str(item.quantity)) + Decimal(str(data.quantity))
+    movement = InventoryMovement(
+        item_id=source.item_id,
+        installation_id=source.installation_id,
+        related_movement_id=source.id,
+        quantity=data.quantity,
+        movement_type="return",
+        unit_cost=source.unit_cost,
+        reason=data.reason.strip() or "Devolución de material sobrante",
+        created_by=identity.email or "",
+    )
+    db.add(movement); db.commit(); db.refresh(movement)
+    serialized_item = _serialize(item)
+    serialized_movement = _serialize(movement)
+    if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
+        serialized_item.pop("unit_cost", None)
+        serialized_movement.pop("unit_cost", None)
+    return {"movement": serialized_movement, "item": serialized_item}
+
+
 @router.get("/inventory/movements")
 def list_inventory_movements(
     item_id: str | None = None,
@@ -686,7 +730,12 @@ def list_inventory_movements(
 ):
     if from_date and to_date and from_date > to_date:
         raise HTTPException(422, "La fecha inicial debe ser anterior a la fecha final.")
-    query = select(InventoryMovement, InventoryItem.name, InventoryItem.unit).join(
+    return_rows = aliased(InventoryMovement)
+    returned_total = select(func.coalesce(func.sum(return_rows.quantity), 0)).where(
+        return_rows.related_movement_id == InventoryMovement.id,
+        return_rows.movement_type == "return",
+    ).correlate(InventoryMovement).scalar_subquery()
+    query = select(InventoryMovement, InventoryItem.name, InventoryItem.unit, returned_total.label("returned_quantity")).join(
         InventoryItem, InventoryItem.id == InventoryMovement.item_id
     )
     if item_id:
@@ -702,9 +751,11 @@ def list_inventory_movements(
     query = query.order_by(InventoryMovement.created_at.desc()).limit(500)
     rows = db.execute(query).all()
     result = []
-    for movement, item_name, unit in rows:
+    for movement, item_name, unit, returned_quantity in rows:
         line = _serialize(movement)
         line.update({"item_name": item_name, "unit": unit, "signed_quantity": -float(movement.quantity) if movement.movement_type in {"out", "waste"} else float(movement.quantity)})
+        if movement.movement_type == "out":
+            line["returnable_quantity"] = max(0.0, float(movement.quantity) - float(returned_quantity or 0))
         if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
             line.pop("unit_cost", None)
         result.append(line)
