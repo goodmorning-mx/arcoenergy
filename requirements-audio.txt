@@ -1,0 +1,4 @@
+# Local-only transcription dependencies for WhatsApp OGG/Opus voice notes.
+faster-whisper==1.2.1
+imageio-ffmpeg==0.8.1
+av==17.1.0
