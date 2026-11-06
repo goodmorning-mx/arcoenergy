@@ -2,14 +2,14 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNo
 import { AgentChat } from '@goodmorning/gm-agent';
 import { useAuth } from '@goodmorning/gm-auth';
 
-type View = 'inicio' | 'clientes' | 'cotizaciones' | 'seguimientos' | 'instalaciones' | 'inventario' | 'gastos' | 'cobranza' | 'cuentas' | 'proveedores' | 'compras' | 'catalogo' | 'equipo' | 'historial';
+type View = 'inicio' | 'clientes' | 'cotizaciones' | 'ventas' | 'seguimientos' | 'instalaciones' | 'inventario' | 'gastos' | 'cobranza' | 'cuentas' | 'proveedores' | 'compras' | 'catalogo' | 'equipo' | 'historial';
 type Customer = { id: string; name: string; phone: string; email: string; city: string; address: string; status: string; source: string; created_at?: string };
 type Quote = { id: string; folio: string; customer_id: string; customer?: Customer; panel_count: number; panel_brand: string; panel_watts: number; inverter: string; payment_method: string; total: number; status: string; pricing_approved: boolean; installation_city: string; installation_address: string; created_at: string };
 type Package = { id: string; panel_count: number; panel_brand: string; panel_watts: number; panel_unit_price: number; structure_name: string; structure_price: number; inverter_options: Array<{ name: string; price_mxn: number }>; default_inverter: string; payment_methods: string[]; enabled: boolean; pricing_approved: boolean; price_mxn: number; system_kw: number };
 type FollowUp = { id: string; customer_id: string; due_date: string; note: string; done: boolean; customer?: Customer };
 type Activity = { id: string; kind: string; note: string; created_by: string; created_at: string };
 type TeamMember = { id: string; name: string; email: string; roles: string[]; permissions: string[] };
-type Installation = { id: string; scheduled_at: string | null; lead_installer: string; status: string; notes: string; customer?: Customer; quote_id?: string | null };
+type Installation = { id: string; folio?: string | null; scheduled_at: string | null; lead_installer: string; status: string; notes: string; customer?: Customer; quote_id?: string | null };
 type InventoryItem = { id: string; name: string; unit: string; quantity: number; minimum_quantity: number; unit_cost: number };
 type InventoryMovement = { id: string; item_id: string; item_name: string; unit: string; quantity: number; signed_quantity: number; movement_type: string; unit_cost?: number | null; reason: string; created_by: string; created_at: string; installation_id?: string | null };
 type ProjectExpense = { id: string; installation_id: string | null; account_id: string | null; account_name: string | null; category: string; description: string; amount: number; receipt_url: string; occurred_on: string; created_by: string; project_customer: string; project_city: string };
@@ -18,6 +18,8 @@ type CashMovement = { id: string; account_id: string; direction: 'in' | 'out'; a
 type Supplier = { id: string; name: string; rfc: string; phone: string; email: string; payment_terms: 'cash' | 'credit'; credit_days: number; active: boolean; current_balance: number };
 type Purchase = { id: string; folio: string; supplier_id: string; supplier?: { id: string; name: string }; invoice_number: string; payment_terms: 'cash' | 'credit'; purchase_date: string; due_date: string | null; total: number; paid_amount: number; balance: number; status: string; lines: Array<{ id: string; item_name: string; quantity: number; unit_cost: number; line_total: number }> };
 type Receivable = { id: string; customer_id: string; customer?: Customer; quote_id: string | null; due_date: string; amount: number; paid_amount: number; balance: number; installment_number: number; payment_method: string; status: 'pending' | 'partial' | 'overdue' | 'paid'; payments?: Array<{ id: string; amount: number; paid_on: string; reference: string; account_name: string }> };
+type Installer = { email: string; name: string };
+type Sale = { id: string; folio: string; customer_id: string; customer?: Customer; quote_id: string; quote?: { id: string; folio: string; payment_method: string }; installation_id: string; installation?: Installation; sale_type: 'cash' | 'credit'; total: number; receivable?: { due_date: string; amount: number; paid_amount: number } | null; materials: Array<{ id: string; item_name: string; quantity: number }>; created_at: string };
 type Dashboard = { customers?: number; quotes_open?: number; quotes_amount?: number; installations_active?: number; receivables_open?: number };
 type CatalogPayload = { packages: Package[]; payment_methods: string[]; catalog_note: string };
 type Notice = { type: 'success' | 'error' | 'info'; text: string };
@@ -69,6 +71,8 @@ export default function App() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [receivables, setReceivables] = useState<Receivable[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [installers, setInstallers] = useState<Installer[]>([]);
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamError, setTeamError] = useState('');
   const [teamName, setTeamName] = useState('');
@@ -85,6 +89,7 @@ export default function App() {
     ...(can('customers:read') || can('quotes:read') ? ['inicio' as View] : []),
     ...(can('customers:read') ? ['clientes' as View, 'seguimientos' as View] : []),
     ...(can('quotes:read') ? ['cotizaciones' as View] : []),
+    ...(can('sales:read') ? ['ventas' as View] : []),
     ...(can('installations:read') ? ['instalaciones' as View] : []),
     ...(can('inventory:read') ? ['inventario' as View] : []),
     ...(can('expenses:read') ? ['gastos' as View] : []),
@@ -94,7 +99,7 @@ export default function App() {
     ...(can('purchases:read') ? ['compras' as View] : []),
     ...(can('team:manage') ? ['catalogo' as View, 'equipo' as View, 'historial' as View] : []),
   ]), [can, clientAccount]);
-  const title: Record<View, string> = { inicio: 'Resumen', clientes: 'Clientes', cotizaciones: 'Cotizaciones', seguimientos: 'Seguimientos', instalaciones: 'Instalaciones', inventario: 'Inventario', gastos: 'Gastos operativos', cobranza: 'Cuentas por cobrar', cuentas: 'Caja y bancos', proveedores: 'Proveedores', compras: 'Compras y cuentas por pagar', catalogo: 'Catálogo de paquetes', equipo: 'Equipo y accesos', historial: 'History cards' };
+  const title: Record<View, string> = { inicio: 'Resumen', clientes: 'Clientes', cotizaciones: 'Cotizaciones', ventas: 'Ventas y órdenes', seguimientos: 'Seguimientos', instalaciones: 'Instalaciones', inventario: 'Inventario', gastos: 'Gastos operativos', cobranza: 'Cuentas por cobrar', cuentas: 'Caja y bancos', proveedores: 'Proveedores', compras: 'Compras y cuentas por pagar', catalogo: 'Catálogo de paquetes', equipo: 'Equipo y accesos', historial: 'History cards' };
 
   const announce = (text: string, type: Notice['type'] = 'success') => {
     setNotice({ text, type });
@@ -172,6 +177,16 @@ export default function App() {
         .catch(error => announce(error instanceof Error ? error.message : 'No se pudo cargar la cartera.', 'error'));
       if (can('accounts:read')) void request<FinancialAccount[]>('/accounts', accessToken).then(setAccounts)
         .catch(error => announce(error instanceof Error ? error.message : 'No se pudieron cargar las cuentas para cobranza.', 'error'));
+    }
+    if (view === 'ventas' && accessToken && can('sales:read')) {
+      void request<Sale[]>('/sales', accessToken).then(setSales)
+        .catch(error => announce(error instanceof Error ? error.message : 'No se pudieron cargar las ventas.', 'error'));
+      if (can('installations:read')) void request<Installer[]>('/installers', accessToken).then(setInstallers)
+        .catch(error => announce(error instanceof Error ? error.message : 'No se pudo cargar el equipo de instalación.', 'error'));
+      if (can('inventory:read')) void request<InventoryItem[]>('/inventory', accessToken).then(setInventory)
+        .catch(error => announce(error instanceof Error ? error.message : 'No se pudo cargar el almacén.', 'error'));
+      if (can('accounts:read')) void request<FinancialAccount[]>('/accounts', accessToken).then(setAccounts)
+        .catch(error => announce(error instanceof Error ? error.message : 'No se pudieron cargar las cuentas.', 'error'));
     }
   }, [view, accessToken, can]);
 
@@ -289,6 +304,12 @@ export default function App() {
     catch (error) { announce(error instanceof Error ? error.message : 'No se pudo actualizar.', 'error'); }
   }
 
+  async function acceptQuote(quote: Quote) {
+    if (!accessToken) return;
+    try { await request(`/quotes/${quote.id}/status`, accessToken, { method: 'PATCH', body: JSON.stringify({ status: 'accepted' }) }); await refresh(); announce(`Aceptación de ${quote.folio} registrada; ahora puedes preparar la venta y su orden.`); }
+    catch(error) { announce(error instanceof Error ? error.message : 'No se pudo registrar la aceptación.', 'error'); }
+  }
+
   async function createQuote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const form = new FormData(event.currentTarget);
     const customerId = String(form.get('customer_id') || ''); const packageCount = Number(form.get('panel_count')); const selectedPackage = catalog?.packages.find(item => item.panel_count === packageCount);
@@ -334,7 +355,7 @@ export default function App() {
   if (!identity || !accessToken) { window.location.replace('/crm/login'); return null; }
   if (clientAccount) return <div className="client-redirect"><div className="brand-mark">A</div><p>Tu portal de cliente está en la aplicación móvil.</p><a href="/app/" className="button button-primary">Abrir mi portal →</a><button className="text-button" onClick={() => void logout()}>Cerrar sesión</button></div>;
 
-  const nav: Array<[View, string, string]> = [['inicio', '◫', 'Resumen'], ['clientes', '♙', 'Clientes'], ['cotizaciones', '▤', 'Cotizaciones'], ['seguimientos', '◷', 'Seguimientos'], ...(can('installations:read') ? [['instalaciones', '⌂', 'Instalaciones']] as Array<[View, string, string]> : []), ...(can('inventory:read') ? [['inventario', '▦', 'Inventario']] as Array<[View, string, string]> : []), ...(can('expenses:read') ? [['gastos', '$', 'Gastos']] as Array<[View, string, string]> : []), ...(can('receivables:read') ? [['cobranza', '↙', 'Cobranza']] as Array<[View, string, string]> : []), ...(can('accounts:read') ? [['cuentas', '▤', 'Caja / bancos']] as Array<[View, string, string]> : []), ...(can('suppliers:read') ? [['proveedores', '♧', 'Proveedores']] as Array<[View, string, string]> : []), ...(can('purchases:read') ? [['compras', '▤', 'Compras / CxP']] as Array<[View, string, string]> : []), ...(can('team:manage') ? [['catalogo', '⊞', 'Catálogo'], ['equipo', '♧', 'Equipo'], ['historial', '↺', 'History cards']] as Array<[View, string, string]> : [])];
+  const nav: Array<[View, string, string]> = [['inicio', '◫', 'Resumen'], ['clientes', '♙', 'Clientes'], ['cotizaciones', '▤', 'Cotizaciones'], ...(can('sales:read') ? [['ventas', '▣', 'Ventas / OT']] as Array<[View, string, string]> : []), ['seguimientos', '◷', 'Seguimientos'], ...(can('installations:read') ? [['instalaciones', '⌂', 'Instalaciones']] as Array<[View, string, string]> : []), ...(can('inventory:read') ? [['inventario', '▦', 'Inventario']] as Array<[View, string, string]> : []), ...(can('expenses:read') ? [['gastos', '$', 'Gastos']] as Array<[View, string, string]> : []), ...(can('receivables:read') ? [['cobranza', '↙', 'Cobranza']] as Array<[View, string, string]> : []), ...(can('accounts:read') ? [['cuentas', '▤', 'Caja / bancos']] as Array<[View, string, string]> : []), ...(can('suppliers:read') ? [['proveedores', '♧', 'Proveedores']] as Array<[View, string, string]> : []), ...(can('purchases:read') ? [['compras', '▤', 'Compras / CxP']] as Array<[View, string, string]> : []), ...(can('team:manage') ? [['catalogo', '⊞', 'Catálogo'], ['equipo', '♧', 'Equipo'], ['historial', '↺', 'History cards']] as Array<[View, string, string]> : [])];
   const visibleCustomers = customers.filter(item => `${item.name} ${item.city} ${item.email} ${item.phone}`.toLowerCase().includes(search.toLowerCase()));
 
   return <div className="crm-app">
@@ -358,7 +379,8 @@ export default function App() {
 
         {view === 'inicio' && <DashboardView data={dashboard} customers={customers} quotes={quotes} followups={followups} can={can} onCustomer={setSelectedCustomer} onView={setView} onComplete={completeFollowup} />}
         {view === 'clientes' && <CustomersView customers={visibleCustomers} search={search} onSearch={setSearch} onCreate={() => setCustomerOpen(true)} canCreate={can('customers:write')} onSelect={setSelectedCustomer} />}
-        {view === 'cotizaciones' && <QuotesView quotes={quotes} onCreate={() => setQuoteOpen(true)} onDownload={downloadQuote} onShare={shareQuote} onMarkSent={markQuoteSent} canWrite={can('quotes:write')} />}
+        {view === 'cotizaciones' && <QuotesView quotes={quotes} onCreate={() => setQuoteOpen(true)} onDownload={downloadQuote} onShare={shareQuote} onMarkSent={markQuoteSent} onAccept={acceptQuote} canWrite={can('quotes:write')} />}
+        {view === 'ventas' && <SalesView items={sales} quotes={quotes} inventory={inventory} installers={installers} accounts={accounts} canWrite={can('sales:write')} token={accessToken || ''} onItems={setSales} onAccounts={setAccounts} onInventory={setInventory} onRefresh={refresh} announce={announce} />}
         {view === 'seguimientos' && <FollowupsView items={followups} onComplete={completeFollowup} onCustomer={setSelectedCustomer} />}
         {view === 'instalaciones' && <InstallationsView items={installations} customers={customers} team={team} canWrite={can('installations:write')} token={accessToken || ''} onRefresh={refresh} announce={announce} />}
         {view === 'inventario' && <InventoryView items={inventory} movements={inventoryMovements} canManage={can('inventory:manage')} canReadCosts={can('inventory:costs:read') || can('inventory:manage')} token={accessToken || ''} onRefresh={refresh} onMovements={setInventoryMovements} announce={announce} />}
@@ -386,7 +408,7 @@ export default function App() {
   </div>;
 }
 
-function headingDescription(view: View) { return ({ inicio: '', clientes: 'Consulta prospectos, contactos y actividad comercial.', cotizaciones: 'Prepara, descarga y comparte propuestas con folio.', seguimientos: 'Da continuidad a las conversaciones y registra cada contacto.', instalaciones: 'Asigna y consulta órdenes de trabajo.', inventario: 'Administra materiales, entradas y existencias.', gastos: 'Registra gastos operativos y directos por fecha y proyecto.', cobranza: 'Administra saldos, abonos recibidos y recordatorios a clientes.', cuentas: 'Consulta saldos y registra movimientos de caja y bancos.', proveedores: 'Administra proveedores y sus condiciones de pago.', compras: 'Registra entradas de material, facturas y saldos por pagar.', catalogo: 'Administra paquetes, inversores, precios y formas de pago.', equipo: 'Usuarios y privilegios para cada área.', historial: 'Conserva relatos, fuentes y versiones de cada user story card.' })[view] || ''; }
+function headingDescription(view: View) { return ({ inicio: '', clientes: 'Consulta prospectos, contactos y actividad comercial.', cotizaciones: 'Prepara, descarga y comparte propuestas con folio.', ventas: 'Registra ventas aceptadas, entradas de dinero y órdenes de trabajo.', seguimientos: 'Da continuidad a las conversaciones y registra cada contacto.', instalaciones: 'Asigna y consulta órdenes de trabajo.', inventario: 'Administra materiales, entradas y existencias.', gastos: 'Registra gastos operativos y directos por fecha y proyecto.', cobranza: 'Administra saldos, abonos recibidos y recordatorios a clientes.', cuentas: 'Consulta saldos y registra movimientos de caja y bancos.', proveedores: 'Administra proveedores y sus condiciones de pago.', compras: 'Registra entradas de material, facturas y saldos por pagar.', catalogo: 'Administra paquetes, inversores, precios y formas de pago.', equipo: 'Usuarios y privilegios para cada área.', historial: 'Conserva relatos, fuentes y versiones de cada user story card.' })[view] || ''; }
 
 function DashboardView({ data, customers, quotes, followups, can, onCustomer, onView, onComplete }: { data: Dashboard; customers: Customer[]; quotes: Quote[]; followups: FollowUp[]; can: (p: string) => boolean; onCustomer: (c: Customer) => void; onView: (v: View) => void; onComplete: (f: FollowUp) => void }) {
   const recent = [...quotes].slice(0, 4);
@@ -407,8 +429,8 @@ function CustomersView({ customers, search, onSearch, canCreate, onCreate, onSel
   return <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">CARTERA COMERCIAL</span><h2>{customers.length} contactos</h2></div><div className="toolbar-actions"><input className="search-input" value={search} onChange={event => onSearch(event.target.value)} placeholder="Buscar por nombre, ciudad o contacto"/>{canCreate && <button className="button button-primary" onClick={onCreate}>＋ Agregar cliente</button>}</div></div>{customers.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>CLIENTE</th><th>UBICACIÓN</th><th>CONTACTO</th><th>ESTADO</th><th>ORIGEN</th><th/></tr></thead><tbody>{customers.map(item => <tr key={item.id} onClick={() => onSelect(item)}><td><span className="table-person"><i>{initials(item.name)}</i><b>{item.name}<small>{item.email || 'Sin correo registrado'}</small></b></span></td><td>{item.city || '—'}<small className="sub-cell">{item.address || 'Domicilio pendiente'}</small></td><td>{item.phone || '—'}</td><td><span className="status-chip status-draft">{labelCustomerStatus(item.status)}</span></td><td>{item.source === 'public_web' ? 'Web pública' : item.source === 'demo' ? 'Registro importado' : 'Equipo'}</td><td><button className="icon-button" aria-label={`Ver ${item.name}`}>→</button></td></tr>)}</tbody></table></div> : <EmptyState title="No encontramos contactos" body="Cambia la búsqueda o agrega un nuevo prospecto." action={canCreate ? 'Agregar cliente' : undefined} onClick={onCreate}/>}</section>;
 }
 
-function QuotesView({ quotes, onCreate, onDownload, onShare, onMarkSent, canWrite }: { quotes: Quote[]; onCreate: () => void; onDownload: (q: Quote) => void; onShare: (q: Quote) => void; onMarkSent: (q: Quote) => void; canWrite: boolean }) {
-  return <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">PROPUESTAS SOLARES</span><h2>{quotes.length} cotizaciones</h2></div>{canWrite && <button className="button button-primary" onClick={onCreate}>＋ Nueva cotización</button>}</div>{quotes.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>FOLIO / CLIENTE</th><th>SISTEMA</th><th>INSTALACIÓN</th><th>INVERSIÓN</th><th>ESTADO</th><th>ACCIONES</th></tr></thead><tbody>{quotes.map(item => <tr key={item.id}><td><b>{item.folio}</b><small className="sub-cell">{item.customer?.name || 'Cliente'}</small></td><td>{item.panel_count} paneles · {((item.panel_count * item.panel_watts) / 1000).toFixed(1)} kWp<small className="sub-cell">{item.inverter}</small></td><td>{item.installation_city || item.customer?.city || '—'}<small className="sub-cell">{item.installation_address || item.customer?.address || 'Domicilio pendiente'}</small></td><td><b>{money(item.total)}</b>{!item.pricing_approved && <small className="price-review-note">Paquete pendiente de aprobación</small>}</td><td><span className={`status-chip status-${item.status}`}>{labelStatus(item.status)}</span></td><td><div className="row-actions"><button title="Descargar PDF" onClick={() => onDownload(item)}>PDF</button><button title="Abrir WhatsApp" onClick={() => onShare(item)}>WhatsApp</button>{item.status === 'draft' && canWrite && <button title="Marcar como enviada" onClick={() => onMarkSent(item)}>Marcar enviada</button>}</div></td></tr>)}</tbody></table></div> : <EmptyState title="Crea tu primera cotización" body="Elige un cliente y un paquete de paneles para generar el PDF foliado." action={canWrite ? 'Nueva cotización' : undefined} onClick={onCreate}/>}</section>;
+function QuotesView({ quotes, onCreate, onDownload, onShare, onMarkSent, onAccept, canWrite }: { quotes: Quote[]; onCreate: () => void; onDownload: (q: Quote) => void; onShare: (q: Quote) => void; onMarkSent: (q: Quote) => void; onAccept: (q: Quote) => void; canWrite: boolean }) {
+  return <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">PROPUESTAS SOLARES</span><h2>{quotes.length} cotizaciones</h2></div>{canWrite && <button className="button button-primary" onClick={onCreate}>＋ Nueva cotización</button>}</div>{quotes.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>FOLIO / CLIENTE</th><th>SISTEMA</th><th>INSTALACIÓN</th><th>INVERSIÓN</th><th>ESTADO</th><th>ACCIONES</th></tr></thead><tbody>{quotes.map(item => <tr key={item.id}><td><b>{item.folio}</b><small className="sub-cell">{item.customer?.name || 'Cliente'}</small></td><td>{item.panel_count} paneles · {((item.panel_count * item.panel_watts) / 1000).toFixed(1)} kWp<small className="sub-cell">{item.inverter}</small></td><td>{item.installation_city || item.customer?.city || '—'}<small className="sub-cell">{item.installation_address || item.customer?.address || 'Domicilio pendiente'}</small></td><td><b>{money(item.total)}</b>{!item.pricing_approved && <small className="price-review-note">Paquete pendiente de aprobación</small>}</td><td><span className={`status-chip status-${item.status}`}>{labelStatus(item.status)}</span></td><td><div className="row-actions"><button title="Descargar PDF" onClick={() => onDownload(item)}>PDF</button><button title="Abrir WhatsApp" onClick={() => onShare(item)}>WhatsApp</button>{item.status === 'draft' && canWrite && <button title="Marcar como enviada" onClick={() => onMarkSent(item)}>Marcar enviada</button>}{item.status === 'sent' && canWrite && <button title="Registrar que el cliente aceptó" onClick={() => onAccept(item)}>Registrar aceptación</button>}</div></td></tr>)}</tbody></table></div> : <EmptyState title="Crea tu primera cotización" body="Elige un cliente y un paquete de paneles para generar el PDF foliado." action={canWrite ? 'Nueva cotización' : undefined} onClick={onCreate}/>}</section>;
 }
 
 function FollowupsView({ items, onComplete, onCustomer }: { items: FollowUp[]; onComplete: (f: FollowUp) => void; onCustomer: (c: Customer) => void }) {
@@ -502,6 +524,55 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
       <div className="data-table-wrap"><table className="data-table"><thead><tr><th>FOLIO / PROVEEDOR</th><th>FACTURA / MATERIALES</th><th>FECHAS</th><th>TOTAL</th><th>PAGADO</th><th>SALDO</th><th>ESTADO</th><th/></tr></thead><tbody>{items.map(item => <tr key={item.id}><td><b>{item.folio}</b><small className="sub-cell">{item.supplier?.name || 'Proveedor'}</small></td><td>{item.invoice_number || 'Sin factura'}<small className="sub-cell">{item.lines.map(line => `${line.item_name} × ${line.quantity}`).join(' · ')}</small></td><td>{new Date(`${item.purchase_date}T12:00:00`).toLocaleDateString('es-MX')}<small className="sub-cell">{item.due_date ? `Vence ${new Date(`${item.due_date}T12:00:00`).toLocaleDateString('es-MX')}` : 'Contado'}</small></td><td><b>{money(Number(item.total))}</b></td><td>{money(Number(item.paid_amount))}</td><td><b>{money(Number(item.balance))}</b></td><td><span className={`status-chip ${item.status === 'paid' ? 'status-approved' : 'status-overdue'}`}>{item.status === 'paid' ? 'Pagada' : item.status === 'partially_paid' ? 'Pago parcial' : 'Pendiente'}</span></td><td>{canWrite && Number(item.balance) > 0 && <button className="button button-small button-outline" onClick={() => setPaymentPurchase(item)}>Registrar pago</button>}</td></tr>)}</tbody></table>{!items.length && <EmptyState title="Sin compras registradas" body="Al registrar una compra, sus renglones aumentan existencias y el saldo se vincula al proveedor."/>}</div>
     </section>
     {paymentPurchase && <Modal title={`Pago a ${paymentPurchase.supplier?.name || 'proveedor'}`} subtitle={`Saldo pendiente: ${money(Number(paymentPurchase.balance))}`} onClose={() => setPaymentPurchase(null)}><form className="form-grid" onSubmit={submitPayment}><Field label="Importe" name="amount" type="number" min="0.01" max={Number(paymentPurchase.balance)} step="0.01" required/><Field label="Fecha de pago" name="paid_on" type="date" defaultValue={today} required/><label className="field span-two"><span>Cuenta de salida</span><select name="account_id" required><option value="">Selecciona caja o banco</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name} · {money(Number(account.current_balance))}</option>)}</select></label><Field className="span-two" label="Referencia" name="reference" placeholder="Transferencia, recibo…"/><div className="modal-actions span-two"><button type="button" className="button button-outline" onClick={() => setPaymentPurchase(null)}>Cancelar</button><button className="button button-primary">Guardar pago</button></div></form></Modal>}
+  </>;
+}
+
+function SalesView({ items, quotes, inventory, installers, accounts, canWrite, token, onItems, onAccounts, onInventory, onRefresh, announce }: { items: Sale[]; quotes: Quote[]; inventory: InventoryItem[]; installers: Installer[]; accounts: FinancialAccount[]; canWrite: boolean; token: string; onItems: (rows: Sale[]) => void; onAccounts: (rows: FinancialAccount[]) => void; onInventory: (rows: InventoryItem[]) => void; onRefresh: () => Promise<void>; announce: (message: string, type?: Notice['type']) => void }) {
+  const acceptedQuotes = quotes.filter(quote => quote.status === 'accepted' && quote.pricing_approved && !items.some(sale => sale.quote_id === quote.id));
+  const [quoteId, setQuoteId] = useState('');
+  const [saleType, setSaleType] = useState<'cash' | 'credit'>('cash');
+  const [materials, setMaterials] = useState([{ item_id: '', quantity: '1' }]);
+  const selectedQuote = acceptedQuotes.find(quote => quote.id === quoteId) || acceptedQuotes[0];
+
+  async function submitSale(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form);
+    if (!selectedQuote) return;
+    try {
+      const created = await request<Sale>('/sales', token, { method: 'POST', body: JSON.stringify({
+        quote_id: selectedQuote.id,
+        sale_type: saleType,
+        account_id: saleType === 'cash' ? String(data.get('account_id') || '') || null : null,
+        due_date: saleType === 'credit' ? String(data.get('due_date') || '') || null : null,
+        scheduled_at: String(data.get('scheduled_at') || '') ? new Date(String(data.get('scheduled_at'))).toISOString() : null,
+        lead_installer: String(data.get('lead_installer') || ''),
+        notes: String(data.get('notes') || '').trim(),
+        materials: materials.map(line => ({ item_id: line.item_id, quantity: Number(line.quantity) })),
+      }) });
+      onItems([created, ...items]);
+      const [accountRows, inventoryRows, saleRows] = await Promise.all([
+        request<FinancialAccount[]>('/accounts', token), request<InventoryItem[]>('/inventory', token), request<Sale[]>('/sales', token),
+      ]);
+      onAccounts(accountRows); onInventory(inventoryRows); onItems(saleRows); await onRefresh();
+      setMaterials([{ item_id: '', quantity: '1' }]); setQuoteId('');
+      announce(`Venta ${created.folio} y orden ${created.installation?.folio || ''} registradas; caja/cartera y existencias se actualizaron.`);
+    } catch(error) { announce(error instanceof Error ? error.message : 'No se pudo registrar la venta y orden.', 'error'); }
+  }
+
+  return <>
+    {canWrite && <section className="surface-card table-surface purchase-entry"><div className="section-title"><div><span className="eyebrow">VENTA ACEPTADA + ORDEN DE TRABAJO</span><h2>Registrar venta y asignar instalación</h2></div></div><p className="muted-copy">Este movimiento requiere cotización aceptada, materiales disponibles y una cuenta instaladora activa. La salida a almacén se registra contra la orden; el tratamiento de impuestos y pagos mixtos aún requiere definición contable.</p>{acceptedQuotes.length ? <form className="form-grid" onSubmit={submitSale}>
+      <label className="field span-two"><span>Cotización aceptada</span><select value={quoteId || selectedQuote?.id || ''} onChange={event => setQuoteId(event.target.value)} required>{acceptedQuotes.map(quote => <option key={quote.id} value={quote.id}>{quote.folio} · {quote.customer?.name || 'Cliente'} · {money(Number(quote.total))}</option>)}</select></label>
+      {selectedQuote && <div className="quote-total span-two"><div><small>TOTAL DE PROPUESTA</small><strong>{money(Number(selectedQuote.total))}</strong><span>{selectedQuote.customer?.name} · {selectedQuote.panel_count} paneles · {selectedQuote.installation_city}</span></div><span>{selectedQuote.payment_method}</span></div>}
+      <label className="field"><span>Tipo de venta</span><select value={saleType} onChange={event => setSaleType(event.target.value as 'cash' | 'credit')}><option value="cash">Contado · liquidado</option><option value="credit">Crédito · saldo total a una fecha</option></select></label>
+      {saleType === 'cash' ? <label className="field"><span>Cuenta que recibió el total</span><select name="account_id" required defaultValue=""><option value="">Selecciona caja o banco</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name} · {money(Number(account.current_balance))}</option>)}</select></label> : <Field label="Vencimiento del saldo" name="due_date" type="date" defaultValue={new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)} required/>}
+      <label className="field"><span>Instalador responsable</span><select name="lead_installer" required defaultValue=""><option value="">Selecciona instalador</option>{installers.map(item => <option key={item.email} value={item.email}>{item.name || item.email} · {item.email}</option>)}</select></label>
+      <Field label="Fecha de instalación" name="scheduled_at" type="datetime-local"/>
+      <div className="span-two purchase-lines"><div className="panel-head"><div><h3>Material solicitado en la orden</h3><p>Las cantidades se validan contra almacén y se descuentan al registrar la venta.</p></div><button type="button" className="button button-outline" onClick={() => setMaterials(rows => [...rows, { item_id: '', quantity: '1' }])}>＋ Agregar material</button></div>
+        {materials.map((line, index) => <div className="purchase-line" key={index}><label className="field"><span>Artículo</span><select value={line.item_id} onChange={event => setMaterials(rows => rows.map((row, i) => i === index ? { ...row, item_id: event.target.value } : row))} required><option value="">Selecciona material</option>{inventory.map(item => <option key={item.id} value={item.id}>{item.name} · {item.quantity} {item.unit} disponibles</option>)}</select></label><Field label="Cantidad" type="number" min="0.01" step="0.01" value={line.quantity} onChange={value => setMaterials(rows => rows.map((row, i) => i === index ? { ...row, quantity: value } : row))} required/>{materials.length > 1 && <button type="button" className="icon-button" aria-label="Quitar material" onClick={() => setMaterials(rows => rows.filter((_, i) => i !== index))}>×</button>}</div>)}
+      </div>
+      <Field className="span-two" label="Instrucciones de instalación / observaciones" name="notes" placeholder="Notas técnicas o indicaciones para la cuadrilla"/>
+      <div className="modal-actions span-two"><button className="button button-primary" disabled={!installers.length || !inventory.length || (saleType === 'cash' && !accounts.length)}>Registrar venta y emitir orden</button></div>
+    </form> : <EmptyState title="No hay cotizaciones aprobadas por registrar" body="Marca como aceptada una propuesta enviada y confirma que sus precios estén aprobados para crear la venta y la orden."/>}</section>}
+    <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">VENTAS REGISTRADAS</span><h2>{items.length} ventas</h2></div></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>FOLIO DE VENTA / CLIENTE</th><th>ORDEN DE TRABAJO</th><th>COBRO</th><th>MATERIALES SOLICITADOS</th><th>TOTAL</th><th>FECHA</th></tr></thead><tbody>{items.map(item => <tr key={item.id}><td><b>{item.folio}</b><small className="sub-cell">{item.customer?.name || 'Cliente'} · {item.quote?.folio}</small></td><td><b>{item.installation?.folio || 'Orden pendiente'}</b><small className="sub-cell">{item.installation?.lead_installer || 'Sin instalador'}{item.installation?.scheduled_at ? ` · ${new Date(item.installation.scheduled_at).toLocaleString('es-MX')}` : ''}</small></td><td><span className={`status-chip ${item.sale_type === 'cash' ? 'status-approved' : 'status-overdue'}`}>{item.sale_type === 'cash' ? 'Contado' : `Crédito · vence ${item.receivable?.due_date ? new Date(`${item.receivable.due_date}T12:00:00`).toLocaleDateString('es-MX') : 'por definir'}`}</span></td><td>{item.materials.map(line => `${line.item_name} × ${line.quantity}`).join(' · ')}</td><td><b>{money(Number(item.total))}</b></td><td>{new Date(item.created_at).toLocaleDateString('es-MX')}</td></tr>)}</tbody></table>{!items.length && <EmptyState title="Sin ventas registradas" body="Las propuestas aceptadas aparecen aquí para confirmar la operación y generar su orden de trabajo."/>}</div></section>
   </>;
 }
 

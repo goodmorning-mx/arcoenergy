@@ -451,4 +451,16 @@ Cada tarjeta conserva las versiones previas; el relato fuente y su procedencia n
 | US-18 | Funcional básico | La cobranza aumenta caja/banco y los pagos ligados a compras/gastos reducen saldos. Pendiente: enlazar ventas y conciliar. |
 | US-34 | Funcional básico | Movimientos ligados a compras, gastos administrativos y abonos de clientes se reflejan en cuentas con historial. Pendiente: enlazar ventas y conciliación. |
 
+## Iteración 6 — Ventas y órdenes de trabajo (2026-11-06)
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-7 | Parcial | La venta crea orden foliada, la asigna a un instalador activo y se muestra en su PWA. Pendiente notificación push/mensajería y confirmación de cuadrilla. |
+| US-15 | Funcional básico | Cotización aceptada se registra como venta contado o crédito; ingreso o saldo por cobrar, materiales descargados por orden y folios se actualizan juntos. Pendientes: impuestos, pagos mixtos, calendario de crédito y reversa integral. |
+| US-18 | Funcional básico | La venta de contado aumenta caja/banco; abonos a crédito, compras y gastos enlazan su movimiento. Pendiente conciliación bancaria y libros contables. |
+| US-24 | Parcial | Material solicitado en la orden se valida, descuenta almacén y conserva costo por movimiento ligado al proyecto. Falta diferenciar solicitado, entregado, consumido y autorizado. |
+| US-32 | Parcial | Venta y orden tienen folios únicos y se relacionan con cotización y cliente. Falta la entidad de proyecto independiente y aprobar formato de folio. |
+| US-34 | Funcional básico | Ingresos de ventas de contado y abonos de crédito, así como salidas por compra/gastos y material en kardex, quedan enlazados a su operación. Faltan conciliación y correcciones relacionadas. |
+| US-35 | Parcial | Venta aceptada actualiza ingreso o cartera, salida de inventario por orden y folios relacionados en transacción. No hay todavía doble partida ni todas las reglas fiscales/contables. |
+
 Las funciones marcadas como pendientes se mantienen visibles en el backlog. Los bloqueos de esta iteración no autorizan inventar precios, documentos legales, tratamiento biométrico, reglas contables ni credenciales de servicios externos.

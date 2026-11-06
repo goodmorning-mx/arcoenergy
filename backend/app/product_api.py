@@ -23,7 +23,7 @@ from gm_auth.models import memberships, users
 from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
-from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InventoryItem, InventoryMovement, ProjectExpense, Purchase, PurchaseLine, Quote, QuotePackage, Receivable, Supplier, SupplierPayment
+from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InventoryItem, InventoryMovement, ProjectExpense, Purchase, PurchaseLine, Quote, QuotePackage, Receivable, Sale, Supplier, SupplierPayment
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 
 settings = get_settings()
@@ -285,6 +285,22 @@ class InstallationInput(BaseModel):
     scheduled_at: datetime | None = None
     lead_installer: str = ""
     notes: str = ""
+
+
+class SaleMaterialInput(BaseModel):
+    item_id: str
+    quantity: Decimal = Field(gt=0)
+
+
+class SaleInput(BaseModel):
+    quote_id: str
+    sale_type: Literal["cash", "credit"]
+    account_id: str | None = None
+    due_date: date | None = None
+    scheduled_at: datetime | None = None
+    lead_installer: str = Field(min_length=1, max_length=180)
+    notes: str = Field(default="", max_length=5000)
+    materials: list[SaleMaterialInput] = Field(min_length=1, max_length=100)
 
 
 class StockInput(BaseModel):
@@ -688,6 +704,125 @@ def create_installation(data: InstallationInput, db: Session = Depends(get_db)):
     return _serialize(row)
 
 
+def _sale_result(db: Session, sale: Sale):
+    quote = db.get(Quote, sale.quote_id)
+    customer = db.get(Customer, sale.customer_id)
+    installation = db.get(Installation, sale.installation_id)
+    receivable = db.scalar(select(Receivable).where(Receivable.quote_id == sale.quote_id))
+    movements = db.scalars(select(InventoryMovement).where(
+        InventoryMovement.installation_id == sale.installation_id,
+        InventoryMovement.movement_type == "out",
+    ).order_by(InventoryMovement.created_at)).all()
+    return {
+        **_serialize(sale),
+        "quote": {"id": quote.id, "folio": quote.folio, "payment_method": quote.payment_method} if quote else None,
+        "customer": {"id": customer.id, "name": customer.name, "phone": customer.phone, "email": customer.email, "city": customer.city} if customer else None,
+        "installation": _serialize(installation),
+        "receivable": _serialize(receivable),
+        "materials": [{**_serialize(movement), "item_name": (db.get(InventoryItem, movement.item_id).name if db.get(InventoryItem, movement.item_id) else "Artículo")} for movement in movements],
+    }
+
+
+@router.get("/sales", dependencies=[Depends(require_permissions(auth_service, "sales:read"))])
+def list_sales(db: Session = Depends(get_db)):
+    rows = db.scalars(select(Sale).order_by(Sale.created_at.desc())).all()
+    return [_sale_result(db, row) for row in rows]
+
+
+@router.post("/sales", status_code=201, dependencies=[Depends(require_permissions(auth_service, "sales:write"))])
+def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    quote = db.scalar(select(Quote).where(Quote.id == data.quote_id).with_for_update())
+    if quote is None: raise HTTPException(404, "Cotización no encontrada.")
+    if quote.status != "accepted": raise HTTPException(422, "Registra primero que el cliente aceptó la cotización.")
+    if not quote.pricing_approved: raise HTTPException(422, "La propuesta requiere aprobación comercial antes de registrarse como venta.")
+    if db.scalar(select(Sale.id).where(Sale.quote_id == quote.id)):
+        raise HTTPException(409, "Esta cotización ya fue registrada como venta.")
+    customer = db.get(Customer, quote.customer_id)
+    if customer is None: raise HTTPException(409, "El cliente de la cotización ya no está disponible.")
+
+    installer_email = data.lead_installer.strip().lower()
+    with auth_service.engine.connect() as connection:
+        installer = connection.execute(select(users.c.id).join(memberships, memberships.c.user_id == users.c.id).where(
+            func.lower(users.c.email) == installer_email,
+            users.c.is_active.is_(True),
+            memberships.c.organization_id == settings.organization_id,
+            memberships.c.roles.contains(["instalador"]),
+        )).first()
+    if installer is None:
+        raise HTTPException(422, "Selecciona una cuenta activa con rol de instalador.")
+
+    account = None
+    if data.sale_type == "cash":
+        if not data.account_id or data.due_date:
+            raise HTTPException(422, "Una venta de contado requiere una cuenta receptora y no lleva vencimiento de crédito.")
+        account = db.scalar(select(FinancialAccount).where(
+            FinancialAccount.id == data.account_id,
+            FinancialAccount.active.is_(True),
+        ).with_for_update())
+        if account is None: raise HTTPException(404, "Selecciona una cuenta de caja o banco activa.")
+    else:
+        if data.account_id or not data.due_date:
+            raise HTTPException(422, "Una venta a crédito requiere fecha de vencimiento y no debe seleccionar cuenta de cobro todavía.")
+        if db.scalar(select(Receivable.id).where(Receivable.quote_id == quote.id)):
+            raise HTTPException(409, "Esta cotización ya tiene cuentas por cobrar registradas.")
+
+    material_totals: dict[str, Decimal] = {}
+    for line in data.materials:
+        material_totals[line.item_id] = material_totals.get(line.item_id, Decimal("0")) + line.quantity
+    locked_items = []
+    for item_id, quantity in material_totals.items():
+        item = db.scalar(select(InventoryItem).where(InventoryItem.id == item_id).with_for_update())
+        if item is None: raise HTTPException(404, "Uno de los materiales de la orden ya no existe en el almacén.")
+        if Decimal(str(item.quantity)) < quantity:
+            raise HTTPException(409, f"Existencia insuficiente de {item.name}: disponibles {item.quantity}, requeridos {quantity}.")
+        locked_items.append((item, quantity))
+
+    if db.get_bind().dialect.name == "postgresql":
+        sale_number = db.execute(text("SELECT nextval('ae_sale_folio_seq')")).scalar_one()
+        work_number = db.execute(text("SELECT nextval('ae_work_order_folio_seq')")).scalar_one()
+    else:
+        sale_number = (db.scalar(select(func.count()).select_from(Sale)) or 0) + 1
+        work_number = (db.scalar(select(func.count()).select_from(Installation).where(Installation.folio.is_not(None))) or 0) + 1
+    year = datetime.now(timezone.utc).year
+    sale_folio = f"AE-V-{year}-{sale_number:05d}"
+    work_folio = f"AE-OT-{year}-{work_number:05d}"
+    installation = Installation(
+        folio=work_folio,
+        customer_id=customer.id,
+        quote_id=quote.id,
+        scheduled_at=data.scheduled_at,
+        lead_installer=installer_email,
+        status="assigned",
+        notes=data.notes.strip(),
+        checklist=[{"task":"Confirmar materiales","done":True},{"task":"Asignar cuadrilla","done":True},{"task":"Visita de instalación","done":False},{"task":"Registrar consumos","done":False},{"task":"Cerrar proyecto","done":False}],
+    )
+    db.add(installation); db.flush()
+    sale = Sale(folio=sale_folio, customer_id=customer.id, quote_id=quote.id, installation_id=installation.id,
+        sale_type=data.sale_type, total=quote.total, created_by=identity.email or "")
+    db.add(sale); db.flush()
+    for item, quantity in locked_items:
+        item.quantity = Decimal(str(item.quantity)) - quantity
+        db.add(InventoryMovement(
+            item_id=item.id,
+            installation_id=installation.id,
+            quantity=quantity,
+            movement_type="out",
+            unit_cost=item.unit_cost,
+            reason=f"Orden {work_folio} · Venta {sale_folio}",
+            created_by=identity.email or "",
+        ))
+    if data.sale_type == "cash" and account is not None:
+        db.add(CashMovement(account_id=account.id, direction="in", amount=quote.total,
+            category="Venta de contado", description=f"{customer.name} · {sale_folio}",
+            occurred_on=date.today(), source_type="sale", source_id=sale.id, created_by=identity.email or ""))
+    elif data.due_date is not None:
+        db.add(Receivable(customer_id=customer.id, quote_id=quote.id, installment_number=1,
+            due_date=data.due_date, amount=quote.total, paid_amount=Decimal("0"), status="pending",
+            payment_method=quote.payment_method))
+    db.commit(); db.refresh(sale)
+    return _sale_result(db, sale)
+
+
 @router.get("/installations")
 def list_installations(identity: AuthIdentity = Depends(require_permissions(auth_service, "installations:read")), db: Session = Depends(get_db)):
     query = select(Installation).order_by(Installation.scheduled_at)
@@ -695,6 +830,17 @@ def list_installations(identity: AuthIdentity = Depends(require_permissions(auth
         query = query.where(Installation.lead_installer == identity.email)
     rows = db.scalars(query).all()
     return [{**_serialize(row), "customer": _serialize(db.get(Customer, row.customer_id))} for row in rows]
+
+
+@router.get("/installers", dependencies=[Depends(require_permissions(auth_service, "installations:read"))])
+def list_installers():
+    with auth_service.engine.connect() as connection:
+        rows = connection.execute(select(users.c.email, users.c.name).join(memberships, memberships.c.user_id == users.c.id).where(
+            users.c.is_active.is_(True),
+            memberships.c.organization_id == settings.organization_id,
+            memberships.c.roles.contains(["instalador"]),
+        ).order_by(users.c.name)).mappings().all()
+    return [{"email": row["email"], "name": row["name"]} for row in rows]
 
 
 @router.get("/inventory")
