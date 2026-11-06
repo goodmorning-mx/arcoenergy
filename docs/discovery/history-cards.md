@@ -560,3 +560,15 @@ El CRM incorpora un resumen filtrable por periodo con existencia y disponibilida
 | US-19 | Parcial funcional | Dashboard previo más resumen de movimientos por periodo, estado de clientes/proveedores/órdenes y gastos por categoría. Falta validar umbrales y flujo de efectivo con contador. |
 | US-27 | Parcial funcional | Kardex con filtro de fecha y descarga CSV desde reportes; se limita a 500 movimientos por consulta. Falta paginación y mayor volumen. |
 | US-29 | Parcial funcional | CRM ofrece stock disponible, movimientos, estatus operativos y gastos agrupados con filtros de fecha y CSV. Faltan reportes dedicados por todas las entidades y validación de fórmulas del contador. |
+
+## Iteración 16 — precarga asistida de compras con CFDI y rutas de acceso (2026-11-06)
+
+Se agrega lectura asistida de CFDI XML 3.3/4.0 en MXN como propuesta revisable para capturar una compra. La lectura no registra la compra, no conserva el XML y no distribuye impuestos, descuentos globales ni fletes. El usuario debe relacionar proveedor y artículos, validar cantidades e importes y confirmar la operación. Esta entrega no procesa imágenes ni OCR. Se verifica la separación de acceso en `/crm/login` para administración y `/app/login` para equipo de campo y clientes; `/login` es alias del acceso CRM. El portal CRM permite a administradores crear y asignar los cinco roles definidos. No se generan cuentas de muestra: la primera cuenta administradora depende de credenciales de arranque configuradas como secretos en Factory. El código fuente ya no presenta modo de prueba; el despliegue DEV sigue pendiente de actualización/verificación de su commit.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | Accesos CRM/PWA y cinco roles en API/gestión de equipo. Falta completar la matriz de permisos y verificar cuentas reales en el entorno DEV. |
+| US-21 | Funcional básico | Compra multirrenglón y CFDI XML pueden precargar una propuesta revisable. Faltan impuestos/fletes según política del contador, XML variantes y manejo de facturas relacionadas. |
+| US-22 | Parcial funcional | CFDI 3.3/4.0 en MXN precarga proveedor/referencia/fecha y conceptos en CRM; revisión humana obligatoria. Imagen, OCR y otros formatos quedan pendientes. |
+| US-39 | Parcial funcional | CRM de escritorio autenticado con catálogo, clientes, ventas/órdenes, compras, finanzas, equipo y reportes ya existentes. El estado del despliegue es anterior a estos cambios; falta integrar y verificar DEV. |
+| US-40 | Parcial funcional | PWA autenticada con rutas de acceso y operaciones móviles. Falta completar flujos de campo y comprobar sesión/roles sobre el despliegue actualizado. |

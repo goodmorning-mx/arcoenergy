@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { AgentChat } from '@goodmorning/gm-agent';
 import { useAuth } from '@goodmorning/gm-auth';
 import { OperationsReportView } from './OperationsReportView';
@@ -18,6 +18,7 @@ type FinancialAccount = { id: string; name: string; account_type: 'cash' | 'bank
 type CashMovement = { id: string; account_id: string; direction: 'in' | 'out'; amount: number; category: string; description: string; occurred_on: string; source_type: string; source_id: string | null; reversal_of_id: string | null; created_by: string };
 type Supplier = { id: string; name: string; rfc: string; phone: string; email: string; payment_terms: 'cash' | 'credit'; credit_days: number; active: boolean; current_balance: number };
 type Purchase = { id: string; folio: string; supplier_id: string; supplier?: { id: string; name: string }; invoice_number: string; payment_terms: 'cash' | 'credit'; purchase_date: string; due_date: string | null; total: number; paid_amount: number; balance: number; status: string; lines: Array<{ id: string; item_name: string; quantity: number; unit_cost: number; line_total: number }> };
+type CfdiProposal = { invoice_reference:string; purchase_date:string; supplier_rfc:string; supplier_name:string; declared_subtotal:number; global_discount:number; declared_total:number; requires_accounting_review:boolean; concepts:Array<{identifier:string;product_service_key:string;description:string;quantity:number;unit:string;net_line_amount:number;unit_cost_before_global_adjustments:number}> };
 type Receivable = { id: string; customer_id: string; customer?: Customer; quote_id: string | null; due_date: string; amount: number; paid_amount: number; balance: number; installment_number: number; payment_method: string; status: 'pending' | 'partial' | 'overdue' | 'paid'; payments?: Array<{ id: string; amount: number; paid_on: string; reference: string; account_name: string }> };
 type Installer = { email: string; name: string };
 type Sale = { id: string; folio: string; customer_id: string; customer?: Customer; quote_id: string; quote?: { id: string; folio: string; payment_method: string }; installation_id: string; installation?: Installation; sale_type: 'cash' | 'credit'; total: number; receivable?: { due_date: string; amount: number; paid_amount: number } | null; materials: Array<{ id: string; item_name: string; quantity: number }>; created_at: string };
@@ -439,7 +440,7 @@ function DashboardView({ data, customers, quotes, followups, can, onCustomer, on
 }
 
 function CustomersView({ customers, search, onSearch, canCreate, onCreate, onSelect }: { customers: Customer[]; search: string; onSearch: (s: string) => void; canCreate: boolean; onCreate: () => void; onSelect: (c: Customer) => void }) {
-  return <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">CARTERA COMERCIAL</span><h2>{customers.length} contactos</h2></div><div className="toolbar-actions"><input className="search-input" value={search} onChange={event => onSearch(event.target.value)} placeholder="Buscar por nombre, ciudad o contacto"/>{canCreate && <button className="button button-primary" onClick={onCreate}>＋ Agregar cliente</button>}</div></div>{customers.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>CLIENTE</th><th>UBICACIÓN</th><th>CONTACTO</th><th>ESTADO</th><th>ORIGEN</th><th/></tr></thead><tbody>{customers.map(item => <tr key={item.id} onClick={() => onSelect(item)}><td><span className="table-person"><i>{initials(item.name)}</i><b>{item.name}<small>{item.email || 'Sin correo registrado'}</small></b></span></td><td>{item.city || '—'}<small className="sub-cell">{item.address || 'Domicilio pendiente'}</small></td><td>{item.phone || '—'}</td><td><span className="status-chip status-draft">{labelCustomerStatus(item.status)}</span></td><td>{item.source === 'public_web' ? 'Web pública' : item.source === 'demo' ? 'Registro importado' : 'Equipo'}</td><td><button className="icon-button" aria-label={`Ver ${item.name}`}>→</button></td></tr>)}</tbody></table></div> : <EmptyState title="No encontramos contactos" body="Cambia la búsqueda o agrega un nuevo prospecto." action={canCreate ? 'Agregar cliente' : undefined} onClick={onCreate}/>}</section>;
+  return <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">CARTERA COMERCIAL</span><h2>{customers.length} contactos</h2></div><div className="toolbar-actions"><input className="search-input" value={search} onChange={event => onSearch(event.target.value)} placeholder="Buscar por nombre, ciudad o contacto"/>{canCreate && <button className="button button-primary" onClick={onCreate}>＋ Agregar cliente</button>}</div></div>{customers.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>CLIENTE</th><th>UBICACIÓN</th><th>CONTACTO</th><th>ESTADO</th><th>ORIGEN</th><th/></tr></thead><tbody>{customers.map(item => <tr key={item.id} onClick={() => onSelect(item)}><td><span className="table-person"><i>{initials(item.name)}</i><b>{item.name}<small>{item.email || 'Sin correo registrado'}</small></b></span></td><td>{item.city || '—'}<small className="sub-cell">{item.address || 'Domicilio pendiente'}</small></td><td>{item.phone || '—'}</td><td><span className="status-chip status-draft">{labelCustomerStatus(item.status)}</span></td><td>{item.source === 'public_web' ? 'Web pública' : 'Equipo'}</td><td><button className="icon-button" aria-label={`Ver ${item.name}`}>→</button></td></tr>)}</tbody></table></div> : <EmptyState title="No encontramos contactos" body="Cambia la búsqueda o agrega un nuevo prospecto." action={canCreate ? 'Agregar cliente' : undefined} onClick={onCreate}/>}</section>;
 }
 
 function QuotesView({ quotes, onCreate, onDownload, onShare, onMarkSent, onAccept, canWrite }: { quotes: Quote[]; onCreate: () => void; onDownload: (q: Quote) => void; onShare: (q: Quote) => void; onMarkSent: (q: Quote) => void; onAccept: (q: Quote) => void; canWrite: boolean }) {
@@ -476,7 +477,18 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
   const [terms, setTerms] = useState<'cash' | 'credit'>('cash');
   const [supplierId, setSupplierId] = useState('');
   const [initialPayment, setInitialPayment] = useState('0');
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [purchaseDate, setPurchaseDate] = useState(today);
+  const [cfdiProposal, setCfdiProposal] = useState<CfdiProposal|null>(null);
+  const [cfdiBusy, setCfdiBusy] = useState(false);
+  const [cfdiError, setCfdiError] = useState('');
+  const supplier = suppliers.find(item => item.id === supplierId);
   const total = lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unit_cost || 0), 0);
+  const normalizedCode = (value:string) => value.trim().toLocaleUpperCase();
+  const cfdiSupplierMatches = !cfdiProposal || normalizedCode(supplier?.rfc||'') === normalizedCode(cfdiProposal.supplier_rfc);
+  const cfdiLinesMapped = !cfdiProposal || lines.every(line => Boolean(line.item_id));
+  const cfdiTotalMatches = !cfdiProposal || Math.abs(Math.round(total*100)-Math.round(Number(cfdiProposal.declared_total)*100)) <= 1;
+  const canSubmitPurchase = !cfdiProposal || (cfdiSupplierMatches && cfdiLinesMapped && cfdiTotalMatches);
 
   async function reload() {
     const [purchaseRows, supplierRows, accountRows, inventoryRows] = await Promise.all([
@@ -497,6 +509,7 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
         payment_reference: String(data.get('payment_reference') || '').trim(),
       }) });
       onItems([purchase, ...items]); form.reset(); setLines([{ item_id: '', quantity: '1', unit_cost: '' }]);
+      setSupplierId(''); setTerms('cash'); setInitialPayment('0'); setInvoiceNumber(''); setPurchaseDate(today); setCfdiProposal(null); setCfdiError('');
       const [, supplierRows, accountRows, inventoryRows] = await Promise.all([
         request<Purchase[]>('/purchases', token).then(onItems), request<Supplier[]>('/suppliers', token),
         request<FinancialAccount[]>('/accounts', token), request<InventoryItem[]>('/inventory', token),
@@ -515,12 +528,38 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
     } catch (error) { announce(error instanceof Error ? error.message : 'No se pudo registrar el pago.', 'error'); }
   }
 
-  const supplier = suppliers.find(item => item.id === supplierId);
+  async function importCfdi(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setCfdiError(''); setCfdiBusy(true);
+    try {
+      if (!file.name.toLowerCase().endsWith('.xml')) throw new Error('Selecciona el XML CFDI de la factura.');
+      if (file.size > 2 * 1024 * 1024) throw new Error('El archivo XML debe ser menor a 2 MiB.');
+      const xml = await file.text();
+      const proposal = await request<CfdiProposal>('/purchases/parse-cfdi', token, { method:'POST', body:JSON.stringify({xml}) });
+      const importedLines = proposal.concepts.map(concept => {
+        const identifier = normalizedCode(concept.identifier);
+        const exactMatches = inventory.filter(item => identifier && [item.barcode, item.model].some(code => normalizedCode(code||'') === identifier));
+        const match = exactMatches.length === 1 ? exactMatches[0] : undefined;
+        return { item_id:match?.id||'', quantity:String(concept.quantity), unit_cost:String(concept.unit_cost_before_global_adjustments) };
+      });
+      const supplierMatches = suppliers.filter(item => item.active && normalizedCode(item.rfc) === normalizedCode(proposal.supplier_rfc));
+      const matchedSupplier = supplierMatches.length === 1 ? supplierMatches[0] : undefined;
+      setCfdiProposal(proposal); setLines(importedLines); setInvoiceNumber(proposal.invoice_reference); setPurchaseDate(proposal.purchase_date);
+      if (matchedSupplier) { setSupplierId(matchedSupplier.id); setTerms(matchedSupplier.payment_terms); setInitialPayment(matchedSupplier.payment_terms === 'cash' ? String(importedLines.reduce((sum,line)=>sum+Number(line.quantity)*Number(line.unit_cost),0)) : '0'); }
+      else if (supplierMatches.length > 1) setCfdiError('Hay varios proveedores activos con ese RFC; selecciona el proveedor correcto y valida el registro duplicado.');
+      announce(`CFDI leído. Revisa proveedor, artículos, importes y cuenta antes de registrar la compra. ${importedLines.filter(line=>line.item_id).length} de ${importedLines.length} artículos identificados.`);
+    } catch(error) { setCfdiProposal(null); setCfdiError(error instanceof Error?error.message:'No se pudo leer el XML CFDI.'); }
+    finally { setCfdiBusy(false); }
+  }
+
   return <>
     {canWrite && <section className="surface-card table-surface purchase-entry"><div className="section-title"><div><span className="eyebrow">ENTRADA DE ALMACÉN + CUENTAS POR PAGAR</span><h2>Registrar compra de materiales</h2></div></div>
       <form className="form-grid" onSubmit={submitPurchase}>
+        <div className="cfdi-import span-two"><label className="field"><span>Precargar desde XML CFDI (opcional)</span><input type="file" accept=".xml,application/xml,text/xml" onChange={event=>void importCfdi(event)} disabled={cfdiBusy}/></label><small>El archivo se procesa para proponer datos; no se guarda. Confirma proveedor, artículos, cantidades e importes antes de registrar.</small>{cfdiBusy&&<p role="status">Leyendo factura…</p>}{cfdiError&&<p className="error-message" role="alert">{cfdiError}</p>}{cfdiProposal&&<div className="cfdi-review"><div><b>CFDI leído · revisión requerida</b><button type="button" className="text-button" onClick={()=>{setCfdiProposal(null);setCfdiError('');}}>Quitar precarga</button></div><p>{cfdiProposal.supplier_name||'Proveedor sin nombre'} · RFC {cfdiProposal.supplier_rfc} · {cfdiProposal.invoice_reference} · {cfdiProposal.purchase_date}</p><p>Subtotal declarado {money(Number(cfdiProposal.declared_subtotal))} · Descuento global {money(Number(cfdiProposal.global_discount))} · Total factura {money(Number(cfdiProposal.declared_total))}</p><p>{lines.filter(line=>line.item_id).length}/{lines.length} conceptos relacionados a artículos. Importe de compra revisado: {money(total)}.</p>{(!cfdiSupplierMatches||!cfdiLinesMapped||!cfdiTotalMatches)&&<p className="cfdi-warning">No se puede registrar esta precarga hasta relacionar cada artículo, seleccionar el proveedor con RFC coincidente y hacer coincidir el total. Impuestos, descuentos globales y fletes no se distribuyen automáticamente; ajusta los costos con la regla del contador o quita la precarga para capturarla manualmente.</p>}{cfdiProposal.requires_accounting_review&&<p className="cfdi-warning">El total incluye diferencia contra el subtotal neto de conceptos. Revisa tratamiento de impuestos/ajustes antes de confirmar.</p>}</div>}</div>
         <label className="field span-two"><span>Proveedor</span><select value={supplierId} onChange={event => { const value = event.target.value; setSupplierId(value); const selected = suppliers.find(row => row.id === value); setTerms(selected?.payment_terms || 'cash'); setInitialPayment(selected?.payment_terms === 'cash' ? String(total) : '0'); }} required><option value="">Selecciona proveedor</option>{suppliers.filter(item => item.active).map(item => <option key={item.id} value={item.id}>{item.name} · {item.payment_terms === 'credit' ? `Crédito ${item.credit_days} días` : 'Contado'}</option>)}</select>{!suppliers.length && <small className="muted-copy">Registra primero un proveedor en el apartado Proveedores.</small>}</label>
-        <Field label="Factura / referencia" name="invoice_number" placeholder="Folio de factura"/><Field label="Fecha de compra" name="purchase_date" type="date" defaultValue={today} required/>
+        <Field label="Factura / referencia" name="invoice_number" value={invoiceNumber} onChange={setInvoiceNumber} placeholder="Folio de factura"/><Field label="Fecha de compra" name="purchase_date" type="date" value={purchaseDate} onChange={setPurchaseDate} required/>
         <label className="field"><span>Forma acordada</span><select value={terms} onChange={event => { const value = event.target.value as 'cash' | 'credit'; setTerms(value); setInitialPayment(value === 'cash' ? String(total) : '0'); }}><option value="cash">Contado</option><option value="credit" disabled={!supplier?.credit_days}>Crédito</option></select></label>
         {terms === 'credit' && <Field label="Fecha límite de pago" name="due_date" type="date" defaultValue={supplier?.credit_days ? new Date(Date.now() + supplier.credit_days * 86400000).toISOString().slice(0, 10) : ''} min={today}/>}
         <div className="span-two purchase-lines"><div className="panel-head"><div><h3>Material recibido</h3><p>Los precios quedan guardados en cada movimiento del kardex.</p></div><button type="button" className="button button-outline" onClick={() => setLines(rows => [...rows, { item_id: '', quantity: '1', unit_cost: '' }])}>＋ Agregar artículo</button></div>
@@ -530,7 +569,7 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
         <Field label={terms === 'cash' ? 'Importe pagado' : 'Anticipo (opcional)'} name="initial_payment" type="number" min="0" step="0.01" value={terms === 'cash' ? String(total) : initialPayment} onChange={setInitialPayment} required/>
         <label className="field"><span>Cuenta de pago</span><select name="payment_account_id" required={terms === 'cash' || Number(initialPayment) > 0}><option value="">Selecciona una cuenta</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name} · {money(Number(account.current_balance))}</option>)}</select></label>
         <Field label="Referencia del pago" name="payment_reference" placeholder="Transferencia, recibo…"/>
-        <div className="modal-actions span-two"><button className="button button-primary" disabled={!supplier || !inventory.length || !accounts.length}>Registrar compra</button></div>
+        <div className="modal-actions span-two"><button className="button button-primary" disabled={!supplier || !inventory.length || !accounts.length || !canSubmitPurchase}>Registrar compra</button></div>
       </form>
     </section>}
     <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">COMPRAS REGISTRADAS</span><h2>{items.length} compras · {money(items.reduce((sum, item) => sum + Number(item.balance), 0))} por pagar</h2></div></div>

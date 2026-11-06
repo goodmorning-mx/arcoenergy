@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from io import BytesIO
+import re
 from typing import Literal
 from urllib.parse import quote as urlquote
 from uuid import uuid4
+import xml.etree.ElementTree as ET
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -404,6 +406,10 @@ class PurchaseInput(BaseModel):
     initial_payment: Decimal = Field(default=Decimal("0"), ge=0)
     payment_account_id: str | None = None
     payment_reference: str = Field(default="", max_length=180)
+
+
+class PurchaseInvoiceXmlInput(BaseModel):
+    xml: str = Field(min_length=1, max_length=2_097_152)
 
 
 class SupplierPaymentInput(BaseModel):
@@ -1289,6 +1295,122 @@ def _record_supplier_payment(db: Session, purchase: Purchase, amount: Decimal, a
     purchase.paid_amount = Decimal(purchase.paid_amount) + amount
     purchase.status = "paid" if purchase.paid_amount >= purchase.total else "partially_paid"
     return payment
+
+
+def _parse_purchase_cfdi_xml(raw_xml: str) -> dict:
+    """Parse a CFDI invoice into a review proposal only; never persist source XML or post inventory here."""
+    if len(raw_xml.encode("utf-8")) > 2 * 1024 * 1024:
+        raise HTTPException(413, "El XML excede el límite de 2 MiB.")
+    if re.search(r"<!\s*(?:DOCTYPE|ENTITY)\b", raw_xml, re.IGNORECASE):
+        raise HTTPException(422, "El XML no debe declarar DTD ni entidades externas.")
+    try:
+        root = ET.fromstring(raw_xml)
+    except ET.ParseError as exc:
+        raise HTTPException(422, "El archivo no contiene un XML CFDI válido.") from exc
+    if root.tag.rsplit("}", 1)[-1] != "Comprobante":
+        raise HTTPException(422, "El XML debe tener un comprobante CFDI como raíz.")
+
+    def attribute(node: ET.Element | None, name: str, default: str = "") -> str:
+        if node is None:
+            return default
+        return node.attrib.get(name, node.attrib.get(name.lower(), default))
+
+    def first(local_name: str, parent: ET.Element = root) -> ET.Element | None:
+        return next((node for node in parent.iter() if node.tag.rsplit("}", 1)[-1] == local_name), None)
+
+    version = attribute(root, "Version")
+    if version not in {"3.3", "4.0"}:
+        raise HTTPException(422, "Se admiten CFDI 3.3 y 4.0.")
+    if attribute(root, "TipoDeComprobante").upper() != "I":
+        raise HTTPException(422, "Solo se admiten CFDI de ingreso por compra; no notas de crédito ni complementos de pago.")
+    currency = attribute(root, "Moneda", "MXN").upper()
+    if currency != "MXN":
+        raise HTTPException(422, "La compra solo se puede prellenar con facturas en MXN.")
+
+    emitter = first("Emisor")
+    issuer_rfc = attribute(emitter, "Rfc", attribute(emitter, "rfc")).strip().upper()
+    issuer_name = attribute(emitter, "Nombre", attribute(emitter, "nombre")).strip()
+    if not issuer_rfc:
+        raise HTTPException(422, "El XML no incluye el RFC del proveedor emisor.")
+
+    stamp = first("TimbreFiscalDigital")
+    invoice_reference = attribute(stamp, "UUID").strip().upper()
+    if not invoice_reference:
+        series, folio = attribute(root, "Serie").strip(), attribute(root, "Folio").strip()
+        invoice_reference = f"{series}-{folio}".strip("-")
+    if not invoice_reference:
+        raise HTTPException(422, "El CFDI no tiene UUID ni referencia de serie/folio.")
+
+    raw_date = attribute(root, "Fecha")
+    try:
+        purchase_date = datetime.fromisoformat(raw_date.replace("Z", "+00:00")).date().isoformat()
+    except ValueError as exc:
+        raise HTTPException(422, "La fecha de emisión del CFDI no es válida.") from exc
+
+    def decimal_attr(node: ET.Element, name: str, *, required: bool = True) -> Decimal:
+        raw_value = attribute(node, name)
+        if not raw_value and not required:
+            return Decimal("0")
+        try:
+            value = Decimal(raw_value)
+        except (InvalidOperation, ValueError) as exc:
+            raise HTTPException(422, f"El campo {name} no contiene un importe válido.") from exc
+        if not value.is_finite() or len(value.as_tuple().digits) > 24 or value.adjusted() > 14 or value.as_tuple().exponent < -8:
+            raise HTTPException(422, f"El campo {name} no contiene un importe válido.")
+        return value
+
+    concepts = [node for node in root.iter() if node.tag.rsplit("}", 1)[-1] == "Concepto"]
+    if not concepts or len(concepts) > 100:
+        raise HTTPException(422, "El CFDI debe contener entre 1 y 100 conceptos.")
+    lines = []
+    for concept in concepts:
+        quantity = decimal_attr(concept, "Cantidad")
+        amount = decimal_attr(concept, "Importe", required=False)
+        discount = decimal_attr(concept, "Descuento", required=False)
+        unit_price = decimal_attr(concept, "ValorUnitario", required=False)
+        if quantity <= 0:
+            raise HTTPException(422, "El CFDI contiene una cantidad no válida.")
+        # Import is the source line amount; subtract its explicit line discount.
+        net_amount = amount - discount if amount else quantity * unit_price - discount
+        if net_amount <= 0:
+            raise HTTPException(422, "El CFDI contiene un concepto con importe neto no positivo.")
+        unit_cost = (net_amount / quantity).quantize(Decimal("0.01"))
+        lines.append({
+            "identifier": attribute(concept, "NoIdentificacion").strip(),
+            "product_service_key": attribute(concept, "ClaveProdServ").strip(),
+            "description": attribute(concept, "Descripcion").strip(),
+            "quantity": quantity,
+            "unit": attribute(concept, "Unidad", attribute(concept, "ClaveUnidad", "pieza")).strip() or "pieza",
+            "net_line_amount": net_amount,
+            "unit_cost_before_global_adjustments": unit_cost,
+        })
+
+    subtotal = decimal_attr(root, "SubTotal", required=False)
+    global_discount = decimal_attr(root, "Descuento", required=False)
+    invoice_total = decimal_attr(root, "Total")
+    if subtotal < 0 or global_discount < 0 or invoice_total < 0:
+        raise HTTPException(422, "El CFDI contiene totales negativos no admitidos.")
+    return {
+        "version": version,
+        "invoice_reference": invoice_reference,
+        "purchase_date": purchase_date,
+        "currency": currency,
+        "supplier_rfc": issuer_rfc,
+        "supplier_name": issuer_name,
+        "declared_subtotal": subtotal,
+        "global_discount": global_discount,
+        "declared_total": invoice_total,
+        "concepts": lines,
+        "review_only": True,
+        "source_xml_stored": False,
+        "requires_accounting_review": bool(global_discount or invoice_total != subtotal - global_discount),
+    }
+
+
+@router.post("/purchases/parse-cfdi", dependencies=[Depends(require_permissions(auth_service, "purchases:write"))])
+def parse_purchase_cfdi(data: PurchaseInvoiceXmlInput):
+    """Read a local user's CFDI into a proposal that must be reviewed before posting a purchase."""
+    return _parse_purchase_cfdi_xml(data.xml)
 
 
 @router.get("/purchases", dependencies=[Depends(require_permissions(auth_service, "purchases:read"))])
