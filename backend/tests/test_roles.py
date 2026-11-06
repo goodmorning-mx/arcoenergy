@@ -12,6 +12,8 @@ def test_role_catalog_contains_exact_requested_roles_and_scopes() -> None:
     assert set(ROLE_LABELS) == {"contador", "marketing", "administrador", "instalador", "cliente"}
     assert "team:manage" in ROLE_PERMISSIONS["administrador"]
     assert "receivables:write" in ROLE_PERMISSIONS["contador"]
+    assert {"sales:read", "sales:write"} <= ROLE_PERMISSIONS["administrador"]
+    assert {"sales:read", "sales:write"} <= ROLE_PERMISSIONS["contador"]
     assert "quotes:write" in ROLE_PERMISSIONS["marketing"]
     assert "inventory:write" in ROLE_PERMISSIONS["instalador"]
     assert "inventory:costs:read" not in ROLE_PERMISSIONS["instalador"]

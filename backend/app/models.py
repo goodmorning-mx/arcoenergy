@@ -97,6 +97,7 @@ class Activity(Base):
 class Installation(Base):
     __tablename__ = "ae_installations"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    folio: Mapped[str | None] = mapped_column(String(36), unique=True, nullable=True)
     customer_id: Mapped[str] = mapped_column(String(36), nullable=False)
     quote_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -104,6 +105,19 @@ class Installation(Base):
     status: Mapped[str] = mapped_column(String(40), default="assigned")
     checklist: Mapped[list] = mapped_column(JSON, default=list)
     notes: Mapped[str] = mapped_column(Text, default="")
+
+
+class Sale(Base):
+    __tablename__ = "ae_sales"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    folio: Mapped[str] = mapped_column(String(36), unique=True, nullable=False)
+    customer_id: Mapped[str] = mapped_column(ForeignKey("ae_customers.id"), nullable=False, index=True)
+    quote_id: Mapped[str] = mapped_column(ForeignKey("ae_quotes.id"), nullable=False, unique=True)
+    installation_id: Mapped[str] = mapped_column(ForeignKey("ae_installations.id"), nullable=False, unique=True)
+    sale_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(180), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
 class InventoryItem(Base):
