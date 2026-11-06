@@ -23,7 +23,7 @@ from gm_auth.models import memberships, users
 from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
-from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InventoryItem, InventoryMovement, ProjectExpense, Purchase, PurchaseLine, Quote, QuotePackage, Receivable, Sale, Supplier, SupplierPayment
+from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InventoryItem, InventoryMovement, ProjectExpense, Purchase, PurchaseLine, Quote, QuotePackage, Receivable, Sale, Supplier, SupplierPayment, WorkOrderMaterial
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 
 settings = get_settings()
@@ -709,17 +709,15 @@ def _sale_result(db: Session, sale: Sale):
     customer = db.get(Customer, sale.customer_id)
     installation = db.get(Installation, sale.installation_id)
     receivable = db.scalar(select(Receivable).where(Receivable.quote_id == sale.quote_id))
-    movements = db.scalars(select(InventoryMovement).where(
-        InventoryMovement.installation_id == sale.installation_id,
-        InventoryMovement.movement_type == "out",
-    ).order_by(InventoryMovement.created_at)).all()
+    materials = db.scalars(select(WorkOrderMaterial).where(WorkOrderMaterial.installation_id == sale.installation_id)).all()
+    item_names = {item.id: item.name for item in db.scalars(select(InventoryItem).where(InventoryItem.id.in_([line.item_id for line in materials]))).all()} if materials else {}
     return {
         **_serialize(sale),
         "quote": {"id": quote.id, "folio": quote.folio, "payment_method": quote.payment_method} if quote else None,
         "customer": {"id": customer.id, "name": customer.name, "phone": customer.phone, "email": customer.email, "city": customer.city} if customer else None,
         "installation": _serialize(installation),
         "receivable": _serialize(receivable),
-        "materials": [{**_serialize(movement), "item_name": (db.get(InventoryItem, movement.item_id).name if db.get(InventoryItem, movement.item_id) else "Artículo")} for movement in movements],
+        "materials": [{**_serialize(line), "item_name": item_names.get(line.item_id, "Artículo"), "quantity": line.requested_quantity, "remaining_quantity": max(Decimal(line.requested_quantity) - Decimal(line.consumed_quantity), Decimal("0"))} for line in materials],
     }
 
 
@@ -773,8 +771,12 @@ def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_depen
     for item_id, quantity in material_totals.items():
         item = db.scalar(select(InventoryItem).where(InventoryItem.id == item_id).with_for_update())
         if item is None: raise HTTPException(404, "Uno de los materiales de la orden ya no existe en el almacén.")
-        if Decimal(str(item.quantity)) < quantity:
-            raise HTTPException(409, f"Existencia insuficiente de {item.name}: disponibles {item.quantity}, requeridos {quantity}.")
+        reserved = db.scalar(select(func.coalesce(func.sum(WorkOrderMaterial.requested_quantity - WorkOrderMaterial.preissued_quantity), 0))
+            .join(Installation, Installation.id == WorkOrderMaterial.installation_id)
+            .where(WorkOrderMaterial.item_id == item_id, Installation.status != "closed")) or 0
+        available = Decimal(str(item.quantity)) - Decimal(str(reserved))
+        if available < quantity:
+            raise HTTPException(409, f"Existencia disponible insuficiente de {item.name}: disponibles {available}, requeridos {quantity}.")
         locked_items.append((item, quantity))
 
     if db.get_bind().dialect.name == "postgresql":
@@ -801,14 +803,13 @@ def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_depen
         sale_type=data.sale_type, total=quote.total, created_by=identity.email or "")
     db.add(sale); db.flush()
     for item, quantity in locked_items:
-        item.quantity = Decimal(str(item.quantity)) - quantity
-        db.add(InventoryMovement(
-            item_id=item.id,
+        db.add(WorkOrderMaterial(
             installation_id=installation.id,
-            quantity=quantity,
-            movement_type="out",
+            item_id=item.id,
+            requested_quantity=quantity,
+            preissued_quantity=Decimal("0"),
+            consumed_quantity=Decimal("0"),
             unit_cost=item.unit_cost,
-            reason=f"Orden {work_folio} · Venta {sale_folio}",
             created_by=identity.email or "",
         ))
     if data.sale_type == "cash" and account is not None:
@@ -829,7 +830,15 @@ def list_installations(identity: AuthIdentity = Depends(require_permissions(auth
     if "instalador" in identity.roles:
         query = query.where(Installation.lead_installer == identity.email)
     rows = db.scalars(query).all()
-    return [{**_serialize(row), "customer": _serialize(db.get(Customer, row.customer_id))} for row in rows]
+    result = []
+    for row in rows:
+        materials = db.scalars(select(WorkOrderMaterial).where(WorkOrderMaterial.installation_id == row.id)).all()
+        result.append({**_serialize(row), "customer": _serialize(db.get(Customer, row.customer_id)), "materials": [
+            {**_serialize(material), "item_name": (db.get(InventoryItem, material.item_id).name if db.get(InventoryItem, material.item_id) else "Artículo"),
+             "remaining_quantity": max(Decimal(material.requested_quantity) - Decimal(material.consumed_quantity), Decimal("0"))}
+            for material in materials
+        ]})
+    return result
 
 
 @router.get("/installers", dependencies=[Depends(require_permissions(auth_service, "installations:read"))])
@@ -845,7 +854,17 @@ def list_installers():
 
 @router.get("/inventory")
 def list_inventory(identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:read")), db: Session = Depends(get_db)):
-    rows = [_serialize(row) for row in db.scalars(select(InventoryItem).order_by(InventoryItem.name)).all()]
+    items = db.scalars(select(InventoryItem).order_by(InventoryItem.name)).all()
+    reserved = {row[0]: Decimal(row[1] or 0) for row in db.execute(
+        select(WorkOrderMaterial.item_id, func.sum(WorkOrderMaterial.requested_quantity - WorkOrderMaterial.preissued_quantity))
+        .join(Installation, Installation.id == WorkOrderMaterial.installation_id)
+        .where(Installation.status != "closed")
+        .group_by(WorkOrderMaterial.item_id)
+    ).all()}
+    rows = []
+    for row in items:
+        held = reserved.get(row.id, Decimal("0"))
+        rows.append({**_serialize(row), "reserved_quantity": held, "available_quantity": max(Decimal(row.quantity) - held, Decimal("0"))})
     if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
         for row in rows:
             row.pop("unit_cost", None)
@@ -868,11 +887,35 @@ def consume_inventory(data: StockInput, identity: AuthIdentity = Depends(require
         installation = db.get(Installation, data.installation_id) if data.installation_id else None
         if installation is None or installation.lead_installer.lower() != (identity.email or "").lower():
             raise HTTPException(403, "Solo puedes registrar consumos en una orden asignada a tu cuenta.")
-    item = db.get(InventoryItem, data.item_id)
+    item = db.scalar(select(InventoryItem).where(InventoryItem.id == data.item_id).with_for_update())
     if not item: raise HTTPException(404, "Artículo no encontrado.")
-    if float(item.quantity) < data.quantity: raise HTTPException(409, "Existencia insuficiente para este consumo.")
-    item.quantity = float(item.quantity) - data.quantity
-    movement = InventoryMovement(**data.model_dump(), movement_type="out", unit_cost=item.unit_cost, created_by=identity.email); db.add(movement); db.commit(); db.refresh(movement)
+    material = db.scalar(select(WorkOrderMaterial).where(
+        WorkOrderMaterial.installation_id == data.installation_id,
+        WorkOrderMaterial.item_id == data.item_id,
+    ).with_for_update()) if data.installation_id else None
+    if data.installation_id and material is None and db.scalar(select(func.count()).select_from(WorkOrderMaterial).where(WorkOrderMaterial.installation_id == data.installation_id)):
+        raise HTTPException(422, "Este material no está solicitado en la orden de trabajo.")
+    stock_out = Decimal(str(data.quantity))
+    if material:
+        remaining = Decimal(str(material.requested_quantity)) - Decimal(str(material.consumed_quantity))
+        if stock_out > remaining:
+            raise HTTPException(409, f"El consumo excede lo solicitado en la orden. Restante: {remaining}.")
+        from_reserved_issue = min(stock_out, max(Decimal(str(material.preissued_quantity)) - Decimal(str(material.consumed_quantity)), Decimal("0")))
+        stock_out -= from_reserved_issue
+        material.consumed_quantity = Decimal(str(material.consumed_quantity)) + Decimal(str(data.quantity))
+        material.preissued_quantity = Decimal(str(material.preissued_quantity)) + stock_out
+    if Decimal(str(item.quantity)) < stock_out:
+        raise HTTPException(409, "Existencia insuficiente para este consumo.")
+    item.quantity = Decimal(str(item.quantity)) - stock_out
+    movement = InventoryMovement(
+        item_id=data.item_id, installation_id=data.installation_id,
+        quantity=stock_out if stock_out > 0 else data.quantity,
+        movement_type="out" if stock_out > 0 else "consumption",
+        work_order_material_id=material.id if material else None,
+        unit_cost=item.unit_cost, reason=("Salida para consumo en orden de trabajo" if stock_out > 0 else "Consumo de material previamente apartado"),
+        created_by=identity.email or "",
+    )
+    db.add(movement); db.commit(); db.refresh(movement)
     serialized_item = _serialize(item)
     if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
         serialized_item.pop("unit_cost", None)
@@ -905,6 +948,17 @@ def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depend
     )) or 0
     if Decimal(str(returned)) + Decimal(str(data.quantity)) > Decimal(str(source.quantity)):
         raise HTTPException(409, "La cantidad devuelta excede el material retirado en esa salida.")
+    material = db.get(WorkOrderMaterial, source.work_order_material_id) if source.work_order_material_id else db.scalar(select(WorkOrderMaterial).where(
+        WorkOrderMaterial.installation_id == source.installation_id,
+        WorkOrderMaterial.item_id == source.item_id,
+    ))
+    if material:
+        if source.reason.startswith("Salida para consumo"):
+            returnable_planned = Decimal(str(material.consumed_quantity))
+        else:
+            returnable_planned = Decimal(str(material.preissued_quantity)) - Decimal(str(material.consumed_quantity))
+        if Decimal(str(data.quantity)) > returnable_planned:
+            raise HTTPException(409, "La devolución excede el material no consumido disponible en la orden.")
     item = db.get(InventoryItem, source.item_id)
     if item is None:
         raise HTTPException(409, "El artículo de la salida ya no existe en el catálogo.")
@@ -913,12 +967,17 @@ def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depend
         item_id=source.item_id,
         installation_id=source.installation_id,
         related_movement_id=source.id,
+        work_order_material_id=material.id if material else None,
         quantity=data.quantity,
         movement_type="return",
         unit_cost=source.unit_cost,
         reason=data.reason.strip() or "Devolución de material sobrante",
         created_by=identity.email or "",
     )
+    if material:
+        material.preissued_quantity = Decimal(str(material.preissued_quantity)) - Decimal(str(data.quantity))
+        if source.reason.startswith("Salida para consumo"):
+            material.consumed_quantity = Decimal(str(material.consumed_quantity)) - Decimal(str(data.quantity))
     db.add(movement); db.commit(); db.refresh(movement)
     serialized_item = _serialize(item)
     serialized_movement = _serialize(movement)
@@ -961,7 +1020,7 @@ def list_inventory_movements(
     result = []
     for movement, item_name, unit, returned_quantity in rows:
         line = _serialize(movement)
-        line.update({"item_name": item_name, "unit": unit, "signed_quantity": -float(movement.quantity) if movement.movement_type in {"out", "waste"} else float(movement.quantity)})
+        line.update({"item_name": item_name, "unit": unit, "signed_quantity": -float(movement.quantity) if movement.movement_type in {"out", "waste"} else (0.0 if movement.movement_type == "consumption" else float(movement.quantity))})
         if movement.movement_type == "out":
             line["returnable_quantity"] = max(0.0, float(movement.quantity) - float(returned_quantity or 0))
         if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):

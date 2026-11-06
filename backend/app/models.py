@@ -120,6 +120,20 @@ class Sale(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
+class WorkOrderMaterial(Base):
+    __tablename__ = "ae_work_order_materials"
+    __table_args__ = (UniqueConstraint("installation_id", "item_id", name="uq_ae_work_order_material_item"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    installation_id: Mapped[str] = mapped_column(ForeignKey("ae_installations.id", ondelete="CASCADE"), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey("ae_inventory.id"), nullable=False, index=True)
+    requested_quantity: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    preissued_quantity: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
+    consumed_quantity: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
+    unit_cost: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(180), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
 class InventoryItem(Base):
     __tablename__ = "ae_inventory"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -141,6 +155,7 @@ class InventoryMovement(Base):
     unit_cost: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     related_movement_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     purchase_line_id: Mapped[str | None] = mapped_column(ForeignKey("ae_purchase_lines.id"), nullable=True, index=True)
+    work_order_material_id: Mapped[str | None] = mapped_column(ForeignKey("ae_work_order_materials.id"), nullable=True, index=True)
     reason: Mapped[str] = mapped_column(String(180), default="")
     created_by: Mapped[str] = mapped_column(String(180), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
