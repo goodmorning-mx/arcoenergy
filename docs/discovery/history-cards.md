@@ -532,3 +532,12 @@ El CRM muestra artículos bajo el mínimo configurado, cuentas por cobrar vencid
 | Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
 | --- | --- | --- |
 | US-19 | Parcial funcional | Dashboard presenta alertas de inventario/cobranza y saldos por permiso. Pendientes indicadores y umbrales acordados, gráficas y flujo de efectivo por periodo validado. |
+
+## Iteración 13 — catálogo de materiales identificable (2026-11-06)
+
+El alta de inventario ahora conserva descripción, categoría, marca, modelo, proveedor habitual y un código QR/barras opcional único. El CRM permite capturar estos datos y consultarlos en el catálogo; el proveedor se selecciona del registro de proveedores. Esto prepara identificación futura desde cámara, pero no genera una etiqueta ni escanea códigos todavía.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-20 | Parcial funcional | Catálogo guarda y muestra categoría, marca, modelo, proveedor y barcode opcional; descripción separada del nombre. Pendientes ediciones completas, conversiones/unidades y generar/leer etiquetas QR o barras. |
+| US-28 | Pendiente | Se puede guardar un identificador escaneable por artículo, pero falta escáner de cámara e identificación del código. |
