@@ -541,3 +541,12 @@ El alta de inventario ahora conserva descripción, categoría, marca, modelo, pr
 | --- | --- | --- |
 | US-20 | Parcial funcional | Catálogo guarda y muestra categoría, marca, modelo, proveedor y barcode opcional; descripción separada del nombre. Pendientes ediciones completas, conversiones/unidades y generar/leer etiquetas QR o barras. |
 | US-28 | Pendiente | Se puede guardar un identificador escaneable por artículo, pero falta escáner de cámara e identificación del código. |
+
+## Iteración 14 — identificación de materiales desde PWA (2026-11-06)
+
+La pantalla móvil de inventario permite escanear QR y códigos de barras en navegadores que exponen `BarcodeDetector`, usando la cámara trasera cuando está disponible. La lectura busca el identificador único del catálogo y lleva visualmente al artículo con su disponibilidad actual. También permite introducir el código desde un lector conectado como teclado o capturarlo manualmente en navegadores incompatibles. La lectura necesita conexión para consultar el inventario; el modo sin conexión y la matriz de dispositivos/formatos probados siguen pendientes.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-20 | Parcial funcional | Código QR/barras opcional se conserva en el catálogo y se muestra en la vista de almacén móvil. Pendientes generación de etiquetas y confirmación de formatos/dispositivos. |
+| US-28 | Parcial funcional | PWA reconoce códigos asignados a artículos y localiza el registro; incluye búsqueda manual como alternativa. Pendientes modo sin conexión y validación en teléfonos y lectores usados por ArcoEnergy. |
