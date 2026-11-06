@@ -24,7 +24,7 @@ def upgrade() -> None:
         with op.batch_alter_table("ae_inventory_movements") as batch:
             batch.add_column(sa.Column("work_order_material_id", sa.String(36), nullable=True))
             batch.create_foreign_key(
-                "fk_ae_inventory_movements_work_order_material_id_ae_work_order_materials",
+                "fk_ae_inv_movements_work_order_material",
                 "ae_work_order_materials", ["work_order_material_id"], ["id"],
             )
             batch.create_index("ix_ae_inventory_movements_work_order_material_id", ["work_order_material_id"])
@@ -115,6 +115,6 @@ def downgrade() -> None:
     if "work_order_material_id" in columns:
         with op.batch_alter_table("ae_inventory_movements") as batch:
             batch.drop_index("ix_ae_inventory_movements_work_order_material_id")
-            batch.drop_constraint("fk_ae_inventory_movements_work_order_material_id_ae_work_order_materials", type_="foreignkey")
+            batch.drop_constraint("fk_ae_inv_movements_work_order_material", type_="foreignkey")
             batch.drop_column("work_order_material_id")
     op.drop_table("ae_work_order_materials")

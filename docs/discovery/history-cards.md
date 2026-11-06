@@ -572,3 +572,7 @@ Se agrega lectura asistida de CFDI XML 3.3/4.0 en MXN como propuesta revisable p
 | US-22 | Parcial funcional | CFDI 3.3/4.0 en MXN precarga proveedor/referencia/fecha y conceptos en CRM; revisión humana obligatoria. Imagen, OCR y otros formatos quedan pendientes. |
 | US-39 | Parcial funcional | CRM de escritorio autenticado con catálogo, clientes, ventas/órdenes, compras, finanzas, equipo y reportes ya existentes. El estado del despliegue es anterior a estos cambios; falta integrar y verificar DEV. |
 | US-40 | Parcial funcional | PWA autenticada con rutas de acceso y operaciones móviles. Falta completar flujos de campo y comprobar sesión/roles sobre el despliegue actualizado. |
+
+### Corrección necesaria para desplegar Iteración 16
+
+El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.
