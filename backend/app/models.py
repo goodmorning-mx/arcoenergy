@@ -45,7 +45,7 @@ class QuotePackage(Base):
     default_inverter: Mapped[str] = mapped_column(String(120), default="")
     payment_methods: Mapped[list] = mapped_column(JSON, default=lambda: ["Contado", "Financiamiento", "Plan 24"])
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    is_demo: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_by: Mapped[str] = mapped_column(String(180), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
@@ -68,7 +68,7 @@ class Quote(Base):
     inverter_cost: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     total: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     status: Mapped[str] = mapped_column(String(40), default="draft")
-    is_demo: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
@@ -162,3 +162,23 @@ class IntegrationStatus(Base):
     connected: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(80), default="pending_configuration")
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class HistoryCard(Base):
+    """Append-only record of a user story observation and its source."""
+    __tablename__ = "ae_history_cards"
+    __table_args__ = (UniqueConstraint("story_id", "version", name="uq_ae_history_card_version"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    story_id: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    iteration: Mapped[str] = mapped_column(String(80), nullable=False)
+    stakeholder: Mapped[str] = mapped_column(String(180), nullable=False)
+    source_literal: Mapped[str] = mapped_column(Text, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_reference: Mapped[str] = mapped_column(Text, default="")
+    normalized_story: Mapped[str] = mapped_column(Text, nullable=False)
+    acceptance_criteria: Mapped[list] = mapped_column(JSON, default=list)
+    unresolved_questions: Mapped[list] = mapped_column(JSON, default=list)
+    linked_cards: Mapped[list] = mapped_column(JSON, default=list)
+    recorded_by: Mapped[str] = mapped_column(String(180), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)

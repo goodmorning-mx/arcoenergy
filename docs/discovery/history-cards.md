@@ -1,7 +1,7 @@
 # Arco Energy — Registro de history user story cards
 
 - **Propósito:** conservar los hallazgos por stakeholder, fuente e iteración para poder revisar cómo evolucionan sin borrar lo que se dijo antes.
-- **Estado:** registro documental de descubrimiento; todavía no es una base de datos funcional ni un backlog aprobado.
+- **Estado:** registro de discovery con fuentes preservadas en documentación y carga inicial versionada a la base de datos de ArcoEnergy; los relatos reconstruidos siguen marcados como tales y no equivalen a backlog aprobado.
 - **MUST — preservación literal:** todo hallazgo debe guardar el relato original literal del stakeholder (o una referencia durable al artefacto original cuando no sea texto), separado de la user story normalizada. Nunca reemplazar, corregir ni parafrasear el original al actualizar una tarjeta.
 - **Cuidado con la reconstrucción:** US-1 a US-34 se reconstituyen aquí a partir de mensajes, fuentes y los resúmenes disponibles en la conversación. Los IDs US-15 a US-32 se asignan a capacidades explícitas del Word del contador para recuperar el rango histórico, pero no se cuenta con una exportación de las tarjetas originales que confirme su título/texto exactos. Deben validarse en una próxima iteración.
 - **Regla de evolución:** agregar nuevas versiones/iteraciones relacionadas; no reemplazar la fuente original. Las reglas contables pendientes no se deben tratar como comportamiento aprobado.
@@ -371,3 +371,49 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 - Los relatos textuales de Goito y del Word del contador ya están recuperados. Para US-1 a US-32 falta cotejar la asignación exacta de cada fragmento a los IDs históricos; el texto de las cards es una síntesis derivada, no una cita.
 - Para US-33 y US-34 hay transcripciones ASR de los audios, no transcripción humana validada. Los OGG originales se identifican por hash y ruta local, sin subir audio de voz al repositorio.
 - No se persisten nombres, teléfonos, direcciones, INE ni archivos de clientes reales dentro de este registro.
+
+## Iteración 2 — producto autenticado y operación de campo (2026-11-06)
+
+### Cambios incorporados a DEV en esta iteración
+
+- CRM y PWA pasan a login separado y protegen el acceso; dejan de renderizar personas, cotizaciones, instalaciones y saldos ficticios. No se persisten acciones localmente como si fueran reales.
+- El backend deja de insertar paquetes e inventario de ejemplo al iniciar. Una migración elimina solo los 17 paquetes `is_demo` identificados y artículos de semilla con costo/existencia/mínimo cero y sin movimientos.
+- CRM puede crear clientes, configurar paquetes comerciales, asignar órdenes a cuentas activas con rol de instalador y registrar artículos/entradas de almacén.
+- PWA consulta catálogo, órdenes e inventario del API; permite registrar consumo y gasto enlazados a una orden asignada.
+- Se crea el modelo append-only `ae_history_cards`, una migración que carga las 42 tarjetas recuperadas/reconstruidas con sus fuentes y una pantalla administrativa para añadir versiones sin sobrescribir las anteriores.
+
+### Estado por user story card al cierre de esta iteración
+
+| Tarjetas | Estado | Alcance pendiente principal |
+| --- | --- | --- |
+| US-1 | Parcial funcional | Configurar paquetes reales y validar PDF con el cliente. |
+| US-2 | Pendiente | Recibo PDF, OCR, fórmula y aprobación humana. |
+| US-3 | Parcial | PDF foliado y enlace WhatsApp; Drive y envío/adjunto automatizado no están configurados. |
+| US-4 | Funcional básico | Agregar alertas/notificaciones y responsable asignado. |
+| US-5–6 | Pendientes | Plantillas legales, carga segura de INE, consentimiento, firma y proveedor biométrico. |
+| US-7 | Parcial | Asignación y visibilidad para instalador; falta notificación push/SMS/WhatsApp. |
+| US-8 | Parcial | Consulta de existencias reales; falta reservar/material requerido por orden y alerta de faltantes. |
+| US-9–10 | Funcionales básicos | Consumo y gasto enlazados a orden; faltan evidencia/recibo, revisión y modo sin conexión. |
+| US-11 | Parcial | API de cuentas por cobrar y pagos; faltan agenda, avisos de pago y plantillas WhatsApp listas. |
+| US-12 | Parcial | Catálogo, existencia y costo unitario; falta costo real por movimiento/proyecto. |
+| US-13 | Pendiente | Google Drive y políticas de carpetas/permisos. |
+| US-14 | Funcional en API y portales | Completar matriz de acceso por cada entidad/campo y pruebas de aislamiento. |
+| US-15–19 | Pendientes/parciales | Contabilidad integrada, cuentas de efectivo/banco, gastos generales y alertas; el resumen comercial actual no es estado financiero. |
+| US-20 | Parcial | Artículos con descripción, unidad, existencia, mínimo y costo; faltan categoría, marca, modelo, proveedor y QR. |
+| US-21–22 | Pendientes/parciales | Entrada individual de almacén disponible; faltan compra multirenglón, proveedor, factura/XML y OCR. |
+| US-23 | Pendiente | Devolución trazable de sobrantes y merma. |
+| US-24 | Parcial | Consumo por orden; falta orden de materiales completa y flujo de autorización. |
+| US-25 | Pendiente | Lectura asistida de orden/solicitud escaneada. |
+| US-26 | Parcial | Se puede identificar stock bajo; falta alerta activa. |
+| US-27–29 | Pendientes | Kardex consultable, cámara QR/código de barras e informes de operación. |
+| US-30–31 | Pendientes | Proveedores, compras, saldos y pagos relacionados. |
+| US-32 | Parcial | Orden enlazada con cliente y cotización; falta entidad proyecto y folio comercial acordado. |
+| US-33–36 | Pendientes | Libro de movimientos vinculados y correcciones reversibles; no se inventó contabilidad sin validar sus reglas. |
+| US-37 | Pendiente | Comparación con cada pantalla del sistema legado; falta acceso al entorno de César. |
+| US-38 | Pendiente | Estado de resultados con fórmula compartida; definir devoluciones, impuestos, costo y corte contable con Mario/Josué. |
+| US-39 | Parcial funcional | CRM de escritorio autenticado y flujos comerciales iniciales; falta el resto administrativo y financiero. |
+| US-40 | Parcial funcional | PWA autenticada con consulta de órdenes/inventario y captura de consumos/gastos; faltan flujos de cierre y trabajo offline. |
+| US-41 | Parcial funcional | Web pública y agente con catálogo aprobado; faltan credenciales y validación de experiencia de venta completa. |
+| US-42 | Funcional para registro/versiones | 42 tarjetas iniciales persistidas con fuente, vista administrativa e inserción append-only; cotejar reconstrucciones e incorporar futuras iteraciones. |
+
+Las funciones marcadas como pendientes se mantienen visibles en el backlog. Los bloqueos de esta iteración no autorizan inventar precios, documentos legales, tratamiento biométrico, reglas contables ni credenciales de servicios externos.
