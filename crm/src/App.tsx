@@ -128,7 +128,7 @@ export default function App() {
     } finally { setLoading(false); }
   }, [accessToken, can]);
 
-  useEffect(() => { const timer = window.setTimeout(() => setAuthResolved(true), 80); return () => window.clearTimeout(timer); }, []);
+  useEffect(() => { const timer = window.setTimeout(() => setAuthResolved(true), 0); return () => window.clearTimeout(timer); }, []);
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => { if (allowedViews.length && !allowedViews.includes(view)) setView(allowedViews[0]); }, [allowedViews, view]);
 
@@ -354,9 +354,9 @@ export default function App() {
   }
 
   if (!authResolved) return <div className="login-screen"><section className="login-card">Cargando sesión…</section></div>;
-  if (window.location.pathname.replace(/\/$/, '').endsWith('/login')) { if (identity) { window.location.replace('/crm/'); return null; } return <LoginScreen />; }
+  if (['/login', '/crm/login'].includes(window.location.pathname.replace(/\/$/, ''))) { if (identity) { window.location.replace(clientAccount ? '/app/' : '/crm/'); return null; } return <LoginScreen />; }
   if (!identity || !accessToken) { window.location.replace('/crm/login'); return null; }
-  if (clientAccount) return <div className="client-redirect"><div className="brand-mark">A</div><p>Tu portal de cliente está en la aplicación móvil.</p><a href="/app/" className="button button-primary">Abrir mi portal →</a><button className="text-button" onClick={() => void logout()}>Cerrar sesión</button></div>;
+  if (clientAccount) { window.location.replace('/app/'); return null; }
 
   const nav: Array<[View, string, string]> = [['inicio', '◫', 'Resumen'], ['clientes', '♙', 'Clientes'], ['cotizaciones', '▤', 'Cotizaciones'], ...(can('sales:read') ? [['ventas', '▣', 'Ventas / OT']] as Array<[View, string, string]> : []), ['seguimientos', '◷', 'Seguimientos'], ...(can('installations:read') ? [['instalaciones', '⌂', 'Instalaciones']] as Array<[View, string, string]> : []), ...(can('inventory:read') ? [['inventario', '▦', 'Inventario']] as Array<[View, string, string]> : []), ...(can('expenses:read') ? [['gastos', '$', 'Gastos']] as Array<[View, string, string]> : []), ...(can('receivables:read') ? [['cobranza', '↙', 'Cobranza']] as Array<[View, string, string]> : []), ...(can('accounts:read') ? [['cuentas', '▤', 'Caja / bancos']] as Array<[View, string, string]> : []), ...(can('suppliers:read') ? [['proveedores', '♧', 'Proveedores']] as Array<[View, string, string]> : []), ...(can('purchases:read') ? [['compras', '▤', 'Compras / CxP']] as Array<[View, string, string]> : []), ...(can('reports:read') ? [['reportes', '▥', 'Reportes']] as Array<[View, string, string]> : []), ...(can('team:manage') ? [['catalogo', '⊞', 'Catálogo'], ['equipo', '♧', 'Equipo'], ['historial', '↺', 'History cards']] as Array<[View, string, string]> : [])];
   const visibleCustomers = customers.filter(item => `${item.name} ${item.city} ${item.email} ${item.phone}`.toLowerCase().includes(search.toLowerCase()));

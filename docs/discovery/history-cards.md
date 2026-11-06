@@ -497,3 +497,14 @@ La captura de cada consumo crea un evento fechado de costo sin producir otro des
 | US-32 | Parcial | Reporte agrupa por folio de orden/proyecto y periodo mensual. Falta identidad de proyecto independiente y clave aprobada. |
 | US-35 | Parcial | Reporte enlaza ventas, consumo material fechado y gastos por proyecto. Doble partida, devoluciones/bonificaciones de venta, impuestos y conciliación siguen pendientes. |
 | US-38 | Parcial | CRM muestra ventas − costo consumido − gastos por mes o proyecto, con faltantes de costo visibles. Falta añadir devoluciones/bonificaciones, validar reglas contables y entregar estado formal. |
+
+## Iteración 9 — acceso de producto y avance de órdenes (2026-11-06)
+
+CRM y PWA conservan accesos separados en `/crm/login` y `/app/login`; `/login` lleva al CRM. Las cuentas cliente se dirigen al portal PWA. Los portales privados exigen autenticación y no crean ni muestran usuarios/clientes/cotizaciones/inventario ficticios. Las rutas se sirven con fallback de aplicación para abrir enlaces directos. La PWA ahora permite actualizar checklist persistido de cada orden y registra cada cambio en la bitácora. El instalador solo puede cambiar órdenes asignadas a su correo. Los avisos locales se reciben mientras la PWA está abierta; notificaciones de fondo requieren configurar un proveedor push. El catálogo solo permite generar cotizaciones después de cargar y aprobar precios reales.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-7 | Parcial | La asignación y checklist de órdenes se muestran y actualizan desde PWA; el cambio deja bitácora. Pendiente push cuando la app está cerrada y confirmación de cuadrilla. |
+| US-14 | Parcial funcional | Login CRM/PWA separado y acceso de cliente redirigido a PWA; completar revisión de permisos por entidad/campo. |
+| US-39 | Parcial funcional | CRM y PWA sin datos de muestra y rutas privadas tras login; hace falta completar el resto administrativo/financiero y configurar catálogo aprobado. |
+| US-40 | Parcial funcional | PWA consulta órdenes asignadas, actualiza checklist con autorización de API y activa avisos locales con permiso del navegador. Offline para escritura y push de fondo siguen pendientes. |

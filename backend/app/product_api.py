@@ -287,6 +287,15 @@ class InstallationInput(BaseModel):
     notes: str = ""
 
 
+class InstallationChecklistItemInput(BaseModel):
+    task: str = Field(min_length=2, max_length=120)
+    done: bool
+
+
+class InstallationChecklistInput(BaseModel):
+    checklist: list[InstallationChecklistItemInput] = Field(min_length=1, max_length=20)
+
+
 class SaleMaterialInput(BaseModel):
     item_id: str
     quantity: Decimal = Field(gt=0)
@@ -839,6 +848,42 @@ def list_installations(identity: AuthIdentity = Depends(require_permissions(auth
             for material in materials
         ]})
     return result
+
+
+@router.patch("/installations/{installation_id}/checklist")
+def update_installation_checklist(
+    installation_id: str,
+    data: InstallationChecklistInput,
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "installations:read")),
+    db: Session = Depends(get_db),
+):
+    installation = db.scalar(select(Installation).where(Installation.id == installation_id).with_for_update())
+    if installation is None:
+        raise HTTPException(404, "Orden de trabajo no encontrada.")
+    if "instalador" in identity.roles:
+        if installation.lead_installer.strip().lower() != (identity.email or "").strip().lower():
+            raise HTTPException(403, "Solo puedes actualizar la lista de una orden asignada a tu cuenta.")
+    elif "installations:write" not in identity.permissions:
+        raise HTTPException(403, "No tienes permiso para actualizar órdenes de trabajo.")
+    current = installation.checklist or []
+    incoming = [item.model_dump() for item in data.checklist]
+    incoming_names = [item["task"] for item in incoming]
+    existing_names = [item.get("task", "") for item in current]
+    if len(set(incoming_names)) != len(incoming_names) or set(incoming_names) != set(existing_names):
+        raise HTTPException(422, "Actualiza únicamente las tareas que ya pertenecen a esta orden.")
+    states = {item["task"]: item["done"] for item in incoming}
+    updated = [{**item, "done": states[item["task"]]} for item in current]
+    changed = [(old, new) for old, new in zip(current, updated) if old.get("done") != new["done"]]
+    installation.checklist = updated
+    for old, new in changed:
+        db.add(Activity(
+            customer_id=installation.customer_id,
+            kind="orden de trabajo",
+            note=f"{installation.folio or 'Orden'} · {new['task']}: {'completada' if new['done'] else 'reabierta'}",
+            created_by=identity.email or "",
+        ))
+    db.commit(); db.refresh(installation)
+    return _serialize(installation)
 
 
 @router.get("/installers", dependencies=[Depends(require_permissions(auth_service, "installations:read"))])

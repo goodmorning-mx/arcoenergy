@@ -4,6 +4,15 @@ const APP_SHELL = ['/app/'];
 self.addEventListener('install', (event) => event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting())));
 self.addEventListener('activate', (event) => event.waitUntil(Promise.all([self.clients.claim(), caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith('arcoenergy-shell-') && key !== CACHE_NAME).map((key) => caches.delete(key))))])));
 
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+    const appClient = clients.find((client) => new URL(client.url).pathname.startsWith('/app/'));
+    if (appClient) return appClient.focus();
+    return self.clients.openWindow(event.notification.data?.url || '/app/');
+  }));
+});
+
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
