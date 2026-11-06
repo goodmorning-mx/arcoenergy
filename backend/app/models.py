@@ -28,7 +28,26 @@ class Customer(Base):
     city: Mapped[str] = mapped_column(String(120), default="")
     address: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(40), default="lead")
+    source: Mapped[str] = mapped_column(String(40), default="crm")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class QuotePackage(Base):
+    __tablename__ = "ae_quote_packages"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    panel_count: Mapped[int] = mapped_column(Integer, unique=True, nullable=False)
+    panel_brand: Mapped[str] = mapped_column(String(100), default="")
+    panel_watts: Mapped[int] = mapped_column(Integer, default=0)
+    panel_unit_price: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    structure_name: Mapped[str] = mapped_column(String(120), default="Estructura")
+    structure_price: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    inverter_options: Mapped[list] = mapped_column(JSON, default=list)
+    default_inverter: Mapped[str] = mapped_column(String(120), default="")
+    payment_methods: Mapped[list] = mapped_column(JSON, default=lambda: ["Contado", "Financiamiento", "Plan 24"])
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_by: Mapped[str] = mapped_column(String(180), default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
 
 class Quote(Base):
@@ -36,16 +55,20 @@ class Quote(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     folio: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     customer_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    installation_address: Mapped[str] = mapped_column(Text, default="")
+    installation_city: Mapped[str] = mapped_column(String(120), default="")
     panel_count: Mapped[int] = mapped_column(Integer, nullable=False)
     panel_brand: Mapped[str] = mapped_column(String(100), default="Jinko")
     panel_watts: Mapped[int] = mapped_column(Integer, default=610)
+    structure_name: Mapped[str] = mapped_column(String(120), default="Estructura")
     inverter: Mapped[str] = mapped_column(String(120), default="Growatt 5 kW")
     payment_method: Mapped[str] = mapped_column(String(60), default="Contado")
     panel_subtotal: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     structure_cost: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     inverter_cost: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     total: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
-    status: Mapped[str] = mapped_column(String(40), default="sent")
+    status: Mapped[str] = mapped_column(String(40), default="draft")
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 

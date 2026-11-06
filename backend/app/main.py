@@ -7,7 +7,7 @@ from gm_auth import create_auth_router
 from app.config import get_settings
 from app.auth import auth_service, bootstrap_admin
 from app.product_api import router as product_router
-from app.seed import seed_inventory
+from app.seed import seed_inventory, seed_quote_catalog
 
 settings = get_settings()
 
@@ -15,6 +15,7 @@ settings = get_settings()
 async def lifespan(_: FastAPI):
     bootstrap_admin()
     seed_inventory()
+    seed_quote_catalog()
     yield
 
 

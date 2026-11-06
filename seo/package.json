@@ -3,13 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "postinstall": "npm --prefix node_modules/@goodmorning/gm-agent/frontend run build",
     "dev": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start --hostname 0.0.0.0",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "next": "16.3.5",
+    "@goodmorning/gm-agent": "https://github.com/goodmorning-mx/gm-agent/archive/06500d8c935ea2cbe5a146b4703f06e3fedceb7f.tar.gz",
+    "next": "^16.4.5",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },
