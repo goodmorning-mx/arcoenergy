@@ -1631,6 +1631,100 @@ def profitability_report(
     }
 
 
+@router.get("/reports/operations")
+def operations_report(
+    from_date: date | None = None,
+    to_date: date | None = None,
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "reports:read")),
+    db: Session = Depends(get_db),
+):
+    """Summarize current stock and recorded operational activity without inferred accounting rules."""
+    if from_date and to_date and from_date > to_date:
+        raise HTTPException(422, "La fecha inicial debe ser anterior a la fecha final.")
+    start_at = datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc) if from_date else None
+    end_at = datetime.combine(to_date + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc) if to_date else None
+
+    reserved = {row[0]: Decimal(row[1] or 0) for row in db.execute(
+        select(WorkOrderMaterial.item_id, func.sum(WorkOrderMaterial.requested_quantity - WorkOrderMaterial.preissued_quantity))
+        .join(Installation, Installation.id == WorkOrderMaterial.installation_id)
+        .where(Installation.status != "closed")
+        .group_by(WorkOrderMaterial.item_id)
+    ).all()}
+    can_read_costs = bool({"inventory:costs:read", "inventory:manage"} & identity.permissions)
+    stock_rows = []
+    stock_value = Decimal("0")
+    for item in db.scalars(select(InventoryItem).order_by(InventoryItem.name)).all():
+        held = reserved.get(item.id, Decimal("0"))
+        available = max(Decimal(item.quantity) - held, Decimal("0"))
+        stock_rows.append({
+            "id": item.id, "name": item.name, "category": item.category, "unit": item.unit,
+            "quantity": item.quantity, "reserved_quantity": held, "available_quantity": available,
+            "minimum_quantity": item.minimum_quantity, "low_stock": item.minimum_quantity > 0 and available <= Decimal(item.minimum_quantity),
+            **({"unit_cost": item.unit_cost} if can_read_costs else {}),
+        })
+        if can_read_costs:
+            stock_value += Decimal(item.quantity) * Decimal(item.unit_cost or 0)
+
+    movement_query = select(InventoryMovement, InventoryItem.name, InventoryItem.unit, Installation.folio).join(
+        InventoryItem, InventoryItem.id == InventoryMovement.item_id
+    ).outerjoin(Installation, Installation.id == InventoryMovement.installation_id)
+    if start_at:
+        movement_query = movement_query.where(InventoryMovement.created_at >= start_at)
+    if end_at:
+        movement_query = movement_query.where(InventoryMovement.created_at < end_at)
+    movement_rows = db.execute(movement_query.order_by(InventoryMovement.created_at.desc(), InventoryMovement.id).limit(501)).all()
+    truncated = len(movement_rows) > 500
+    movements = []
+    movement_totals: dict[str, Decimal] = {}
+    for movement, item_name, unit, folio in movement_rows[:500]:
+        movement_totals[movement.movement_type] = movement_totals.get(movement.movement_type, Decimal("0")) + Decimal(movement.quantity)
+        row = {
+            "id": movement.id, "created_at": movement.created_at, "item_name": item_name,
+            "unit": unit, "movement_type": movement.movement_type, "quantity": movement.quantity,
+            "installation_folio": folio, "reason": movement.reason, "created_by": movement.created_by,
+        }
+        if can_read_costs:
+            row["unit_cost"] = movement.unit_cost
+        movements.append(row)
+
+    def status_counts(rows):
+        counts: dict[str, int] = {}
+        for row in rows:
+            counts[row.status or "sin_estatus"] = counts.get(row.status or "sin_estatus", 0) + 1
+        return [{"status": status, "count": count} for status, count in sorted(counts.items())]
+
+    customers = db.scalars(select(Customer)).all()
+    suppliers = db.scalars(select(Supplier)).all()
+    installations = db.scalars(select(Installation)).all()
+    expense_query = select(ProjectExpense)
+    if from_date:
+        expense_query = expense_query.where(ProjectExpense.occurred_on >= from_date)
+    if to_date:
+        expense_query = expense_query.where(ProjectExpense.occurred_on <= to_date)
+    expenses = db.scalars(expense_query.order_by(ProjectExpense.occurred_on.desc(), ProjectExpense.created_at.desc())).all()
+    expense_totals: dict[str, Decimal] = {}
+    for expense in expenses:
+        expense_totals[expense.category] = expense_totals.get(expense.category, Decimal("0")) + Decimal(expense.amount)
+
+    return {
+        "period": {"from_date": from_date, "to_date": to_date},
+        "basis": "Existencia y reservas actuales; movimientos de almacén por fecha de registro; gastos por fecha capturada. Los totales no son una póliza contable.",
+        "stock": {
+            "items": stock_rows, "item_count": len(stock_rows),
+            "low_stock_count": sum(1 for row in stock_rows if row["low_stock"]),
+            "estimated_value": stock_value if can_read_costs else None,
+        },
+        "movements": {
+            "items": movements, "truncated": truncated,
+            "totals_by_type": [{"movement_type": key, "quantity": quantity} for key, quantity in sorted(movement_totals.items())],
+        },
+        "customers_by_status": status_counts(customers),
+        "suppliers": {"total": len(suppliers), "active": sum(1 for supplier in suppliers if supplier.active), "inactive": sum(1 for supplier in suppliers if not supplier.active)},
+        "installations_by_status": status_counts(installations),
+        "expenses": {"total": sum(expense_totals.values(), Decimal("0")), "by_category": [{"category": key, "amount": amount} for key, amount in sorted(expense_totals.items())], "count": len(expenses)},
+    }
+
+
 @router.get("/dashboard")
 def dashboard(identity: AuthIdentity = Depends(require_permissions(auth_service, "customers:read")), db: Session = Depends(get_db)):
     active_quotes = Quote.status.in_(["draft", "sent"])

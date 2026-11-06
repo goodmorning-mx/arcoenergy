@@ -550,3 +550,13 @@ La pantalla móvil de inventario permite escanear QR y códigos de barras en nav
 | --- | --- | --- |
 | US-20 | Parcial funcional | Código QR/barras opcional se conserva en el catálogo y se muestra en la vista de almacén móvil. Pendientes generación de etiquetas y confirmación de formatos/dispositivos. |
 | US-28 | Parcial funcional | PWA reconoce códigos asignados a artículos y localiza el registro; incluye búsqueda manual como alternativa. Pendientes modo sin conexión y validación en teléfonos y lectores usados por ArcoEnergy. |
+
+## Iteración 15 — reportes operativos de inventario y actividad (2026-11-06)
+
+El CRM incorpora un resumen filtrable por periodo con existencia y disponibilidad actuales, alerta de artículos bajo mínimo, movimientos del kardex, estado de clientes, proveedores y órdenes, y gastos agrupados por categoría. Los movimientos se pueden descargar en CSV (límite visible de 500 registros). El valor de existencias y los costos aparecen solo con permiso de lectura de costos. El reporte describe registros operativos y no asigna tratamiento contable nuevo; fórmulas oficiales y periodos de corte requieren validación del contador.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-19 | Parcial funcional | Dashboard previo más resumen de movimientos por periodo, estado de clientes/proveedores/órdenes y gastos por categoría. Falta validar umbrales y flujo de efectivo con contador. |
+| US-27 | Parcial funcional | Kardex con filtro de fecha y descarga CSV desde reportes; se limita a 500 movimientos por consulta. Falta paginación y mayor volumen. |
+| US-29 | Parcial funcional | CRM ofrece stock disponible, movimientos, estatus operativos y gastos agrupados con filtros de fecha y CSV. Faltan reportes dedicados por todas las entidades y validación de fórmulas del contador. |
