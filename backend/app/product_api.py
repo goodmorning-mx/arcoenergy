@@ -317,6 +317,7 @@ class InventoryItemInput(BaseModel):
 
 class ExpenseInput(BaseModel):
     installation_id: str | None = None
+    account_id: str | None = None
     category: str = "Viáticos"
     description: str = Field(min_length=2, max_length=240)
     amount: Decimal = Field(gt=0)
@@ -826,8 +827,23 @@ def add_expense(data: ExpenseInput, identity: AuthIdentity = Depends(require_per
     if data.installation_id and not installation: raise HTTPException(404, "Instalación no encontrada.")
     if "instalador" in identity.roles and (installation is None or installation.lead_installer.lower() != (identity.email or "").lower()):
         raise HTTPException(403, "Selecciona una orden asignada a tu cuenta para registrar gastos de campo.")
-    row = ProjectExpense(**data.model_dump(), created_by=identity.email); db.add(row); db.commit(); db.refresh(row)
-    return _serialize(row)
+    if "instalador" not in identity.roles and not data.account_id:
+        raise HTTPException(422, "Selecciona la cuenta de caja o banco que pagó este gasto.")
+    account = None
+    if data.account_id:
+        account = db.scalar(select(FinancialAccount).where(FinancialAccount.id == data.account_id, FinancialAccount.active.is_(True)).with_for_update())
+        if account is None: raise HTTPException(404, "Selecciona una cuenta de caja o banco activa.")
+    row = ProjectExpense(**data.model_dump(), created_by=identity.email); db.add(row); db.flush()
+    if account:
+        movement = CashMovement(account_id=account.id, direction="out", amount=data.amount,
+            category=f"Gasto · {data.category}", description=data.description,
+            occurred_on=data.occurred_on, source_type="expense", source_id=row.id,
+            created_by=identity.email or "")
+        db.add(movement)
+    db.commit(); db.refresh(row)
+    result = _serialize(row)
+    result["account_name"] = account.name if account else None
+    return result
 
 
 @router.get("/expenses", dependencies=[Depends(require_permissions(auth_service, "expenses:read"))])
@@ -836,6 +852,8 @@ def list_expenses(db: Session = Depends(get_db)):
     result = []
     for row in rows:
         item = _serialize(row)
+        account = db.get(FinancialAccount, row.account_id) if row.account_id else None
+        item["account_name"] = account.name if account else None
         installation = db.get(Installation, row.installation_id) if row.installation_id else None
         customer = db.get(Customer, installation.customer_id) if installation else None
         item["project_customer"] = customer.name if customer else "Gasto operativo"

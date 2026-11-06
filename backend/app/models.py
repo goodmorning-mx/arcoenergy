@@ -141,6 +141,7 @@ class ProjectExpense(Base):
     amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     occurred_on: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
     receipt_url: Mapped[str] = mapped_column(Text, default="")
+    account_id: Mapped[str | None] = mapped_column(ForeignKey("ae_financial_accounts.id"), nullable=True, index=True)
     created_by: Mapped[str] = mapped_column(String(180), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
