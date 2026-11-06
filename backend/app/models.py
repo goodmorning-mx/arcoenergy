@@ -126,6 +126,7 @@ class InventoryMovement(Base):
     movement_type: Mapped[str] = mapped_column(String(20), default="in", nullable=False)
     unit_cost: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     related_movement_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    purchase_line_id: Mapped[str | None] = mapped_column(ForeignKey("ae_purchase_lines.id"), nullable=True, index=True)
     reason: Mapped[str] = mapped_column(String(180), default="")
     created_by: Mapped[str] = mapped_column(String(180), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
@@ -183,6 +184,45 @@ class Supplier(Base):
     payment_terms: Mapped[str] = mapped_column(String(20), default="cash", nullable=False)
     credit_days: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(180), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class Purchase(Base):
+    __tablename__ = "ae_purchases"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    folio: Mapped[str] = mapped_column(String(36), unique=True, nullable=False)
+    supplier_id: Mapped[str] = mapped_column(ForeignKey("ae_suppliers.id"), nullable=False, index=True)
+    invoice_number: Mapped[str] = mapped_column(String(100), default="")
+    payment_terms: Mapped[str] = mapped_column(String(20), nullable=False)
+    purchase_date: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    paid_amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="open", nullable=False)
+    created_by: Mapped[str] = mapped_column(String(180), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class PurchaseLine(Base):
+    __tablename__ = "ae_purchase_lines"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    purchase_id: Mapped[str] = mapped_column(ForeignKey("ae_purchases.id", ondelete="CASCADE"), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey("ae_inventory.id"), nullable=False, index=True)
+    quantity: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    unit_cost: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    line_total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+
+
+class SupplierPayment(Base):
+    __tablename__ = "ae_supplier_payments"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    purchase_id: Mapped[str] = mapped_column(ForeignKey("ae_purchases.id"), nullable=False, index=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("ae_financial_accounts.id"), nullable=False, index=True)
+    cash_movement_id: Mapped[str] = mapped_column(ForeignKey("ae_cash_movements.id"), unique=True, nullable=False)
+    amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    paid_on: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
+    reference: Mapped[str] = mapped_column(String(180), default="")
     created_by: Mapped[str] = mapped_column(String(180), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 

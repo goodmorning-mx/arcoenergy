@@ -9,7 +9,7 @@ type StockMovement = { id:string; item_id:string; item_name:string; quantity:num
 type QuotePackage = { panel_count:number; panel_brand:string; panel_watts:number; panel_unit_price:number; structure_name:string; structure_price:number; inverter_options:Array<{name:string;price_mxn:number}>; default_inverter:string; payment_methods:string[]; enabled:boolean; pricing_approved:boolean };
 type Installation = { id:string; scheduled_at:string|null; lead_installer:string; status:string; notes:string; customer?:{name:string;city:string}; };
 type PortalData = { customers:Array<{id:string;name:string;city:string;status:string}>; quotes:Array<{id:string;folio:string;panel_count:number;panel_brand:string;panel_watts:number;inverter:string;total:number;status:string;created_at:string}>; installations:Array<{id:string;scheduled_at:string|null;status:string;checklist:Array<{task:string;done:boolean}>}>; payments:Array<{installment_number:number;due_date:string;amount:number;paid_amount:number;balance:number;status:string;payment_method:string}> };
-const money = (n: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
+const money = (n: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 2 }).format(n);
 
 function App() {
   const [screen, setScreen] = useState<Screen>('inicio');

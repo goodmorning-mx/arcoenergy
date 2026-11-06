@@ -23,7 +23,7 @@ from gm_auth.models import memberships, users
 from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
-from app.models import Activity, CashMovement, Customer, FinancialAccount, FollowUp, HistoryCard, Installation, InventoryItem, InventoryMovement, ProjectExpense, Quote, QuotePackage, Receivable, Supplier
+from app.models import Activity, CashMovement, Customer, FinancialAccount, FollowUp, HistoryCard, Installation, InventoryItem, InventoryMovement, ProjectExpense, Purchase, PurchaseLine, Quote, QuotePackage, Receivable, Supplier, SupplierPayment
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 
 settings = get_settings()
@@ -354,6 +354,31 @@ class SupplierInput(BaseModel):
         if info.data.get("payment_terms") == "credit" and value < 1:
             raise ValueError("Indica los días de crédito acordados con el proveedor.")
         return value
+
+
+class PurchaseLineInput(BaseModel):
+    item_id: str
+    quantity: Decimal = Field(gt=0)
+    unit_cost: Decimal = Field(gt=0)
+
+
+class PurchaseInput(BaseModel):
+    supplier_id: str
+    invoice_number: str = Field(default="", max_length=100)
+    payment_terms: Literal["cash", "credit"]
+    purchase_date: date = Field(default_factory=date.today)
+    due_date: date | None = None
+    lines: list[PurchaseLineInput] = Field(min_length=1, max_length=100)
+    initial_payment: Decimal = Field(default=Decimal("0"), ge=0)
+    payment_account_id: str | None = None
+    payment_reference: str = Field(default="", max_length=180)
+
+
+class SupplierPaymentInput(BaseModel):
+    amount: Decimal = Field(gt=0)
+    account_id: str
+    paid_on: date = Field(default_factory=date.today)
+    reference: str = Field(default="", max_length=180)
 
 
 class ReceivableInput(BaseModel):
@@ -890,7 +915,8 @@ def reverse_cash_movement(movement_id: str, identity: AuthIdentity = Depends(ide
 
 @router.get("/suppliers", dependencies=[Depends(require_permissions(auth_service, "suppliers:read"))])
 def list_suppliers(db: Session = Depends(get_db)):
-    return [{**_serialize(row), "current_balance": Decimal("0")} for row in db.scalars(select(Supplier).order_by(Supplier.name)).all()]
+    rows = db.scalars(select(Supplier).order_by(Supplier.name)).all()
+    return [{**_serialize(row), "current_balance": Decimal(db.scalar(select(func.coalesce(func.sum(Purchase.total - Purchase.paid_amount), 0)).where(Purchase.supplier_id == row.id)) or 0)} for row in rows]
 
 
 @router.post("/suppliers", status_code=201, dependencies=[Depends(require_permissions(auth_service, "suppliers:manage"))])
@@ -904,6 +930,151 @@ def create_supplier(data: SupplierInput, identity: AuthIdentity = Depends(identi
     row = Supplier(**values, created_by=identity.email or "")
     db.add(row); db.commit(); db.refresh(row)
     return {**_serialize(row), "current_balance": Decimal("0")}
+
+
+def _purchase_result(db: Session, purchase: Purchase):
+    supplier = db.get(Supplier, purchase.supplier_id)
+    lines = db.scalars(select(PurchaseLine).where(PurchaseLine.purchase_id == purchase.id)).all()
+    inventory_items = {item.id: item.name for item in db.scalars(
+        select(InventoryItem).where(InventoryItem.id.in_([line.item_id for line in lines]))
+    ).all()} if lines else {}
+    return {
+        **_serialize(purchase),
+        "supplier": {"id": supplier.id, "name": supplier.name} if supplier else None,
+        "balance": Decimal(purchase.total) - Decimal(purchase.paid_amount),
+        "lines": [
+            {**_serialize(line), "item_name": inventory_items.get(line.item_id, "Artículo")}
+            for line in lines
+        ],
+    }
+
+
+def _record_supplier_payment(db: Session, purchase: Purchase, amount: Decimal, account_id: str, paid_on: date, reference: str, email: str):
+    account = db.scalar(select(FinancialAccount).where(FinancialAccount.id == account_id, FinancialAccount.active.is_(True)).with_for_update())
+    if account is None:
+        raise HTTPException(404, "Selecciona una cuenta de caja o banco activa para registrar el pago.")
+    cash = CashMovement(
+        account_id=account.id,
+        direction="out",
+        amount=amount,
+        category="Pago a proveedor",
+        description=f"Pago a {db.get(Supplier, purchase.supplier_id).name} · {purchase.folio}",
+        occurred_on=paid_on,
+        source_type="supplier_payment",
+        created_by=email,
+    )
+    db.add(cash); db.flush()
+    payment = SupplierPayment(
+        purchase_id=purchase.id,
+        account_id=account.id,
+        cash_movement_id=cash.id,
+        amount=amount,
+        paid_on=paid_on,
+        reference=reference.strip(),
+        created_by=email,
+    )
+    db.add(payment); db.flush()
+    cash.source_id = payment.id
+    purchase.paid_amount = Decimal(purchase.paid_amount) + amount
+    purchase.status = "paid" if purchase.paid_amount >= purchase.total else "partially_paid"
+    return payment
+
+
+@router.get("/purchases", dependencies=[Depends(require_permissions(auth_service, "purchases:read"))])
+def list_purchases(db: Session = Depends(get_db)):
+    return [_purchase_result(db, row) for row in db.scalars(select(Purchase).order_by(Purchase.purchase_date.desc(), Purchase.created_at.desc())).all()]
+
+
+@router.post("/purchases", status_code=201, dependencies=[Depends(require_permissions(auth_service, "purchases:write"))])
+def create_purchase(data: PurchaseInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    supplier = db.scalar(select(Supplier).where(Supplier.id == data.supplier_id, Supplier.active.is_(True)))
+    if supplier is None:
+        raise HTTPException(404, "Selecciona un proveedor activo.")
+    if data.payment_terms == "credit" and supplier.credit_days < 1:
+        raise HTTPException(422, "El proveedor debe tener días de crédito configurados para registrar esta compra a crédito.")
+    due_date = data.due_date
+    if data.payment_terms == "credit":
+        due_date = due_date or date.fromordinal(data.purchase_date.toordinal() + supplier.credit_days)
+        if due_date < data.purchase_date:
+            raise HTTPException(422, "La fecha de vencimiento no puede ser anterior a la compra.")
+    elif due_date is not None:
+        raise HTTPException(422, "Una compra de contado no lleva fecha de vencimiento.")
+
+    locked_lines = []
+    total = Decimal("0")
+    for line in data.lines:
+        item = db.scalar(select(InventoryItem).where(InventoryItem.id == line.item_id).with_for_update())
+        if item is None:
+            raise HTTPException(404, "Uno de los artículos seleccionados ya no existe en almacén.")
+        line_total = (line.quantity * line.unit_cost).quantize(Decimal("0.01"))
+        total += line_total
+        locked_lines.append((line, item, line_total))
+    total = total.quantize(Decimal("0.01"))
+    if data.initial_payment > total:
+        raise HTTPException(422, "El pago inicial excede el total de la compra.")
+    if data.payment_terms == "cash" and data.initial_payment != total:
+        raise HTTPException(422, "Una compra de contado debe quedar pagada al registrarse; indica el total y la cuenta usada.")
+    if data.initial_payment and not data.payment_account_id:
+        raise HTTPException(422, "Selecciona la cuenta usada para el pago inicial.")
+    if not data.initial_payment and data.payment_account_id:
+        raise HTTPException(422, "No indiques una cuenta bancaria si no se registrará un pago inicial.")
+    if data.initial_payment:
+        payment_account = db.scalar(select(FinancialAccount).where(
+            FinancialAccount.id == data.payment_account_id,
+            FinancialAccount.active.is_(True),
+        ).with_for_update())
+        if payment_account is None:
+            raise HTTPException(404, "Selecciona una cuenta de caja o banco activa para registrar el pago inicial.")
+
+    if db.get_bind().dialect.name == "postgresql":
+        sequence = db.execute(text("SELECT nextval('ae_purchase_folio_seq')")).scalar_one()
+    else:
+        sequence = (db.scalar(select(func.count()).select_from(Purchase)) or 0) + 1
+    purchase = Purchase(
+        folio=f"AE-C-{datetime.now(timezone.utc).year}-{sequence:05d}",
+        supplier_id=supplier.id,
+        invoice_number=data.invoice_number.strip(),
+        payment_terms=data.payment_terms,
+        purchase_date=data.purchase_date,
+        due_date=due_date,
+        total=total,
+        paid_amount=Decimal("0"),
+        status="open",
+        created_by=identity.email or "",
+    )
+    db.add(purchase); db.flush()
+    for line, item, line_total in locked_lines:
+        purchase_line = PurchaseLine(purchase_id=purchase.id, item_id=item.id, quantity=line.quantity, unit_cost=line.unit_cost, line_total=line_total)
+        db.add(purchase_line); db.flush()
+        item.quantity = Decimal(item.quantity) + line.quantity
+        item.unit_cost = line.unit_cost
+        db.add(InventoryMovement(
+            item_id=item.id,
+            purchase_line_id=purchase_line.id,
+            quantity=line.quantity,
+            movement_type="purchase",
+            unit_cost=line.unit_cost,
+            reason=f"Compra {purchase.folio}" + (f" · Factura {purchase.invoice_number}" if purchase.invoice_number else ""),
+            created_by=identity.email or "",
+            created_at=datetime.combine(data.purchase_date, datetime.min.time(), tzinfo=timezone.utc),
+        ))
+    if data.initial_payment:
+        _record_supplier_payment(db, purchase, data.initial_payment, data.payment_account_id or "", data.purchase_date, data.payment_reference, identity.email or "")
+    db.commit(); db.refresh(purchase)
+    return _purchase_result(db, purchase)
+
+
+@router.post("/purchases/{purchase_id}/payments", status_code=201, dependencies=[Depends(require_permissions(auth_service, "purchases:write"))])
+def add_supplier_payment(purchase_id: str, data: SupplierPaymentInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    purchase = db.scalar(select(Purchase).where(Purchase.id == purchase_id).with_for_update())
+    if purchase is None:
+        raise HTTPException(404, "Compra no encontrada.")
+    balance = Decimal(purchase.total) - Decimal(purchase.paid_amount)
+    if data.amount > balance:
+        raise HTTPException(409, "El pago excede el saldo pendiente de esta compra.")
+    _record_supplier_payment(db, purchase, data.amount, data.account_id, data.paid_on, data.reference, identity.email or "")
+    db.commit(); db.refresh(purchase)
+    return _purchase_result(db, purchase)
 
 
 @router.post("/receivables", status_code=201, dependencies=[Depends(require_permissions(auth_service, "receivables:write"))])
