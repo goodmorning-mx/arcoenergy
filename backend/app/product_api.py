@@ -1811,7 +1811,11 @@ def reverse_expense(expense_id: str, data: PaymentCorrectionInput, identity: Aut
             reversal_of_id=movement.id,
             created_by=identity.email or "",
         ))
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Este gasto ya tiene una corrección registrada.")
     db.refresh(correction)
     account = db.get(FinancialAccount, correction.account_id) if correction.account_id else None
     result = _serialize(correction)
