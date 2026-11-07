@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Base, Customer, Installation, Quote, Receivable
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
-from app.product_api import client_portal_data
+from app.product_api import client_portal_data, team_roles
 from gm_auth.models import AuthIdentity
 
 
@@ -32,6 +32,14 @@ def test_roles_that_record_inventory_usage_cannot_read_direct_costs() -> None:
     assert "inventory:costs:read" not in ROLE_PERMISSIONS["instalador"]
     assert "expenses:write" in ROLE_PERMISSIONS["instalador"]
     assert "expenses:read" not in ROLE_PERMISSIONS["instalador"]
+
+
+def test_role_permission_catalog_matches_the_api_matrix() -> None:
+    catalog = team_roles()
+    assert {row["id"] for row in catalog} == set(ROLE_LABELS)
+    for row in catalog:
+        assert row["label"] == ROLE_LABELS[row["id"]]
+        assert set(row["permissions"]) == ROLE_PERMISSIONS[row["id"]]
 
 
 def test_client_portal_only_returns_records_for_authenticated_email() -> None:

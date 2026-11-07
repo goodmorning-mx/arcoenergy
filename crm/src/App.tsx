@@ -12,6 +12,7 @@ type Package = { id: string; panel_count: number; panel_brand: string; panel_wat
 type FollowUp = { id: string; customer_id: string; due_date: string; note: string; done: boolean; assigned_to: string; customer?: Customer };
 type Activity = { id: string; kind: string; note: string; created_by: string; created_at: string };
 type TeamMember = { id: string; name: string; email: string; roles: string[]; permissions: string[] };
+type RoleDefinition = { id: string; label: string; permissions: string[] };
 type Installation = { id: string; folio?: string | null; scheduled_at: string | null; lead_installer: string; assigned_installers?: string[]; confirmed_installers?: string[]; status: string; notes: string; customer?: Customer; quote_id?: string | null; materials?: Array<{ item_name: string; requested_quantity: number; consumed_quantity: number; remaining_quantity: number }> };
 type InventoryItem = { id: string; name: string; description?: string; category?: string; brand?: string; model?: string; supplier_id?: string | null; barcode?: string | null; unit: string; quantity: number; reserved_quantity?: number; available_quantity?: number; minimum_quantity: number; unit_cost: number };
 type InventoryMovement = { id: string; item_id: string; item_name: string; unit: string; quantity: number; signed_quantity: number; movement_type: string; unit_cost?: number | null; reason: string; created_by: string; created_at: string; installation_id?: string | null };
@@ -35,6 +36,21 @@ const money = (amount: number) => new Intl.NumberFormat('es-MX', { style: 'curre
 const initials = (name: string) => name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
 const roleLabel: Record<string, string> = { admin: 'Administrador', administrador: 'Administrador', contador: 'Contador', marketing: 'Marketing', instalador: 'Instalador', cliente: 'Cliente' };
 const roleOptions = [['administrador', 'Administrador'], ['contador', 'Contador'], ['marketing', 'Marketing'], ['instalador', 'Instalador'], ['cliente', 'Cliente']] as const;
+const permissionLabel: Record<string, string> = {
+  'customers:read': 'Consultar clientes', 'customers:write': 'Crear y actualizar clientes',
+  'quotes:read': 'Consultar cotizaciones', 'quotes:write': 'Crear cotizaciones',
+  'installations:read': 'Consultar instalaciones', 'installations:write': 'Administrar instalaciones',
+  'inventory:read': 'Consultar inventario', 'inventory:write': 'Registrar movimientos de inventario',
+  'inventory:manage': 'Administrar catálogo y costos', 'inventory:costs:read': 'Consultar costos de inventario',
+  'expenses:read': 'Consultar gastos', 'expenses:write': 'Registrar gastos',
+  'receivables:read': 'Consultar cuentas por cobrar', 'receivables:write': 'Registrar cobranza',
+  'accounts:read': 'Consultar caja y bancos', 'accounts:write': 'Registrar movimientos de cuentas',
+  'accounts:manage': 'Administrar cuentas financieras', 'suppliers:read': 'Consultar proveedores',
+  'suppliers:manage': 'Administrar proveedores', 'purchases:read': 'Consultar compras y CxP',
+  'purchases:write': 'Registrar compras y pagos', 'sales:read': 'Consultar ventas',
+  'sales:write': 'Registrar ventas', 'reports:read': 'Consultar reportes',
+  'team:manage': 'Administrar usuarios y roles', 'client:portal': 'Consultar su propio portal de cliente',
+};
 
 async function request<T>(path: string, token?: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
@@ -67,6 +83,7 @@ export default function App() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [agentOpen, setAgentOpen] = useState(false);
   const [team, setTeam] = useState<TeamMember[]>([]);
+  const [roleDefinitions, setRoleDefinitions] = useState<RoleDefinition[]>([]);
   const [installations, setInstallations] = useState<Installation[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [inventoryMovements, setInventoryMovements] = useState<InventoryMovement[]>([]);
@@ -144,7 +161,9 @@ export default function App() {
   useEffect(() => {
     if (!['equipo', 'instalaciones'].includes(view) || !accessToken || !can('team:manage')) return;
     setTeamLoading(true); setTeamError('');
-    void request<TeamMember[]>('/team', accessToken).then(setTeam).catch(error => setTeamError(error.message || 'No se pudo cargar el equipo.')).finally(() => setTeamLoading(false));
+    const teamRequest = request<TeamMember[]>('/team', accessToken).then(setTeam);
+    const rolesRequest = view === 'equipo' ? request<RoleDefinition[]>('/team/roles', accessToken).then(setRoleDefinitions) : Promise.resolve();
+    void Promise.all([teamRequest, rolesRequest]).catch(error => setTeamError(error.message || 'No se pudo cargar el equipo y sus permisos.')).finally(() => setTeamLoading(false));
   }, [view, accessToken, can]);
 
   useEffect(() => {
@@ -399,7 +418,7 @@ export default function App() {
         {view === 'compras' && <PurchasesView items={purchases} suppliers={suppliers} inventory={inventory} accounts={accounts} canWrite={can('purchases:write')} token={accessToken || ''} onItems={setPurchases} onSuppliers={setSuppliers} onAccounts={setAccounts} onInventory={setInventory} announce={announce} />}
         {view === 'reportes' && <><OperationsReportView token={accessToken || ''} /><ProfitabilityView token={accessToken || ''} /></>}
         {view === 'catalogo' && <CatalogView catalog={catalog} onSave={savePackage} onLogin={() => window.location.assign('/crm/login')} />}
-        {view === 'equipo' && <TeamView members={team} loading={teamLoading} error={teamError} name={teamName} email={teamEmail} password={teamPassword} role={teamRole} busy={teamBusy} onName={setTeamName} onEmail={setTeamEmail} onPassword={setTeamPassword} onRole={setTeamRole} onSubmit={createMember} onUpdateRole={updateMemberRole} />}
+        {view === 'equipo' && <TeamView members={team} roleDefinitions={roleDefinitions} loading={teamLoading} error={teamError} name={teamName} email={teamEmail} password={teamPassword} role={teamRole} busy={teamBusy} onName={setTeamName} onEmail={setTeamEmail} onPassword={setTeamPassword} onRole={setTeamRole} onSubmit={createMember} onUpdateRole={updateMemberRole} />}
         {view === 'historial' && <HistoryCardsView token={accessToken || ''} announce={announce} />}
 
         <footer className="page-foot"><span>Arco Energy · CRM</span><span>La información se actualiza desde el espacio de trabajo de Arco Energy.</span></footer>
@@ -854,8 +873,8 @@ function CatalogView({ catalog, onSave, onLogin }: { catalog: CatalogPayload | n
   </>;
 }
 
-function TeamView({ members, loading, error, name, email, password, role, busy, onName, onEmail, onPassword, onRole, onSubmit, onUpdateRole }: { members: TeamMember[]; loading: boolean; error: string; name: string; email: string; password: string; role: string; busy: boolean; onName: (v: string) => void; onEmail: (v: string) => void; onPassword: (v: string) => void; onRole: (v: string) => void; onSubmit: (e: FormEvent<HTMLFormElement>) => void; onUpdateRole: (id: string, role: string) => void }) {
-  return <><section className="surface-card team-surface"><div className="section-title"><div><span className="eyebrow">CUENTAS Y PERMISOS</span><h2>Personas en el equipo</h2></div><span className="status-chip status-approved">5 roles</span></div><p className="muted-copy">Los permisos se validan en la API además de controlar qué se muestra en cada pantalla.</p><form className="team-form" onSubmit={onSubmit}><Field label="Nombre" value={name} onChange={onName} required placeholder="Nombre completo"/><Field label="Correo" type="email" value={email} onChange={onEmail} required placeholder="persona@arcoenergy.mx"/><Field label="Contraseña temporal" type="password" value={password} onChange={onPassword} required minLength={12} placeholder="12 caracteres mínimo"/><label className="field"><span>Rol</span><select value={role} onChange={event => onRole(event.target.value)}>{roleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button className="button button-primary" disabled={busy}>{busy ? 'Creando…' : '＋ Crear usuario'}</button></form>{error && <p className="error-message">{error}</p>}{loading && <p className="muted-copy">Cargando equipo…</p>}<div className="team-list">{members.map(member => <div className="team-row" key={member.id}><span className="avatar-soft">{initials(member.name)}</span><div><b>{member.name}</b><small>{member.email}</small></div><select aria-label={`Rol de ${member.name}`} value={member.roles[0] || ''} onChange={event => onUpdateRole(member.id, event.target.value)}>{roleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>)}</div></section></>;
+function TeamView({ members, roleDefinitions, loading, error, name, email, password, role, busy, onName, onEmail, onPassword, onRole, onSubmit, onUpdateRole }: { members: TeamMember[]; roleDefinitions: RoleDefinition[]; loading: boolean; error: string; name: string; email: string; password: string; role: string; busy: boolean; onName: (v: string) => void; onEmail: (v: string) => void; onPassword: (v: string) => void; onRole: (v: string) => void; onSubmit: (e: FormEvent<HTMLFormElement>) => void; onUpdateRole: (id: string, role: string) => void }) {
+  return <><section className="surface-card team-surface"><div className="section-title"><div><span className="eyebrow">CUENTAS Y PERMISOS</span><h2>Personas en el equipo</h2></div><span className="status-chip status-approved">5 roles</span></div><p className="muted-copy">Los permisos se validan en la API además de controlar qué se muestra en cada pantalla.</p><form className="team-form" onSubmit={onSubmit}><Field label="Nombre" value={name} onChange={onName} required placeholder="Nombre completo"/><Field label="Correo" type="email" value={email} onChange={onEmail} required placeholder="persona@arcoenergy.mx"/><Field label="Contraseña temporal" type="password" value={password} onChange={onPassword} required minLength={12} placeholder="12 caracteres mínimo"/><label className="field"><span>Rol</span><select value={role} onChange={event => onRole(event.target.value)}>{roleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button className="button button-primary" disabled={busy}>{busy ? 'Creando…' : '＋ Crear usuario'}</button></form>{error && <p className="error-message">{error}</p>}{loading && <p className="muted-copy">Cargando equipo y permisos…</p>}<div className="team-list">{members.map(member => <div className="team-row" key={member.id}><span className="avatar-soft">{initials(member.name)}</span><div><b>{member.name}</b><small>{member.email}</small></div><select aria-label={`Rol de ${member.name}`} value={member.roles[0] || ''} onChange={event => onUpdateRole(member.id, event.target.value)}>{roleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></div>)}</div></section><section className="surface-card role-matrix"><div className="section-title"><div><span className="eyebrow">MATRIZ DE ACCESO</span><h2>Qué puede hacer cada rol</h2></div></div><p className="muted-copy">Permisos configurados en la API. Son asignaciones predefinidas; el CRM no permite añadir permisos individuales.</p>{roleDefinitions.length ? <div className="role-matrix-grid">{roleDefinitions.map(definition => <article className="role-permission-card" key={definition.id}><h3>{definition.label}</h3><ul>{definition.permissions.map(permission => <li key={permission}>{permissionLabel[permission] || permission}</li>)}</ul></article>)}</div> : <p className="muted-copy">{loading ? 'Cargando matriz…' : 'No fue posible cargar la matriz de permisos.'}</p>}</section></>;
 }
 
 function QuoteComposer({ packages, customers, onClose, onSubmit, onNewCustomer }: { packages: Package[]; customers: Customer[]; onClose: () => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onNewCustomer: () => void }) {

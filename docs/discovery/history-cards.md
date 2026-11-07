@@ -722,6 +722,14 @@ La cartera puede filtrarse por pagos vencidos, con vencimiento hoy, próximos si
 | --- | --- | --- |
 | US-11 | Parcial funcional | Agenda filtrable y mensajes contextuales desde WhatsApp; faltan generación del calendario de financiamiento y automatización de envíos, sujetas a reglas y canales aprobados. |
 
+## Iteración 31 — matriz visible de permisos por rol (2026-11-06)
+
+Administración ahora puede consultar en CRM una tarjeta por cada rol disponible y los permisos concretos que el API le asigna. Las etiquetas se traducen para el equipo y los permisos siguen siendo presets del producto, aplicados y validados por el API. Esto hace transparente la configuración existente; no crea permisos individuales ni sustituye la validación de acceso con cuentas reales de cada puesto.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | CRM presenta desde el catálogo autenticado del API los permisos efectivos de los cinco roles. Pendientes pruebas integrales de aislamiento con cuentas reales y validar el alcance de cada permiso con sus responsables. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.
