@@ -705,6 +705,15 @@ Antes de registrar una compra, venta, pago a proveedor o cobro de cliente, CRM r
 | US-33 | Parcial funcional | CRM anticipa los efectos vinculados para cuatro acciones operativas. Falta validar reglas contables, impuestos, pagos mixtos y Plan 24 con el contador. |
 | US-35 | Parcial funcional | Vista previa de saldo bancario/caja, inventario reservado y cuentas por cobrar/pagar según las reglas actuales. Falta aprobación del flujo contable y de valuación. |
 
+## Iteración 29 — responsabilidad de seguimientos (2026-11-06)
+
+Todo seguimiento comercial se asigna al usuario que lo programa si no se selecciona otro. Administración puede delegarlo a una persona activa del equipo que tenga permiso para gestionar clientes; marketing mantiene la responsabilidad de sus propios registros. El tablero de seguimientos muestra el responsable junto con fecha, cliente y nota, y mantiene las alertas de vencimiento dentro del CRM. Los avisos automáticos por correo, push o WhatsApp requieren seleccionar y configurar un proveedor.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-4 | Parcial funcional | Seguimientos con fecha, bitácora, alertas dentro del CRM y responsable asignado/visible; faltan avisos automáticos y validar el flujo con vendedores reales. |
+| US-14 | Parcial funcional | La asignación valida que el responsable pertenezca a la organización, esté activo y tenga permiso comercial; falta completar la matriz de acceso de todas las entidades. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.

@@ -80,6 +80,7 @@ class FollowUp(Base):
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
     note: Mapped[str] = mapped_column(Text, default="")
     created_by: Mapped[str] = mapped_column(String(180), default="")
+    assigned_to: Mapped[str] = mapped_column(String(180), default="")
     done: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
