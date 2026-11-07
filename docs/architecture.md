@@ -12,6 +12,8 @@ The Factory hybrid gateway is the only public frontend resource. Its Nginx resol
 
 CRM and PWA workspaces require an authenticated identity with matching permissions. `/crm/login` is the desktop sign-in, `/app/login` is the field/customer sign-in and `/login` aliases the CRM sign-in. Customer identities are directed to the PWA client portal. Public lead intake requires consent to contact. The public agent can read enabled system sizes and whether a package is commercially approved; it cannot access CRM records or write data. Agent conversations currently live in API process memory and are not durable across restarts.
 
+ArcoEnergy has no end-user trial mode, trial countdown, demo login or seeded business records. `/` remains the public marketing and lead-capture site; protected routes redirect unauthenticated visitors to their respective login. The word “demo” remains only in test fixtures and migration history about removing old sample rows. Runtime administrator bootstrap credentials are supplied through Factory secrets; real staff and client accounts must be created by an administrator from the organization's actual user list.
+
 ## Data and integrations
 
 The product does not load sample customers, quotes, packages, inventory or installations. Quote packages, equipment mapping and prices must be entered and explicitly approved by ArcoEnergy before commercial quotes can be shared or accepted; this is a commercial-data control, not a trial mode. Quotes receive a sequential folio and can be rendered as a PDF download. WhatsApp actions open a prefilled `wa.me` link so an employee can attach the downloaded PDF in the existing conversation; the system does not send messages automatically or store the PDF in Drive.

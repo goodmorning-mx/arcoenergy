@@ -650,6 +650,16 @@ El reporte de existencias ahora incluye un gráfico circular de artículos dispo
 | US-19 | Parcial funcional | Reportes muestra disponibilidad y alertas de artículos bajo mínimo; faltan indicadores/gráficas y periodo de flujo de efectivo validados por administración y contador. |
 | US-29 | Parcial funcional | Reporte ofrece gráfico circular por estado y tabla detallada de stock; faltan reportes dedicados restantes, paginación y validación de fórmulas contables. |
 
+## Iteración 23 — salida de prueba y accesos reales (2026-11-07)
+
+Se verificó en DEV que ArcoEnergy no presenta modo de prueba, contador de trial, credenciales demo ni registros empresariales de muestra. Las semillas demo anteriores están retiradas; las menciones restantes son fixtures de pruebas y documentación histórica. El sitio raíz conserva su función pública de marketing y captura de prospectos. Las rutas privadas `/crm/` y `/app/` requieren sesión y muestran el acceso de CRM o PWA respectivamente; `/crm/login`, `/app/login` y el alias `/login` entregan la pantalla de inicio de sesión. API, CRM y PWA reportan `d9fe896ade6e5a463d2ecfd4a62d7fc9c5029821`. Se confirma una cuenta de administración existente, pero no hay datos proporcionados para crear o verificar las cuentas reales del resto del equipo.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | Accesos separados y protegidos, cinco roles disponibles; sin contactos reales no se pueden provisionar las cuentas faltantes. La matriz por entidad/campo y pruebas con usuarios de cada rol siguen pendientes. |
+| US-39 | Parcial funcional | Sin modo trial ni datos demo; servicios productivos de DEV desplegados y versiones alineadas. Falta cargar datos reales aprobados y configurar integraciones externas pendientes. |
+| US-40 | Parcial funcional | PWA requiere autenticación para operaciones; falta probar acceso y tareas con los instaladores reales del cliente. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.
