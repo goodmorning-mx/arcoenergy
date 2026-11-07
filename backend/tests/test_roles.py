@@ -19,6 +19,11 @@ def test_role_catalog_contains_exact_requested_roles_and_scopes() -> None:
     assert "reports:read" not in ROLE_PERMISSIONS["marketing"]
     assert "quotes:write" in ROLE_PERMISSIONS["marketing"]
     assert "inventory:write" in ROLE_PERMISSIONS["instalador"]
+    assert "inventory:issue" not in ROLE_PERMISSIONS["instalador"]
+    assert "inventory:issue" in ROLE_PERMISSIONS["administrador"]
+    assert "inventory:issue" in ROLE_PERMISSIONS["contador"]
+    assert "inventory:issue" not in ROLE_PERMISSIONS["marketing"]
+    assert "inventory:issue" not in ROLE_PERMISSIONS["cliente"]
     assert "inventory:costs:read" not in ROLE_PERMISSIONS["instalador"]
     assert ROLE_PERMISSIONS["cliente"] == frozenset({"client:portal"})
     assert "customers:read" not in ROLE_PERMISSIONS["cliente"]
