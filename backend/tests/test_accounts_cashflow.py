@@ -11,6 +11,7 @@ from app.product_api import (
     CashMovementInput,
     CashTransferInput,
     FinancialAccountInput,
+    PaymentCorrectionInput,
     create_cash_movement,
     create_financial_account,
     create_cash_transfer,
@@ -35,7 +36,7 @@ def test_cash_movement_and_reversal_keep_auditable_balance() -> None:
             identity,
             db,
         )
-        reversal = reverse_cash_movement(movement["id"], identity, db)
+        reversal = reverse_cash_movement(movement["id"], PaymentCorrectionInput(reason="Importe capturado por error"), identity, db)
 
         rows = list_financial_accounts(db)
         saved = db.get(CashMovement, movement["id"])
@@ -45,6 +46,7 @@ def test_cash_movement_and_reversal_keep_auditable_balance() -> None:
     assert saved is not None and saved.direction == "out"
     assert len(all_movements) == 2
     assert reversal["reversal_of_id"] == movement["id"]
+    assert reversal["description"].endswith("Importe capturado por error")
 
 
 def test_cash_movement_cannot_be_reversed_twice() -> None:
@@ -56,10 +58,10 @@ def test_cash_movement_cannot_be_reversed_twice() -> None:
         db.add(account); db.commit(); db.refresh(account)
         movement = CashMovement(account_id=account.id, direction="in", amount=100, category="Cobro", description="Anticipo", source_type="manual", created_by=identity.email)
         db.add(movement); db.commit(); db.refresh(movement)
-        reverse_cash_movement(movement.id, identity, db)
+        reverse_cash_movement(movement.id, PaymentCorrectionInput(reason="Cobro duplicado"), identity, db)
 
         with pytest.raises(HTTPException) as error:
-            reverse_cash_movement(movement.id, identity, db)
+            reverse_cash_movement(movement.id, PaymentCorrectionInput(reason="Segundo intento"), identity, db)
 
     assert error.value.status_code == 409
 
@@ -85,14 +87,15 @@ def test_cash_transfer_posts_balanced_pair_and_reversal_corrects_both_accounts()
         assert balances[bank.id] == Decimal("450.00")
         assert sum(balances.values()) == Decimal("1200.00")
 
-        correction = reverse_cash_movement(transfer["movements"][0]["id"], identity, db)
+        correction = reverse_cash_movement(transfer["movements"][0]["id"], PaymentCorrectionInput(reason="Se capturó la cuenta de destino incorrecta"), identity, db)
         assert len(correction["movements"]) == 2
+        assert all(row["description"].endswith("Se capturó la cuenta de destino incorrecta") for row in correction["movements"])
         balances = {row["id"]: row["current_balance"] for row in list_financial_accounts(db)}
         assert balances[cash.id] == Decimal("1000.00")
         assert balances[bank.id] == Decimal("200.00")
 
         with pytest.raises(HTTPException) as error:
-            reverse_cash_movement(transfer["movements"][1]["id"], identity, db)
+            reverse_cash_movement(transfer["movements"][1]["id"], PaymentCorrectionInput(reason="Reversa duplicada"), identity, db)
         assert error.value.status_code == 409
 
 
@@ -110,3 +113,22 @@ def test_cash_transfer_rejects_same_account_and_pre_opening_date() -> None:
         with pytest.raises(HTTPException) as error:
             create_cash_transfer(CashTransferInput(source_account_id=cash.id, destination_account_id=bank.id, amount=10, description="Antes del inicio", occurred_on=date(2026, 11, 1)), identity, db)
         assert error.value.status_code == 422
+
+
+def test_linked_operational_cash_movement_must_be_corrected_at_its_source() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    identity = AuthIdentity("admin-1", "arcoenergy", frozenset({"administrador"}), frozenset(), "admin@example.com", "Admin")
+    with Session(engine) as db:
+        account = FinancialAccount(name="Caja", account_type="cash", opening_balance=200, opening_balance_date=date.today())
+        db.add(account); db.flush()
+        linked = CashMovement(account_id=account.id, direction="out", amount=Decimal("75"), category="Gasto de proyecto",
+            description="Gasolina obra", occurred_on=date.today(), source_type="expense", source_id="expense-1")
+        db.add(linked); db.commit(); db.refresh(linked)
+        with pytest.raises(HTTPException) as error:
+            reverse_cash_movement(linked.id, PaymentCorrectionInput(reason="Gasto con referencia equivocada"), identity, db)
+        saved = db.query(CashMovement).all()
+        balance = list_financial_accounts(db)[0]["current_balance"]
+    assert error.value.status_code == 409
+    assert saved == [linked]
+    assert balance == Decimal("125.00")

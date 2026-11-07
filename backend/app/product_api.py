@@ -1839,12 +1839,14 @@ def create_cash_transfer(data: CashTransferInput, identity: AuthIdentity = Depen
 
 
 @router.post("/cash-movements/{movement_id}/reverse", status_code=201, dependencies=[Depends(require_permissions(auth_service, "accounts:write"))])
-def reverse_cash_movement(movement_id: str, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+def reverse_cash_movement(movement_id: str, data: PaymentCorrectionInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
     original = db.scalar(select(CashMovement).where(CashMovement.id == movement_id).with_for_update())
     if original is None:
         raise HTTPException(404, "Movimiento de cuenta no encontrado.")
     if original.source_type in {"supplier_payment", "customer_payment"}:
         raise HTTPException(409, "Corrige este pago desde su compra o cuenta por cobrar para actualizar también el saldo relacionado.")
+    if original.source_type not in {"manual", "transfer"}:
+        raise HTTPException(409, "Este movimiento está ligado a otra operación; corrígelo desde su origen para conservar sus efectos relacionados.")
     if original.reversal_of_id is not None:
         raise HTTPException(409, "Una reversa no puede revertirse; registra un nuevo movimiento de corrección.")
     if original.source_type == "transfer":
@@ -1860,7 +1862,7 @@ def reverse_cash_movement(movement_id: str, identity: AuthIdentity = Depends(ide
             direction="out" if row.direction == "in" else "in",
             amount=row.amount,
             category="Reversa de transferencia",
-            description=f"Reversa de transferencia {original.source_id}: {row.description}",
+            description=f"Reversa de transferencia {original.source_id}: {data.reason}",
             occurred_on=date.today(), source_type="transfer_reversal", source_id=original.source_id,
             reversal_of_id=row.id, created_by=identity.email or "",
         ) for row in pair]
@@ -1875,7 +1877,7 @@ def reverse_cash_movement(movement_id: str, identity: AuthIdentity = Depends(ide
         direction="out" if original.direction == "in" else "in",
         amount=original.amount,
         category="Corrección",
-        description=f"Reversa del movimiento {original.id}: {original.description}",
+        description=f"Reversa del movimiento {original.id}: {data.reason}",
         occurred_on=date.today(),
         source_type="reversal",
         source_id=original.id,
