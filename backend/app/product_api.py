@@ -276,6 +276,7 @@ class FollowUpInput(BaseModel):
     due_date: date
     note: str = ""
     quote_id: str | None = None
+    assigned_to: str | None = None
 
 
 class NoteInput(BaseModel):
@@ -710,7 +711,23 @@ def quote_pdf(quote_id: str, db: Session = Depends(get_db)):
 @router.post("/followups", status_code=201, dependencies=[Depends(require_permissions(auth_service, "customers:write"))])
 def create_followup(data: FollowUpInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
     if not db.get(Customer, data.customer_id): raise HTTPException(404, "Cliente no encontrado.")
-    row = FollowUp(**data.model_dump(), created_by=identity.email); db.add(row); db.flush()
+    assigned_to = (data.assigned_to or identity.email or "").strip().lower()
+    if not assigned_to:
+        raise HTTPException(422, "Selecciona a la persona responsable del seguimiento.")
+    with auth_service.engine.connect() as connection:
+        member = connection.execute(
+            select(users.c.email, memberships.c.permissions)
+            .join(memberships, memberships.c.user_id == users.c.id)
+            .where(
+                users.c.is_active.is_(True),
+                func.lower(users.c.email) == assigned_to,
+                memberships.c.organization_id == settings.organization_id,
+            )
+        ).mappings().first()
+    if member is None or "customers:write" not in (member["permissions"] or []):
+        raise HTTPException(422, "La persona responsable debe ser un usuario activo del equipo con permiso comercial.")
+    values = data.model_dump(exclude={"assigned_to"})
+    row = FollowUp(**values, assigned_to=assigned_to, created_by=identity.email or ""); db.add(row); db.flush()
     db.add(Activity(customer_id=row.customer_id, kind="seguimiento programado", note=f"{row.due_date}: {row.note}", created_by=identity.email)); db.commit(); db.refresh(row)
     return _serialize(row)
 
