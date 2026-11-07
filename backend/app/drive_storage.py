@@ -51,12 +51,12 @@ def folder_status(settings=None) -> dict[str, Any]:
         return {"connected": False, "status": "connection_check_failed"}
 
 
-def save_quote_pdf(*, folio: str, pdf: bytes, existing_file_id: str = "") -> str:
-    """Save or replace a PDF in the configured private folder; return its Drive id."""
+def save_private_file(*, filename: str, content: bytes, content_type: str, existing_file_id: str = "") -> str:
+    """Save or replace a file in the configured private folder; return its Drive id."""
     settings = get_settings()
     token = _access_token()
     headers = {"Authorization": f"Bearer {token}"}
-    metadata: dict[str, Any] = {"name": f"{folio}.pdf", "mimeType": "application/pdf"}
+    metadata: dict[str, Any] = {"name": filename, "mimeType": content_type}
     if existing_file_id:
         url = f"{DRIVE_API}/files/{existing_file_id}"
         method = "PATCH"
@@ -68,7 +68,7 @@ def save_quote_pdf(*, folio: str, pdf: bytes, existing_file_id: str = "") -> str
         response = client.request(
             method, url,
             params={"uploadType": "resumable", "fields": "id,name", "supportsAllDrives": "true"},
-            headers={**headers, "Content-Type": "application/json; charset=UTF-8", "X-Upload-Content-Type": "application/pdf", "X-Upload-Content-Length": str(len(pdf))},
+            headers={**headers, "Content-Type": "application/json; charset=UTF-8", "X-Upload-Content-Type": content_type, "X-Upload-Content-Length": str(len(content))},
             json=metadata,
         )
         if response.status_code not in (200, 201):
@@ -77,10 +77,26 @@ def save_quote_pdf(*, folio: str, pdf: bytes, existing_file_id: str = "") -> str
         parsed = httpx.URL(upload_url)
         if parsed.scheme != "https" or parsed.host not in {"www.googleapis.com", "content.googleapis.com"}:
             raise RuntimeError("invalid_upload_session")
-        uploaded = client.put(upload_url, content=pdf, headers={**headers, "Content-Type": "application/pdf", "Content-Length": str(len(pdf))})
+        uploaded = client.put(upload_url, content=content, headers={**headers, "Content-Type": content_type, "Content-Length": str(len(content))})
         if uploaded.status_code not in (200, 201):
             raise RuntimeError("upload_failed")
         result = uploaded.json()
         if not result.get("id"):
             raise RuntimeError("upload_missing_id")
         return str(result["id"])
+
+
+def save_quote_pdf(*, folio: str, pdf: bytes, existing_file_id: str = "") -> str:
+    """Save or replace a quote PDF in the configured private folder."""
+    return save_private_file(filename=f"{folio}.pdf", content=pdf, content_type="application/pdf", existing_file_id=existing_file_id)
+
+
+def download_private_file(file_id: str) -> httpx.Response:
+    token = _access_token()
+    response = httpx.get(
+        f"{DRIVE_API}/files/{file_id}", params={"alt": "media", "supportsAllDrives": "true"},
+        headers={"Authorization": f"Bearer {token}"}, timeout=30, follow_redirects=False,
+    )
+    if response.status_code != 200:
+        raise RuntimeError("download_failed")
+    return response

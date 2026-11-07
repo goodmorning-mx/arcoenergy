@@ -7,11 +7,11 @@ import json
 from io import BytesIO
 import re
 from typing import Literal
-from urllib.parse import quote as urlquote
+from urllib.parse import quote as urlquote, unquote
 from uuid import uuid4
 import xml.etree.ElementTree as ET
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, or_, select, text
@@ -27,7 +27,7 @@ from gm_auth.models import memberships, users
 from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
-from app.drive_storage import folder_status, save_quote_pdf
+from app.drive_storage import download_private_file, folder_status, save_private_file, save_quote_pdf
 from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, Purchase, PurchaseLine, Quote, QuotePackage, Receivable, Sale, Supplier, SupplierPayment, WorkOrderMaterial
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 
@@ -1082,6 +1082,100 @@ def list_installations(identity: AuthIdentity = Depends(require_permissions(auth
             for material in materials
         ]})
     return result
+
+
+_MATERIAL_REQUEST_TYPES = {
+    "application/pdf": (".pdf", b"%PDF-"),
+    "image/jpeg": (".jpg", b"\xff\xd8\xff"),
+    "image/png": (".png", b"\x89PNG\r\n\x1a\n"),
+    "image/webp": (".webp", b"RIFF"),
+}
+_MAX_MATERIAL_REQUEST_BYTES = 12 * 1024 * 1024
+
+
+@router.put("/installations/{installation_id}/material-request-file")
+async def upload_material_request_file(
+    installation_id: str,
+    request: Request,
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:issue")),
+    db: Session = Depends(get_db),
+):
+    installation = db.get(Installation, installation_id)
+    if installation is None:
+        raise HTTPException(404, "Orden de trabajo no encontrada.")
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    file_type = _MATERIAL_REQUEST_TYPES.get(content_type)
+    if file_type is None:
+        raise HTTPException(415, "Usa PDF, JPG, PNG o WebP.")
+    try:
+        declared_length = int(request.headers.get("content-length", "0"))
+    except ValueError:
+        raise HTTPException(400, "Tamaño de archivo no válido.") from None
+    if declared_length > _MAX_MATERIAL_REQUEST_BYTES:
+        raise HTTPException(413, "El archivo debe pesar 12 MB o menos.")
+    collected = bytearray()
+    async for chunk in request.stream():
+        if len(collected) + len(chunk) > _MAX_MATERIAL_REQUEST_BYTES:
+            raise HTTPException(413, "El archivo debe pesar 12 MB o menos.")
+        collected.extend(chunk)
+    content = bytes(collected)
+    if not content:
+        raise HTTPException(400, "El archivo está vacío.")
+    if not content.startswith(file_type[1]) or (content_type == "image/webp" and content[8:12] != b"WEBP"):
+        raise HTTPException(415, "El contenido del archivo no coincide con su formato.")
+    raw_name = unquote(request.headers.get("x-document-name", "solicitud"))
+    raw_name = raw_name.replace("\\", "/").split("/")[-1]
+    filename = re.sub(r"[^\w.() -]", "_", raw_name, flags=re.UNICODE).strip(" .")[:220]
+    expected_extension = file_type[0]
+    if not filename.lower().endswith(expected_extension):
+        filename = f"{filename.rsplit('.', 1)[0] if '.' in filename else filename}{expected_extension}"
+    try:
+        drive_id = save_private_file(
+            filename=f"orden-{installation.folio or installation.id}-{filename}",
+            content=content,
+            content_type=content_type,
+            existing_file_id=installation.material_request_drive_file_id,
+        )
+    except RuntimeError as error:
+        if str(error) == "not_configured":
+            raise HTTPException(503, "drive_not_configured") from None
+        raise HTTPException(502, "No se pudo archivar el documento en Drive.") from None
+    except Exception:
+        raise HTTPException(502, "No se pudo archivar el documento en Drive.") from None
+    installation.material_request_drive_file_id = drive_id
+    installation.material_request_filename = filename
+    installation.material_request_content_type = content_type
+    installation.material_request_updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {
+        "saved": True,
+        "filename": filename,
+        "content_type": content_type,
+        "updated_at": installation.material_request_updated_at.isoformat(),
+    }
+
+
+@router.get("/installations/{installation_id}/material-request-file")
+def get_material_request_file(
+    installation_id: str,
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:issue")),
+    db: Session = Depends(get_db),
+):
+    installation = db.get(Installation, installation_id)
+    if installation is None:
+        raise HTTPException(404, "Orden de trabajo no encontrada.")
+    if not installation.material_request_drive_file_id:
+        raise HTTPException(404, "Esta orden no tiene una solicitud archivada.")
+    try:
+        stored = download_private_file(installation.material_request_drive_file_id)
+    except Exception:
+        raise HTTPException(502, "No se pudo recuperar el documento archivado.") from None
+    filename = installation.material_request_filename or "solicitud-materiales"
+    return Response(
+        content=stored.content,
+        media_type=installation.material_request_content_type or "application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{urlquote(filename)}"},
+    )
 
 
 @router.post("/installations/{installation_id}/confirm")

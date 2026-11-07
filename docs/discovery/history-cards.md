@@ -810,3 +810,17 @@ CRM y PWA ofrecen el PDF al diálogo nativo de compartir del dispositivo. En mó
 | Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
 | --- | --- | --- |
 | US-3 | Parcial funcional | El PDF foliado se puede compartir como archivo desde las interfaces nativas compatibles, con descarga y WhatsApp como fallback. Pendiente validación en dispositivos reales; envío/confirmación automáticos requieren integración y aprobación separadas. |
+
+## Iteración 41 — archivo privado de solicitudes y auditoría de acceso real (2026-11-07)
+
+El CRM permite archivar en Drive una foto o PDF de la solicitud de materiales ligada a la orden. La carga valida tipo de contenido, firma de archivo y tamaño; la consulta del documento pasa por un endpoint autenticado. Si Drive no está configurado o falla, la interfaz lo indica expresamente y registra el movimiento sin afirmar que el documento quedó respaldado. No se agregó OCR manuscrito.
+
+La revisión de DEV confirma que `/login` y `/crm/login` sirven el acceso de escritorio y `/app/login` sirve el acceso móvil; los recursos activos de CRM/PWA no muestran etiqueta ni contador de trial/demo. Las vistas privadas redirigen a su acceso correspondiente. En la organización de DEV hay una cuenta con rol administrador y ninguna cuenta de los roles restantes; la existencia de la ruta de acceso no implica que el equipo ya esté provisionado.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-25 | Parcial funcional | El archivo de solicitud se puede guardar y recuperar en Drive privado desde la orden. Pendientes OCR, cuenta/carpeta de Drive autorizada en DEV y validación del formato de almacén. |
+| US-13 | Parcial funcional | Drive admite documentos de cotización y solicitud de materiales al estar conectado. Contratos, INE, recibos, datos operativos, retención y respaldo siguen pendientes. |
+| US-14 | Parcial funcional | Las rutas de acceso están separadas y las vistas requieren sesión; DEV contiene solo una cuenta administradora. Falta cargar y validar las cuentas reales y cerrar la matriz completa de privilegios. |
+| US-39 | Parcial funcional | No hay UI activa de trial/demo y el acceso al CRM está protegido. Faltan completar las capacidades administrativas descritas en las demás historias y cargar datos aprobados del negocio. |
+| US-40 | Parcial funcional | PWA protegida disponible en `/app/login`; no se encontraron usuarios instalador/cliente en DEV. Falta el alta real del equipo y validar tareas/campo en dispositivos. |
