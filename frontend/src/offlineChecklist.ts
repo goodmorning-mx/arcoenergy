@@ -79,8 +79,17 @@ export async function readCachedInstallations(owner: string): Promise<Installati
   return value?.rows || null;
 }
 
-export async function clearCachedInstallations(owner: string): Promise<void> {
-  await withStore(INSTALLATIONS, 'readwrite', store => store.delete(owner));
+/** Remove private snapshots on logout while preserving unsynchronized actions. */
+export async function clearCachedFieldSnapshots(owner: string): Promise<void> {
+  const database = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const stores = [INSTALLATIONS, INVENTORY, MOVEMENTS];
+    const transaction = database.transaction(stores, 'readwrite');
+    for (const name of stores) transaction.objectStore(name).delete(owner);
+    transaction.oncomplete = () => { database.close(); resolve(); };
+    transaction.onerror = () => { database.close(); reject(transaction.error || new Error('Falló la limpieza de datos privados locales.')); };
+    transaction.onabort = () => { database.close(); reject(transaction.error || new Error('Se canceló la limpieza de datos privados locales.')); };
+  });
 }
 
 export async function cacheInventory<T>(owner: string, rows: T[]): Promise<void> {

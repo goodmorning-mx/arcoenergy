@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@goodmorning/gm-auth';
 import { PwaStatus } from '@goodmorning/gm-pwa';
-import { cacheInstallations, cacheInventory, cacheMovements, checklistQueueKey, clearCachedInstallations, queueChecklistChange, queueFieldAction, readCachedInstallations, readCachedInventory, readCachedMovements, readChecklistQueue, readFieldActionQueue, removeChecklistChange, removeChecklistChangeIfCurrent, removeFieldAction, type ChecklistQueueItem, type FieldActionQueueItem, type Installation } from './offlineChecklist';
+import { cacheInstallations, cacheInventory, cacheMovements, checklistQueueKey, clearCachedFieldSnapshots, queueChecklistChange, queueFieldAction, readCachedInstallations, readCachedInventory, readCachedMovements, readChecklistQueue, readFieldActionQueue, removeChecklistChange, removeChecklistChangeIfCurrent, removeFieldAction, type ChecklistQueueItem, type FieldActionQueueItem, type Installation } from './offlineChecklist';
 import './styles.css';
 import './barcode.css';
 import './offline.css';
@@ -211,7 +211,7 @@ function App() {
   if (!authResolved) return <div className="login-page"><p>Cargando sesión…</p></div>;
   if (['/login', '/app/login'].includes(window.location.pathname.replace(/\/$/, ''))) { if (identity) { window.location.replace('/app/'); return null; } return <div className="login-page"><section className="login-sheet"><div className="eyebrow">ARCOENERGY · CAMPO</div><h1>Iniciar sesión</h1><p>Acceso para personal y clientes autorizados.</p><form onSubmit={async event => {event.preventDefault(); const form=new FormData(event.currentTarget); setLoginError(''); try {await login(String(form.get('email')),String(form.get('password')),true); window.location.replace('/app/');} catch(err) {setLoginError(err instanceof Error?err.message:authError||'No se pudo iniciar sesión.');}}}><label>Correo electrónico<input name="email" type="email" autoComplete="username" required /></label><label>Contraseña<input name="password" type="password" autoComplete="current-password" required /></label>{loginError&&<p role="alert">{loginError}</p>}<button className="button dark full" disabled={authLoading}>{authLoading?'Iniciando…':'Entrar'}</button></form><a href="/crm/login">Acceso de administración</a></section></div>; }
   if (!identity || !accessToken) { window.location.replace('/app/login'); return null; }
-  if (identity?.roles.includes('cliente')) return <ClientPortal accessToken={accessToken||''} onLogout={()=>void logout()}/>;
+  if (identity?.roles.includes('cliente')) return <ClientPortal accessToken={accessToken||''} onLogout={()=>void logoutFieldUser()}/>;
 
   const selectedWorkOrder = (liveInstallations || []).find(item => item.id === workInstallId);
   const selectableStock: Array<StockItem & { orderRemaining: number }> = selectedWorkOrder?.materials
@@ -295,8 +295,13 @@ function App() {
   }
 
   async function logoutFieldUser() {
-    if (identity?.email && identity.roles.includes('instalador')) await clearCachedInstallations(identity.email).catch(() => undefined);
+    let cacheCleanupFailed = false;
+    if (identity?.email) {
+      try { await clearCachedFieldSnapshots(identity.email); }
+      catch { cacheCleanupFailed = true; }
+    }
     await logout();
+    if (cacheCleanupFailed) window.alert('La sesión se cerró, pero este dispositivo no confirmó la limpieza de datos guardados localmente. Cierra el navegador y solicita apoyo al administrador.');
     window.location.replace('/app/login');
   }
 

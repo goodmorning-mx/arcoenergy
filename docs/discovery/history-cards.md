@@ -772,6 +772,15 @@ En Reportes, contador y administración pueden filtrar el flujo de las cuentas a
 | US-19 | Parcial funcional | Reportes incorpora flujo por periodo y cuenta activa a partir de movimientos y saldos iniciales. Pendientes transferencias entre cuentas, conciliación bancaria y validación de métricas con el contador. |
 | US-18 | Parcial funcional | El reporte añade saldo de apertura, entradas, salidas y saldo calculado al cierre por cuenta activa. Pendiente conciliar con estados bancarios y decidir visibilidad de cuentas inactivas. |
 
+## Iteración 37 — limpieza de caché privada al cerrar sesión (2026-11-07)
+
+Al cerrar sesión desde la PWA se borran de IndexedDB las instantáneas locales de órdenes, inventario y movimientos asociadas a la cuenta. Las colas de checklist y de operaciones pendientes permanecen guardadas con el correo propietario para no perder trabajo sin sincronizar; al reiniciar sesión solo la misma identidad puede reanudar la sincronización. Esta entrega reduce la exposición de vistas en equipos compartidos, pero no sustituye borrado remoto, cifrado del dispositivo ni gestión MDM. Falta validar retención y uso compartido en los teléfonos reales.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | Al salir se eliminan instantáneas operativas privadas del usuario desde PWA; queda pendiente matriz integral de permisos y política de dispositivos. |
+| US-40 | Parcial funcional | Órdenes, inventario y movimientos en caché se limpian al salir sin borrar las acciones locales pendientes; falta validación con usuarios/dispositivos reales y política de borrado remoto. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.
