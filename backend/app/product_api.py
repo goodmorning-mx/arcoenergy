@@ -66,6 +66,34 @@ def require_permissions(service, *required: str):
     return dependency
 
 
+def require_any_permission(service, *allowed: str):
+    """Allow one of a small set of permissions, using the current membership."""
+    token_identity = identity_dependency(service)
+
+    def dependency(identity: AuthIdentity = Depends(token_identity)):
+        with service.engine.connect() as connection:
+            row = connection.execute(
+                select(users.c.email, users.c.name, memberships.c.roles, memberships.c.permissions)
+                .join(memberships, memberships.c.user_id == users.c.id)
+                .where(
+                    users.c.id == identity.user_id,
+                    users.c.is_active.is_(True),
+                    memberships.c.organization_id == identity.organization_id,
+                )
+            ).mappings().first()
+        if row is None:
+            raise HTTPException(status_code=401, detail="Active organization membership required.")
+        current = AuthIdentity(
+            identity.user_id, identity.organization_id, frozenset(row["roles"] or []),
+            frozenset(row["permissions"] or []), row["email"], row["name"],
+        )
+        if not set(allowed).intersection(current.permissions):
+            raise HTTPException(status_code=403, detail="Insufficient permissions.")
+        return current
+
+    return dependency
+
+
 def get_db():
     with SessionLocal() as session:
         yield session
@@ -325,6 +353,25 @@ class StockInput(BaseModel):
     reason: str = "consumo en instalación"
     installation_id: str | None = None
     operation_id: str | None = Field(default=None, min_length=8, max_length=80)
+
+
+class StockIssueLineInput(BaseModel):
+    work_order_material_id: str
+    quantity: Decimal = Field(gt=0)
+
+
+class StockIssueInput(BaseModel):
+    installation_id: str
+    document_reference: str = Field(default="", max_length=80)
+    lines: list[StockIssueLineInput] = Field(min_length=1, max_length=100)
+
+    @field_validator("lines")
+    @classmethod
+    def material_lines_are_unique(cls, values: list[StockIssueLineInput]) -> list[StockIssueLineInput]:
+        ids = [line.work_order_material_id for line in values]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Cada material de la orden debe aparecer una sola vez.")
+        return values
 
 
 class InventoryReturnInput(BaseModel):
@@ -932,7 +979,8 @@ def list_installations(identity: AuthIdentity = Depends(require_permissions(auth
             "confirmed_installers": [assignment.installer_email for assignment in assignments if assignment.confirmed_at],
             "customer": _serialize(db.get(Customer, row.customer_id)), "materials": [
             {**_serialize(material), "item_name": (db.get(InventoryItem, material.item_id).name if db.get(InventoryItem, material.item_id) else "Artículo"),
-             "remaining_quantity": max(Decimal(material.requested_quantity) - Decimal(material.consumed_quantity), Decimal("0"))}
+             "remaining_quantity": max(Decimal(material.requested_quantity) - Decimal(material.consumed_quantity), Decimal("0")),
+             "remaining_to_issue": max(Decimal(material.requested_quantity) - Decimal(material.preissued_quantity), Decimal("0"))}
             for material in materials
         ]})
     return result
@@ -1067,6 +1115,64 @@ def list_inventory(identity: AuthIdentity = Depends(require_permissions(auth_ser
     return rows
 
 
+@router.post("/inventory/issue", status_code=201)
+def issue_work_order_materials(data: StockIssueInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:issue")), db: Session = Depends(get_db)):
+    installation = db.scalar(select(Installation).where(Installation.id == data.installation_id).with_for_update())
+    if installation is None:
+        raise HTTPException(404, "Orden de trabajo no encontrada.")
+    if installation.status == "closed":
+        raise HTTPException(409, "No se puede emitir material para una orden cerrada.")
+
+    issued = []
+    for line in data.lines:
+        material = db.scalar(select(WorkOrderMaterial).where(
+            WorkOrderMaterial.id == line.work_order_material_id,
+            WorkOrderMaterial.installation_id == installation.id,
+        ).with_for_update())
+        if material is None:
+            raise HTTPException(422, "El material indicado no pertenece a esta orden.")
+        remaining = Decimal(str(material.requested_quantity)) - Decimal(str(material.preissued_quantity))
+        if line.quantity > remaining:
+            raise HTTPException(409, f"La salida excede lo solicitado para este artículo. Restante por entregar: {remaining}.")
+
+        item = db.scalar(select(InventoryItem).where(InventoryItem.id == material.item_id).with_for_update())
+        if item is None:
+            raise HTTPException(404, "El artículo solicitado ya no existe en el catálogo.")
+        reserved_for_other_orders = db.scalar(
+            select(func.coalesce(func.sum(WorkOrderMaterial.requested_quantity - WorkOrderMaterial.preissued_quantity), 0))
+            .join(Installation, Installation.id == WorkOrderMaterial.installation_id)
+            .where(
+                WorkOrderMaterial.item_id == item.id,
+                WorkOrderMaterial.installation_id != installation.id,
+                Installation.status != "closed",
+            )
+        ) or 0
+        available_for_this_order = Decimal(str(item.quantity)) - Decimal(str(reserved_for_other_orders))
+        if line.quantity > available_for_this_order:
+            raise HTTPException(409, f"Existencia disponible para esta orden: {max(available_for_this_order, Decimal('0'))} {item.unit}.")
+
+        item.quantity = Decimal(str(item.quantity)) - line.quantity
+        material.preissued_quantity = Decimal(str(material.preissued_quantity)) + line.quantity
+        reference = data.document_reference.strip()
+        reason = f"Salida de solicitud {reference}" if reference else "Salida desde solicitud de materiales"
+        movement = InventoryMovement(
+            item_id=item.id,
+            installation_id=installation.id,
+            work_order_material_id=material.id,
+            quantity=line.quantity,
+            movement_type="out",
+            unit_cost=item.unit_cost,
+            reason=reason,
+            created_by=identity.email or "",
+        )
+        db.add(movement)
+        db.flush()
+        issued.append({"item_id": item.id, "item_name": item.name, "quantity": float(line.quantity), "unit": item.unit, "movement_id": movement.id})
+
+    db.commit()
+    return {"installation_id": installation.id, "folio": installation.folio, "issued": issued}
+
+
 @router.post("/inventory/items", status_code=201, dependencies=[Depends(require_permissions(auth_service, "inventory:manage"))])
 def create_inventory_item(data: InventoryItemInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
     if data.supplier_id and not db.get(Supplier, data.supplier_id):
@@ -1161,7 +1267,7 @@ def receive_inventory(data: StockReceiptInput, identity: AuthIdentity = Depends(
 
 
 @router.post("/inventory/returns", status_code=201)
-def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:write")), db: Session = Depends(get_db)):
+def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depends(require_any_permission(auth_service, "inventory:write", "inventory:issue")), db: Session = Depends(get_db)):
     source = db.scalar(select(InventoryMovement).where(InventoryMovement.id == data.out_movement_id).with_for_update())
     if source is None or source.movement_type != "out" or not source.installation_id:
         raise HTTPException(404, "No se encontró una salida de instalación válida para devolver.")

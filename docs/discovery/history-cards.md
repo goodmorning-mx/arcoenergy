@@ -738,6 +738,15 @@ Se comprueba que los endpoints vuelven a leer el estado activo y los permisos ac
 | --- | --- | --- |
 | US-14 | Parcial funcional | Pruebas de autorización por membresía activa, cambio de rol y permisos vigentes; costos de inventario ocultos para instaladores y visibles para contabilidad. Pendiente una matriz endpoint/campo revisada con cuentas reales de cada rol y los responsables del negocio. |
 
+## Iteración 33 — revisión y salida física desde solicitud de materiales (2026-11-07)
+
+CRM permite seleccionar una orden, adjuntar temporalmente una foto o PDF de la solicitud y capturar las cantidades revisadas por almacén antes de confirmar. La salida se limita a los materiales y cantidades solicitados, reserva la existencia para órdenes activas y queda vinculada a la orden, renglón y kardex. Desde el mismo flujo se pueden registrar devoluciones o piezas dañadas relacionadas con una salida. La captura es manual: no hay OCR ni extracción automática. El archivo se previsualiza localmente y no se conserva ni sincroniza a Drive; se debe acordar e integrar almacenamiento documental.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-25 | Parcial funcional | CRM acepta foto/PDF como referencia temporal y permite revisar cantidades antes de emitir material y registrar devoluciones ligadas. Pendientes OCR, conservación en Drive y validación del formato operativo con almacén. |
+| US-14 | Parcial funcional | Administrador y contador pueden confirmar salidas físicas mediante permiso explícito; instalador, marketing y cliente no reciben ese permiso. Pendiente validar la matriz completa con usuarios reales. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.
