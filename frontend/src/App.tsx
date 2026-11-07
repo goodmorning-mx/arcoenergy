@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@goodmorning/gm-auth';
 import { PwaStatus } from '@goodmorning/gm-pwa';
+import { cacheInstallations, checklistQueueKey, clearCachedInstallations, queueChecklistChange, readCachedInstallations, readChecklistQueue, removeChecklistChange, removeChecklistChangeIfCurrent, type ChecklistQueueItem, type Installation } from './offlineChecklist';
 import './styles.css';
 import './barcode.css';
+import './offline.css';
 
 type Screen = 'inicio' | 'cotizar' | 'instalaciones' | 'inventario' | 'cuenta';
 type StockItem = { id:string; name:string; barcode?:string|null; unit:string; quantity:number; reserved_quantity?:number; available_quantity?:number; minimum_quantity:number; unit_cost:number };
 type StockMovement = { id:string; item_id:string; item_name:string; quantity:number; signed_quantity:number; movement_type:string; installation_id:string|null; reason:string; related_movement_id:string|null; returnable_quantity:number };
 type QuotePackage = { panel_count:number; panel_brand:string; panel_watts:number; panel_unit_price:number; structure_name:string; structure_price:number; inverter_options:Array<{name:string;price_mxn:number}>; default_inverter:string; payment_methods:string[]; enabled:boolean; pricing_approved:boolean };
-type Installation = { id:string; folio?:string|null; scheduled_at:string|null; lead_installer:string; status:string; notes:string; customer?:{name:string;city:string}; checklist?:Array<{task:string;done:boolean}>; materials?:Array<{item_id:string;item_name:string;requested_quantity:number;consumed_quantity:number;remaining_quantity:number}>; };
 type PortalData = { customers:Array<{id:string;name:string;city:string;status:string}>; quotes:Array<{id:string;folio:string;panel_count:number;panel_brand:string;panel_watts:number;inverter:string;total:number;status:string;created_at:string}>; installations:Array<{id:string;folio?:string|null;scheduled_at:string|null;status:string;checklist:Array<{task:string;done:boolean}>}>; payments:Array<{installment_number:number;due_date:string;amount:number;paid_amount:number;balance:number;status:string;payment_method:string}> };
 const money = (n: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 2 }).format(n);
 
@@ -34,6 +35,10 @@ function App() {
   const [actionMessage, setActionMessage] = useState('');
   const [notificationMessage, setNotificationMessage] = useState('');
   const [checklistBusy, setChecklistBusy] = useState('');
+  const [offlineQueue, setOfflineQueue] = useState<ChecklistQueueItem[]>([]);
+  const [isOnline, setIsOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
+  const [syncAttempt, setSyncAttempt] = useState(0);
+  const syncingChecklist = useRef(false);
   const seenInstallationIds = useRef<Set<string> | null>(null);
   const [authResolved, setAuthResolved] = useState(false);
   const can = (permission:string) => Boolean(identity?.permissions.includes(permission));
@@ -45,16 +50,91 @@ function App() {
 
   useEffect(() => { const timer=window.setTimeout(()=>setAuthResolved(true),0); return ()=>window.clearTimeout(timer); }, []);
   useEffect(() => {
+    const update = () => setIsOnline(navigator.onLine);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); };
+  }, []);
+  useEffect(() => {
+    if (!identity?.email) { setOfflineQueue([]); return; }
+    void readChecklistQueue(identity.email).then(setOfflineQueue).catch(() => setNotificationMessage('No se pudo leer la cola local de cambios.'));
+  }, [identity?.email]);
+  useEffect(() => {
     if (!accessToken || !identity?.permissions.includes('quotes:read')) { setQuotePackages([]); return; }
     void fetch(`${import.meta.env.VITE_API_URL || '/api'}/v1/catalog`).then(async response => { if (!response.ok) throw new Error('No se pudo cargar el catálogo.'); const result=await response.json(); setQuotePackages(result.packages || []); }).catch(error => setQuoteNotice(error instanceof Error ? error.message : 'No se pudo cargar el catálogo.'));
   }, [accessToken, identity?.permissions.join(',')]);
   useEffect(() => {
     if (!accessToken || !identity?.permissions.includes('installations:read')) { setLiveInstallations(null); return; }
-    const loadInstallations = () => fetch(`${import.meta.env.VITE_API_URL || '/api'}/v1/installations`, { headers: { Authorization: `Bearer ${accessToken}` } }).then(async response => { if (!response.ok) throw new Error('No se pudieron cargar las instalaciones.'); setLiveInstallations(await response.json()); }).catch(() => setLiveInstallations([]));
+    const loadInstallations = async () => {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/v1/installations`, { headers: { Authorization: `Bearer ${accessToken}` } });
+        if (!response.ok) throw new Error('No se pudieron cargar las instalaciones.');
+        const rows: Installation[] = await response.json();
+        setLiveInstallations(rows);
+        if (identity?.email && identity.roles.includes('instalador')) await cacheInstallations(identity.email, rows);
+      } catch {
+        if (identity?.email && identity.roles.includes('instalador')) {
+          const cached = await readCachedInstallations(identity.email).catch(() => null);
+          if (cached) setLiveInstallations(cached);
+        }
+      }
+    };
     void loadInstallations();
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void loadInstallations(); }, 30000);
     return () => window.clearInterval(timer);
-  }, [accessToken, identity?.permissions.join(',')]);
+  }, [accessToken, identity?.permissions.join(','), identity?.email]);
+  useEffect(() => {
+    if (!isOnline || !accessToken || !identity?.email || syncingChecklist.current) return;
+    const ownerEmail = identity.email;
+    syncingChecklist.current = true;
+    void (async () => {
+      let needsAnotherPass = false;
+      try {
+        const queued = await readChecklistQueue(ownerEmail);
+        if (!queued.length) { setOfflineQueue([]); return; }
+        const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/v1/installations`, { headers: { Authorization: `Bearer ${accessToken}` } });
+        if (!response.ok) throw new Error('No se pudieron validar las órdenes asignadas.');
+        let rows: Installation[] = await response.json();
+        if (identity.roles.includes('instalador')) await cacheInstallations(ownerEmail, rows);
+        for (const change of queued) {
+          const installation = rows.find(row => row.id === change.installation_id);
+          if (!installation) continue;
+          const current = installation.checklist || [];
+          const checklist = current.map(item => ({ ...item, done: item.task === change.task ? change.done : item.done }));
+          if (!current.some(item => item.task === change.task)) {
+            await removeChecklistChange(change.key);
+            setNotificationMessage('Se descartó un cambio local porque coordinación retiró ese paso de la orden.');
+            continue;
+          }
+          const saved = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/v1/installations/${installation.id}/checklist`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+            body: JSON.stringify({ checklist }),
+          });
+          if (!saved.ok) {
+            setNotificationMessage(saved.status >= 500
+              ? 'El servidor no pudo sincronizar los cambios. Puedes reintentar cuando vuelva a responder.'
+              : 'Un cambio local requiere revisión porque la orden o el acceso cambió. Contacta a coordinación.');
+            break;
+          }
+          const updated: Installation = await saved.json();
+          rows = rows.map(row => row.id === updated.id ? updated : row);
+          const removed = await removeChecklistChangeIfCurrent(change.key, change.done);
+          if (!removed) needsAnotherPass = true;
+        }
+        setLiveInstallations(rows);
+        if (identity.roles.includes('instalador')) await cacheInstallations(ownerEmail, rows);
+        const remaining = await readChecklistQueue(ownerEmail);
+        setOfflineQueue(remaining);
+        if (!remaining.length) setNotificationMessage('Cambios del checklist sincronizados.');
+        else if (needsAnotherPass) setSyncAttempt(value => value + 1);
+      } catch {
+        // Keep queued edits until the server confirms them.
+      } finally {
+        syncingChecklist.current = false;
+      }
+    })();
+  }, [isOnline, accessToken, identity?.email, identity?.roles.join(','), offlineQueue.length, syncAttempt]);
   useEffect(() => {
     if (!liveInstallations) { seenInstallationIds.current = null; return; }
     const current = new Set(liveInstallations.map(item => item.id));
@@ -110,13 +190,35 @@ function App() {
   async function toggleChecklist(installation: Installation, task: string, done: boolean) {
     if (!accessToken || checklistBusy) return;
     setChecklistBusy(installation.id);
+    const checklist = (installation.checklist || []).map(item => ({ ...item, done: item.task === task ? done : item.done }));
+    const queuedChange: ChecklistQueueItem = {
+      key: checklistQueueKey(identity?.email || '', installation.id, task),
+      owner: identity?.email || '', installation_id: installation.id, task, done, queued_at: new Date().toISOString(),
+    };
+    const queueLocally = async () => {
+      if (!identity?.email) throw new Error('No se puede asociar el cambio a la cuenta activa.');
+      await queueChecklistChange(queuedChange);
+      setOfflineQueue(await readChecklistQueue(identity.email));
+      const updated = { ...installation, checklist };
+      setLiveInstallations(rows => (rows || []).map(row => row.id === updated.id ? updated : row));
+      const cachedRows = liveInstallations || [installation];
+      await cacheInstallations(identity.email, cachedRows.map(row => row.id === updated.id ? updated : row));
+      setNotificationMessage('Sin conexión: cambio guardado en este dispositivo y pendiente de sincronizar.');
+    };
     try {
-      const checklist = (installation.checklist || []).map(item => ({ ...item, done: item.task === task ? done : item.done }));
-      const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/v1/installations/${installation.id}/checklist`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({ checklist }),
-      });
+      if (!navigator.onLine || offlineQueue.length > 0) {
+        await queueLocally();
+        if (navigator.onLine && offlineQueue.length > 0) setSyncAttempt(value => value + 1);
+        return;
+      }
+      let response: Response;
+      try {
+        response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/v1/installations/${installation.id}/checklist`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ checklist }),
+        });
+      } catch { await queueLocally(); return; }
       if (!response.ok) throw new Error((await response.json()).detail || 'No se pudo actualizar la orden.');
       const updated = await response.json();
       setLiveInstallations(rows => (rows || []).map(row => row.id === updated.id ? updated : row));
@@ -130,6 +232,20 @@ function App() {
     if (typeof Notification === 'undefined') { setNotificationMessage('Este navegador no admite notificaciones.'); return; }
     const permission = await Notification.requestPermission();
     setNotificationMessage(permission === 'granted' ? 'Avisos activados mientras la app esté abierta.' : 'El navegador no autorizó los avisos.');
+  }
+
+  async function logoutFieldUser() {
+    if (identity?.email && identity.roles.includes('instalador')) await clearCachedInstallations(identity.email).catch(() => undefined);
+    await logout();
+    window.location.replace('/app/login');
+  }
+
+  async function discardPendingChecklist() {
+    if (!identity?.email || !window.confirm('¿Descartar todos los cambios de checklist pendientes en este dispositivo?')) return;
+    const pending = await readChecklistQueue(identity.email);
+    await Promise.all(pending.map(item => removeChecklistChange(item.key)));
+    setOfflineQueue([]);
+    setNotificationMessage('Se descartaron los cambios locales pendientes.');
   }
 
   async function generateQuote() {
@@ -153,14 +269,14 @@ function App() {
   }
 
   return <div className="app-frame">
-    <header className="topbar"><a className="brand" href="/"><span className="brand-mark">A</span><span>arco<span>energy</span></span></a><div className="top-actions"><PwaStatus/><button className="avatar" title="Cerrar sesión" onClick={async()=>{await logout();window.location.replace('/app/login')}}>{identity.name?.slice(0,2).toUpperCase()||'AE'}</button></div></header>
+    <header className="topbar"><a className="brand" href="/"><span className="brand-mark">A</span><span>arco<span>energy</span></span></a><div className="top-actions"><PwaStatus/><button className="avatar" title="Cerrar sesión" onClick={()=>void logoutFieldUser()}>{identity.name?.slice(0,2).toUpperCase()||'AE'}</button></div></header>
     <div className="workspace"><aside className="rail"><div className="rail-label">CAMPO</div>{navItems.map(([id,icon,label])=><button key={id} className={screen===id?'rail-item active':'rail-item'} onClick={()=>setScreen(id)}><span>{icon}</span>{label}</button>)}<div className="rail-bottom"><span className="mini-avatar">{identity.name?.slice(0,2).toUpperCase()||'AE'}</span><div><b>{identity.name}</b><small>{identity.roles[0]||'Equipo'} · ArcoEnergy</small></div></div></aside>
     <main className="content">
       {screen==='inicio'&&<><div className="welcome"><div><div className="eyebrow">{new Date().toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'}).toUpperCase()}</div><h1>Hola, {identity?.name?.split(' ')[0]||'equipo'} <span>☀</span></h1><p>Tu operación solar, en un solo lugar.</p></div>{can('quotes:write')&&<button className="button dark" onClick={()=>setScreen('cotizar')}>＋ Crear cotización</button>}</div><section className="stats">{can('quotes:read')&&<article><small>COTIZACIONES</small><strong>CRM</strong><span className="muted">Consulta la cartera comercial</span></article>}{can('installations:read')&&<article><small>INSTALACIONES</small><strong>Agenda</strong><span className="muted">Tareas asignadas a tu equipo</span></article>}{can('inventory:read')&&<article><small>INVENTARIO</small><strong>{liveStock?.length ?? '—'}</strong><span className="muted">Artículos disponibles</span></article>}</section><section className="overview-grid"><article className="panel pipeline"><div className="panel-head"><div><small>ACCESOS RÁPIDOS</small><h2>Tu espacio de trabajo</h2></div></div><div className="todo-row"><span className="todo-icon green">▤</span><div><b>CRM de escritorio</b><small>Clientes, cotizaciones y seguimientos</small></div><a className="arrow" href="/crm/login">↗</a></div><div className="todo-row"><span className="todo-icon blue">▦</span><div><b>Materiales del equipo</b><small>Consulta existencias autorizadas desde esta app</small></div><button className="arrow" onClick={()=>setScreen('inventario')}>↗</button></div></article><article className="panel todo"><div className="panel-head"><div><small>PARA EMPEZAR</small><h2>Acciones disponibles</h2></div></div><div className="todo-row"><span className="todo-icon amber">＋</span><div><b>Cotiza desde el celular</b><small>Usa los paquetes vigentes configurados por administración</small></div><button className="arrow" onClick={()=>setScreen('cotizar')}>↗</button></div></article></section></>}
       {screen==='cotizar'&&<><div className="page-title"><div><div className="eyebrow">VENTAS / NUEVA PROPUESTA</div><h1>Cotizador solar</h1><p>Arma una propuesta con el catálogo vigente de tu empresa.</p></div><span className="catalog-status">{!selectedPackage?'SIN PAQUETE ACTIVO':!selectedPackage.pricing_approved?'PRECIO PENDIENTE':'CATÁLOGO APROBADO'}</span></div><div className="quote-layout"><section className="panel form-panel"><h2>Cuéntanos del proyecto</h2><label>Nombre del cliente<input value={customerName} onChange={e=>setCustomerName(e.target.value)} placeholder="Ej. Andrea Martínez"/></label><label>Teléfono / WhatsApp<input value={customerPhone} onChange={e=>setCustomerPhone(e.target.value)} placeholder="833 123 4567" inputMode="tel"/></label><label>Correo del cliente<input type="email" value={customerEmail} onChange={e=>setCustomerEmail(e.target.value)} placeholder="cliente@correo.com"/></label><label>Lugar de instalación<input value={customerCity} onChange={e=>setCustomerCity(e.target.value)} placeholder="Ciudad o código postal"/></label><div className="form-row"><label>Paneles <div className="stepper"><button type="button" onClick={()=>{setSaved(false);setPanels(Math.max(4,panels-1))}}>−</button><strong>{panels}</strong><button type="button" onClick={()=>{setSaved(false);setPanels(Math.min(20,panels+1))}}>＋</button><span>paneles</span></div></label><label>Forma de pago<select value={paymentMethod} onChange={e=>setPaymentMethod(e.target.value)}>{(selectedPackage?.payment_methods||[]).map(method=><option key={method}>{method}</option>)}</select></label></div><label>Inversor recomendado<select value={inverter||selectedPackage?.default_inverter||''} onChange={e=>setInverter(e.target.value)}>{(selectedPackage?.inverter_options||[]).map(option=><option key={option.name}>{option.name}</option>)}</select></label><button className="button dark full" onClick={()=>void generateQuote()} disabled={!selectedPackage||!selectedPackage.pricing_approved||!accessToken}>{saved?'✓ Propuesta guardada':!selectedPackage?.pricing_approved?'Paquete pendiente de aprobación':'Generar propuesta y PDF'}</button>{quoteNotice&&<small className="form-error">{quoteNotice}</small>}<small className="form-note">{accessToken?'La cotización se guardará en el CRM y el PDF se descargará.':'Inicia sesión con permisos comerciales para consultar el catálogo y guardar cotizaciones.'}</small></section><section className="quote-preview"><div className="preview-top"><span>PROPUESTA</span><span>{folio}</span></div><div className="sun-art">☼</div><div className="quote-copy"><small>SISTEMA SOLAR RESIDENCIAL</small><h2>Tu energía,<br/>a tu manera.</h2><p>Un sistema diseñado para aprovechar el sol y reducir tu recibo.</p></div><div className="quote-spec"><span><b>{panels} ×</b> paneles {selectedPackage?.panel_brand||''} de {selectedPackage?.panel_watts||'—'} W</span><span><b>{(quote.watts/1000).toFixed(2)} kWp</b> capacidad · {inverter||selectedPackage?.default_inverter||'Inversor por definir'}</span></div><div className="quote-price"><small>INVERSIÓN ESTIMADA</small><strong>{!selectedPackage?.pricing_approved?'Precio por aprobar':selectedPackage?money(quote.price):'Configura el paquete'}</strong><small>{paymentMethod} · {selectedPackage?.structure_name||''}</small></div>{saved&&customerPhone&&selectedPackage&&selectedPackage.pricing_approved&&<a className="button lime full share-button" href={`https://wa.me/${customerPhone.replace(/\D/g,'')}?text=${encodeURIComponent(`Hola ${customerName||''}, te comparto tu propuesta solar ${folio}. Estoy al pendiente de tus dudas.`)}`} target="_blank" rel="noreferrer">Abrir WhatsApp · Adjunta el PDF ↗</a>}<p className="fine">Cotización sujeta a validación técnica y condiciones comerciales.</p></section></div></>}
-      {screen==='instalaciones'&&<><div className="page-title"><div><div className="eyebrow">OPERACIÓN / CAMPO</div><h1>Instalaciones</h1><p>Tu agenda de trabajo y el estado de cada proyecto.</p></div>{identity?.roles.includes('instalador')&&<button className="button outline" onClick={()=>void enableNotifications()}>Activar avisos</button>}</div>{notificationMessage&&<p className="action-message" role="status">{notificationMessage}</p>}<div className="install-list">{(liveInstallations||[]).length ? liveInstallations!.map(item=><article className="panel install-card" key={item.id}><div className="install-date">{item.scheduled_at?new Date(item.scheduled_at).toLocaleString('es-MX'):'Fecha por confirmar'}</div><div className="install-person"><span className="person-avatar">{(item.customer?.name||'AE').slice(0,2).toUpperCase()}</span><div><h2>{item.customer?.name||'Cliente'}</h2><small>{item.customer?.city||'Ubicación pendiente'}</small></div></div><div className="install-system"><b>{item.folio||item.status}</b><small>{item.notes||'Orden de trabajo'}</small></div><span className="pill scheduled">{item.checklist?.filter(task=>task.done).length||0}/{item.checklist?.length||0} pasos</span>{item.materials?.length ? <div className="order-materials"><b>Materiales para esta orden</b>{item.materials.map(line=>{const stock=liveStock?.find(row=>row.id===line.item_id);const physical=Number(stock?.quantity||0);const reserved=Number(stock?.reserved_quantity||0);const gap=Math.max(0,reserved-physical);return <div className="order-material" key={line.item_id}><span><strong>{line.item_name}</strong><small>{line.requested_quantity} solicitados · {line.consumed_quantity} usados · {line.remaining_quantity} pendientes</small></span><span className={stock?(gap>0?'stock-gap':'stock-ok'):'stock-unknown'}>{stock?gap>0?`Revisar faltante global: ${gap} ${stock.unit}`:`Reservas cubiertas · ${physical} ${stock.unit} físicos`:'Sin registro de inventario'}</span></div>})}</div>:null}{Boolean(item.checklist?.length)&&<div className="install-checklist">{item.checklist!.map(task=><label key={task.task}><input type="checkbox" checked={task.done} disabled={checklistBusy===item.id} onChange={event=>void toggleChecklist(item,task.task,event.target.checked)}/><span>{task.task}</span></label>)}</div>}<button className="button outline" onClick={()=>{setWorkInstallId(item.id);setScreen('inventario')}}>Registrar material/gasto</button></article>):<section className="panel empty-state"><h2>Sin instalaciones asignadas</h2><p>Cuando coordinación te asigne una orden, aparecerá aquí.</p></section>}</div></>}
+      {screen==='instalaciones'&&<><div className="page-title"><div><div className="eyebrow">OPERACIÓN / CAMPO</div><h1>Instalaciones</h1><p>Tu agenda de trabajo y el estado de cada proyecto.</p></div>{identity?.roles.includes('instalador')&&<button className="button outline" onClick={()=>void enableNotifications()}>Activar avisos</button>}</div>{(!isOnline||offlineQueue.length>0)&&<div className="offline-banner" role="status"><b>{isOnline?'Cambios pendientes de sincronizar':'Sin conexión'}</b><span>{isOnline?'Los cambios guardados en este dispositivo se enviarán al recuperar conexión.':'Se muestran las órdenes guardadas previamente. Los cambios de checklist quedan en cola; consumos y gastos requieren conexión.'}</span>{offlineQueue.length>0&&<><small>{offlineQueue.length} cambio(s) pendiente(s)</small>{isOnline&&<button className="button outline" onClick={()=>setSyncAttempt(value=>value+1)}>Reintentar sincronización</button>}<button className="button outline" onClick={()=>void discardPendingChecklist()}>Descartar cambios pendientes</button></>}</div>}{notificationMessage&&<p className="action-message" role="status">{notificationMessage}</p>}<div className="install-list">{(liveInstallations||[]).length ? liveInstallations!.map(item=><article className="panel install-card" key={item.id}><div className="install-date">{item.scheduled_at?new Date(item.scheduled_at).toLocaleString('es-MX'):'Fecha por confirmar'}</div><div className="install-person"><span className="person-avatar">{(item.customer?.name||'AE').slice(0,2).toUpperCase()}</span><div><h2>{item.customer?.name||'Cliente'}</h2><small>{item.customer?.city||'Ubicación pendiente'}</small></div></div><div className="install-system"><b>{item.folio||item.status}</b><small>{item.notes||'Orden de trabajo'}</small></div><span className="pill scheduled">{item.checklist?.filter(task=>task.done).length||0}/{item.checklist?.length||0} pasos</span>{item.materials?.length ? <div className="order-materials"><b>Materiales para esta orden</b>{item.materials.map(line=>{const stock=liveStock?.find(row=>row.id===line.item_id);const physical=Number(stock?.quantity||0);const reserved=Number(stock?.reserved_quantity||0);const gap=Math.max(0,reserved-physical);return <div className="order-material" key={line.item_id}><span><strong>{line.item_name}</strong><small>{line.requested_quantity} solicitados · {line.consumed_quantity} usados · {line.remaining_quantity} pendientes</small></span><span className={stock?(gap>0?'stock-gap':'stock-ok'):'stock-unknown'}>{stock?gap>0?`Revisar faltante global: ${gap} ${stock.unit}`:`Reservas cubiertas · ${physical} ${stock.unit} físicos`:'Sin registro de inventario'}</span></div>})}</div>:null}{Boolean(item.checklist?.length)&&<div className="install-checklist">{item.checklist!.map(task=><label key={task.task}><input type="checkbox" checked={task.done} disabled={checklistBusy===item.id} onChange={event=>void toggleChecklist(item,task.task,event.target.checked)}/><span>{task.task}</span></label>)}</div>}<button className="button outline" onClick={()=>{setWorkInstallId(item.id);setScreen('inventario')}}>Registrar material/gasto</button></article>):<section className="panel empty-state"><h2>{isOnline?'Sin instalaciones asignadas':'No hay órdenes guardadas en este dispositivo'}</h2><p>{isOnline?'Cuando coordinación te asigne una orden, aparecerá aquí.':'Conéctate una vez para cargar las órdenes asignadas antes de trabajar sin conexión.'}</p></section>}</div></>}
       {screen==='inventario'&&<><div className="page-title"><div><div className="eyebrow">OPERACIÓN / ALMACÉN</div><h1>Inventario</h1><p>Consulta existencias. Registra consumos y viáticos vinculados a una orden de trabajo.</p></div><span className="catalog-status">{liveStock?`${liveStock.length} ARTÍCULOS`:'Cargando inventario'}</span></div><BarcodeScanner items={liveStock||[]} onMatch={item=>{setActionMessage(`Artículo identificado: ${item.name} · ${item.available_quantity??item.quantity} ${item.unit} disponibles.`);document.getElementById(`stock-${item.id}`)?.scrollIntoView({behavior:'smooth',block:'center'});}}/><section className="stats">{(can('inventory:costs:read')||can('inventory:manage'))&&<article><small>VALOR ESTIMADO</small><strong>{liveStock?money(liveStock.reduce((sum,item)=>sum+item.quantity*item.unit_cost,0)):'—'}</strong><span className="muted">{liveStock?'Costo registrado':'Cargando inventario'}</span></article>}<article><small>STOCK BAJO</small><strong>{liveStock?liveStock.filter(item=>item.minimum_quantity>0&&(item.available_quantity??item.quantity)<=item.minimum_quantity).length:'—'}</strong><span className="warn">Requieren revisión</span></article><article><small>ASIGNADO A PROYECTOS</small><strong>{liveStock?'Consultar instalación':'—'}</strong><span className="muted">Material para cuadrillas</span></article></section><section className="panel inventory-list"><div className="table-head inv-head"><span>ARTÍCULO</span><span>DISPONIBLE</span><span>ASIGNADO</span><span>ESTADO</span></div>{liveStock?.length ? liveStock.map((item,i)=><div className="inv-row" id={`stock-${item.id}`} key={item.id}><span className="item-cell"><i>{['▧','⌁','▤','⌁','⟐'][i%5]}</i><b>{item.name}<small>{item.barcode||'Sin código registrado'}</small></b></span><b>{item.available_quantity ?? item.quantity} {item.unit}</b><span>{item.reserved_quantity ?? 0} {item.unit}</span><em className={`pill ${item.minimum_quantity>0&&(item.available_quantity??item.quantity)<=item.minimum_quantity?'scheduled':'sent'}`}>{item.minimum_quantity>0&&(item.available_quantity??item.quantity)<=item.minimum_quantity?'Disponibilidad baja':'Disponible'}</em></div>):<div className="empty-state"><h3>Inventario sin artículos</h3><p>El catálogo se mostrará cuando administración registre artículos y existencias.</p></div>}</section>{(identity.permissions.includes('inventory:write')||identity.permissions.includes('expenses:write'))&&<section className="panel field-actions"><h2>Registrar movimiento de campo</h2><label>Orden de trabajo<select value={workInstallId} onChange={e=>setWorkInstallId(e.target.value)} required><option value="">Selecciona una instalación</option>{(liveInstallations||[]).map(item=><option key={item.id} value={item.id}>{item.folio||'Orden'} · {item.customer?.name||'Cliente'} · {item.customer?.city||item.status}</option>)}</select></label>{identity.permissions.includes('inventory:write')&&<form onSubmit={e=>void submitFieldAction(e,'consume')}><h3>Material utilizado</h3><select name="installation_id" value={workInstallId} onChange={e=>setWorkInstallId(e.target.value)} required><option value="">Orden de trabajo</option>{(liveInstallations||[]).map(item=><option key={item.id} value={item.id}>{item.customer?.name||'Cliente'}</option>)}</select><select name="item_id" required><option value="">Artículo</option>{selectableStock.map(item=><option key={item.id} value={item.id}>{item.name} · pendiente en esta orden {item.orderRemaining} {item.unit}</option>)}</select><input name="quantity" type="number" min="0.01" step="0.01" placeholder="Cantidad utilizada" required/><input name="reason" placeholder="Nota del consumo"/><button className="button dark">Descontar material</button></form>}{identity.permissions.includes('inventory:write')&&<form onSubmit={e=>void submitFieldAction(e,'return')}><h3>Devolver sobrantes</h3><select name="out_movement_id" required><option value="">Salida de material de esta orden</option>{liveMovements.filter(movement=>movement.movement_type==='out'&&movement.installation_id===workInstallId&&movement.returnable_quantity>0).map(movement=><option key={movement.id} value={movement.id}>{movement.item_name} · quedan {movement.returnable_quantity}</option>)}</select><input name="quantity" type="number" min="0.01" step="0.01" placeholder="Cantidad devuelta" required/><input name="reason" placeholder="Estado o nota del material"/><button className="button outline">Registrar devolución</button></form>}{identity.permissions.includes('expenses:write')&&<form onSubmit={e=>void submitFieldAction(e,'expense')}><h3>Viáticos y gastos</h3><input type="hidden" name="installation_id" value={workInstallId}/><select name="category"><option>Viáticos</option><option>Combustible</option><option>Materiales</option><option>Otro</option></select><input name="description" placeholder="Concepto del gasto" required/><input name="amount" type="number" min="0.01" step="0.01" placeholder="Importe MXN" required/><button className="button dark">Registrar gasto</button></form>}{actionMessage&&<p role="status">{actionMessage}</p>}</section>}</>}
-      {screen==='cuenta'&&<><div className="page-title"><div><div className="eyebrow">PERFIL</div><h1>Mi cuenta</h1><p>Sesión activa del equipo ArcoEnergy.</p></div></div><section className="panel account-card"><span className="person-avatar">{(identity.name||identity.email||'AE').slice(0,2).toUpperCase()}</span><div><h2>{identity.name}</h2><p>{identity.roles[0]||'Equipo'} · arcoenergy</p><span className="pill sent">Cuenta activa</span></div><a className="button outline" href="/crm/login">Abrir CRM</a><button className="button outline" onClick={async()=>{await logout();window.location.replace('/app/login')}}>Cerrar sesión</button></section><section className="panel integrations"><h2>Conexiones del negocio</h2><div><span className="integration-icon">G</span><span><b>Google Drive</b><small>El almacenamiento se conecta al configurar la cuenta del negocio.</small></span><em>Pendiente de conectar</em></div><div><span className="integration-icon">⌕</span><span><b>WhatsApp</b><small>Abre una conversación con el cliente desde el CRM.</small></span><em>Enlace disponible</em></div></section></>}
+      {screen==='cuenta'&&<><div className="page-title"><div><div className="eyebrow">PERFIL</div><h1>Mi cuenta</h1><p>Sesión activa del equipo ArcoEnergy.</p></div></div><section className="panel account-card"><span className="person-avatar">{(identity.name||identity.email||'AE').slice(0,2).toUpperCase()}</span><div><h2>{identity.name}</h2><p>{identity.roles[0]||'Equipo'} · arcoenergy</p><span className="pill sent">Cuenta activa</span></div><a className="button outline" href="/crm/login">Abrir CRM</a><button className="button outline" onClick={()=>void logoutFieldUser()}>Cerrar sesión</button></section><section className="panel integrations"><h2>Conexiones del negocio</h2><div><span className="integration-icon">G</span><span><b>Google Drive</b><small>El almacenamiento se conecta al configurar la cuenta del negocio.</small></span><em>Pendiente de conectar</em></div><div><span className="integration-icon">⌕</span><span><b>WhatsApp</b><small>Abre una conversación con el cliente desde el CRM.</small></span><em>Enlace disponible</em></div></section></>}
     </main></div><nav className="mobile-nav">{navItems.map(([id,icon,label])=><button key={id} className={screen===id?'selected':''} onClick={()=>setScreen(id)}><span>{icon}</span>{label==='Resumen'?'Inicio':label==='Instalaciones'?'Obras':label==='Inventario'?'Stock':label==='Mi cuenta'?'Más':label}</button>)}</nav>
 
   </div>

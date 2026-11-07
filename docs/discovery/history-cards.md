@@ -589,6 +589,18 @@ El contador indicó que corregir un pago debe conservar historial y actualizar e
 | US-34 | Parcial funcional | Reversa de pago de proveedor/cliente actualiza movimiento de caja y saldo relacionado con trazabilidad. Quedan otros tipos de operación y conciliación. |
 | US-36 | Parcial funcional | Se corrigen pagos de clientes y proveedores con eventos enlazados y motivo; no se permite revertir por separado el movimiento de caja enlazado. Pendiente extender a compras completas, ventas e inventario. |
 
+## Iteración 18 — checklist de campo sin conexión (2026-11-07)
+
+La PWA guarda en IndexedDB las órdenes consultadas previamente por una cuenta instaladora y permite marcar pasos del checklist sin conexión. Cada cambio queda asociado a la cuenta y la orden; al reconectar, la PWA vuelve a consultar las órdenes autorizadas y aplica el cambio a la versión actual del checklist antes de enviarlo. Los cambios confirmados se eliminan de la cola. Al cerrar sesión se borra la caché de órdenes de esa cuenta. Consumos, devoluciones de inventario y gastos continúan requiriendo conexión al API y sus validaciones. El almacenamiento local necesita validación en los teléfonos de ArcoEnergy y no sustituye una política de borrado remoto del dispositivo.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-40 | Parcial funcional | Checklist de órdenes con cola offline persistente y sincronización tras reconexión; caché de órdenes por cuenta instaladora. Consumos, devoluciones, gastos, otras escrituras offline, notificaciones de fondo, validación en dispositivos y borrado remoto siguen pendientes. |
+
+## Auditoría de accesos y despliegue DEV (2026-11-07)
+
+La rama `dev` quedó en `bf70b0c`. Las rutas `/app/login` y `/crm/login` y sus portales responden HTTP 200; `/api/version` informa el commit desplegado `470708e`, que incluye la Iteración 17. La ruta CRM/PWA usa autenticación y se verificó la cuenta real existente con rol `administrador`; no se crearon cuentas de muestra ni están verificadas cuentas reales para los demás roles. La limpieza de selectores CSS obsoletos del PR #39 no cambia el comportamiento servido. Estos datos acreditan accesos y un usuario administrador, no la cobertura completa de las 42 user story cards.
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.
