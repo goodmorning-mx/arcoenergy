@@ -677,6 +677,14 @@ En el catálogo CRM, administración puede abrir e imprimir una etiqueta QR de c
 | US-20 | Parcial funcional | El CRM genera e imprime etiqueta QR con identificador de catálogo y ya conserva marca/modelo/categoría/barcode. Falta validar tamaño/medio de impresión con almacén. |
 | US-28 | Parcial funcional | El escáner PWA resuelve barcode capturado y el identificador generado de etiqueta; falta validar cámaras, lectores y formatos en dispositivos reales. |
 
+## Iteración 26 — exportación completa del kardex (2026-11-07)
+
+La descarga CSV del CRM ahora vuelve a consultar todas las páginas de 500 movimientos hasta completar el conjunto filtrado por artículo y fecha. Esto evita que la exportación dependa de cuántas páginas haya cargado visualmente la tabla. Se conserva la protección contra fórmulas de hoja de cálculo y el costo solo aparece para usuarios autorizados. Falta medir exportaciones con el volumen histórico real.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-27 | Parcial funcional | CRM filtra por artículo/fecha, pagina resultados y exporta el conjunto filtrado completo. Falta validar rendimiento con históricos de producción. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.
