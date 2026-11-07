@@ -824,3 +824,13 @@ La revisión de DEV confirma que `/login` y `/crm/login` sirven el acceso de esc
 | US-14 | Parcial funcional | Las rutas de acceso están separadas y las vistas requieren sesión; DEV contiene solo una cuenta administradora. Falta cargar y validar las cuentas reales y cerrar la matriz completa de privilegios. |
 | US-39 | Parcial funcional | No hay UI activa de trial/demo y el acceso al CRM está protegido. Faltan completar las capacidades administrativas descritas en las demás historias y cargar datos aprobados del negocio. |
 | US-40 | Parcial funcional | PWA protegida disponible en `/app/login`; no se encontraron usuarios instalador/cliente en DEV. Falta el alta real del equipo y validar tareas/campo en dispositivos. |
+
+## Iteración 42 — acceso visible desde el sitio público (2026-11-07)
+
+La cabecera del sitio público ahora incluye una entrada “Ingresar” hacia `/login`, que dirige al acceso CRM. El acceso móvil continúa disponible en el pie del sitio (`/app/login`) y desde el vínculo “Acceso móvil” de la pantalla de CRM. Los espacios internos siguen protegidos con autenticación; hacer más visible la ruta no crea usuarios ni amplía permisos.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | El usuario puede llegar al login desde la web pública y cada portal conserva su acceso. Falta validar la navegación con cuentas reales de todos los roles y completar la matriz de permisos. |
+| US-39 | Parcial funcional | La cabecera del sitio facilita el acceso al CRM desde escritorio; el área interna mantiene login y privilegios. Faltan datos reales y capacidades aún abiertas en las demás tarjetas. |
+| US-40 | Parcial funcional | El portal PWA sigue en `/app/login` y enlazado desde el acceso CRM y el pie público. Falta probar con instaladores/clientes provisionados. |
