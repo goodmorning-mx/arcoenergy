@@ -755,6 +755,14 @@ Administración puede corregir la ficha del material desde CRM: nombre, descripc
 | --- | --- | --- |
 | US-20 | Parcial funcional | CRM permite corregir los metadatos del catálogo con permiso de administración, valida proveedor y código único y protege el saldo físico. Pendiente acordar unidades de medida válidas y validar impresión/lectura con almacén. |
 
+## Iteración 35 — procedencia estructurada para history cards (2026-11-07)
+
+Las nuevas versiones de tarjeta pueden registrar uno o más artefactos fuente con tipo, referencia durable, canal, ubicación exacta y hash SHA-256 opcional. Se conserva el literal por separado de idioma, atribución, fecha/hora original cuando se conoce y nivel de fidelidad. Cada relación indica si el vínculo representa cita literal, transcripción, paráfrasis, inferencia, validación o reconstrucción. La migración conserva las versiones existentes y las marca `needs_validation` porque no se inventan fechas ni grados de certeza para evidencia previa.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-42 | Parcial funcional | La base de datos y el CRM guardan procedencia estructurada y distinguen literal/transcripción/paráfrasis/inferencia/reconstrucción. Los artefactos sensibles aún requieren almacenamiento privado con retención y permisos definidos; las fuentes históricas necesitan cotejo de stakeholders. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.

@@ -32,7 +32,7 @@ def test_history_card_adds_new_version_without_replacing_previous() -> None:
         db.add(HistoryCard(story_id="US-1", version=1, iteration="Discovery inicial", stakeholder="Goito", source_literal="Texto original", source_type="WhatsApp", normalized_story="Story anterior", recorded_by="test"))
         db.commit()
         result = append_history_card(
-            HistoryCardInput(story_id="US-1", version=2, iteration="Iteración 2", stakeholder="Goito", source_literal="Aclaración literal", source_type="WhatsApp", normalized_story="Story actualizada"),
+            HistoryCardInput(story_id="US-1", version=2, iteration="Iteración 2", stakeholder="Goito", source_literal="Aclaración literal", source_type="WhatsApp", source_reference="private://whatsapp/story-1", normalized_story="Story actualizada"),
             AuthIdentity("admin", "arcoenergy", frozenset({"administrador"}), frozenset({"team:manage"}), "admin@example.test", "Admin"),
             db,
         )
@@ -41,8 +41,56 @@ def test_history_card_adds_new_version_without_replacing_previous() -> None:
         assert [card.source_literal for card in cards] == ["Texto original", "Aclaración literal"]
         with pytest.raises(HTTPException) as error:
             append_history_card(
-                HistoryCardInput(story_id="US-1", version=2, iteration="Iteración 2", stakeholder="Goito", source_literal="No se sobrescribe", source_type="WhatsApp", normalized_story="Story"),
+                HistoryCardInput(story_id="US-1", version=2, iteration="Iteración 2", stakeholder="Goito", source_literal="No se sobrescribe", source_type="WhatsApp", source_reference="private://whatsapp/story-1", normalized_story="Story"),
                 AuthIdentity("admin", "arcoenergy", frozenset({"administrador"}), frozenset({"team:manage"}), "admin@example.test", "Admin"),
                 db,
             )
         assert error.value.status_code == 409
+
+
+def test_history_card_persists_artifact_provenance_and_source_relationships():
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    identity = AuthIdentity("admin", "arcoenergy", frozenset({"administrador"}), frozenset({"team:manage"}), "admin@example.test", "Admin")
+    with Session(engine) as db:
+        result = append_history_card(
+            HistoryCardInput(
+                story_id="US-42", version=1, iteration="Iteración de fuentes", stakeholder="Mario Groso",
+                source_literal="Registrar siempre el mensaje literal.", source_type="WhatsApp",
+                source_reference="private://whatsapp/2026-11-07", normalized_story="Preservar procedencia",
+                source_artifacts=[
+                    {"artifact_type": "Audio", "reference": "private://audio/1", "channel": "WhatsApp", "location": "00:12", "sha256": "a" * 64},
+                    {"artifact_type": "Transcripción", "reference": "private://transcript/1", "channel": "ASR", "location": "línea 3"},
+                ],
+                source_links=[
+                    {"artifact_index": 0, "relation": "transcription", "location": "00:12"},
+                    {"artifact_index": 1, "relation": "transcription", "location": "línea 3"},
+                ],
+                source_language="es-MX", source_attribution="Mario Groso, transcrito por el equipo",
+                source_occurred_at="2026-11-07T12:00:00-06:00", source_confidence="transcription",
+            ), identity, db,
+        )
+        card = db.get(HistoryCard, result["id"])
+        assert card is not None
+        assert card.source_artifact["artifacts"][0]["sha256"] == "a" * 64
+        assert card.source_links[1]["artifact_index"] == 1
+        assert card.source_links[0]["relation"] == "transcription"
+        assert card.source_attribution == "Mario Groso, transcrito por el equipo"
+        assert card.source_occurred_at == "2026-11-07T12:00:00-06:00"
+        assert card.source_confidence == "transcription"
+
+
+def test_history_card_rejects_source_link_to_missing_artifact():
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db, pytest.raises(HTTPException) as error:
+        append_history_card(
+            HistoryCardInput(
+                story_id="US-42", version=1, iteration="Fuentes", stakeholder="Stakeholder",
+                source_literal="Texto literal", source_type="WhatsApp", source_reference="private://source", normalized_story="Historia",
+                source_artifacts=[{"artifact_type": "WhatsApp", "reference": "private://source"}],
+                source_links=[{"artifact_index": 1, "relation": "literal"}],
+            ),
+            AuthIdentity("admin", "arcoenergy", frozenset({"administrador"}), frozenset({"team:manage"}), "admin@example.test", "Admin"), db,
+        )
+    assert error.value.status_code == 422
