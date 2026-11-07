@@ -601,6 +601,17 @@ La PWA guarda en IndexedDB las órdenes consultadas previamente por una cuenta i
 
 La rama `dev` quedó en `bf70b0c`. Las rutas `/app/login` y `/crm/login` y sus portales responden HTTP 200; `/api/version` informa el commit desplegado `470708e`, que incluye la Iteración 17. La ruta CRM/PWA usa autenticación y se verificó la cuenta real existente con rol `administrador`; no se crearon cuentas de muestra ni están verificadas cuentas reales para los demás roles. La limpieza de selectores CSS obsoletos del PR #39 no cambia el comportamiento servido. Estos datos acreditan accesos y un usuario administrador, no la cobertura completa de las 42 user story cards.
 
+## Iteración 19 — devolución reutilizable y merma de obra (2026-11-07)
+
+La devolución de una salida ahora distingue sobrante reutilizable y material dañado. El material dañado queda relacionado con la salida original, no incrementa el stock y se registra como costo de la orden si todavía no se había confirmado como consumo; si ya estaba consumido, no duplica el costo. El kardex muestra la merma con cambio físico cero. Se conserva el registro original y la cuenta de piezas devueltas o dañadas no puede exceder la salida. La política de inspección y autorización de materiales reparables necesita validación del responsable de almacén.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-23 | Funcional básico | Distingue devolución reutilizable y pieza dañada ligada a la salida. Solo lo reutilizable vuelve a existencias. Pendientes inspección/aprobación y tratamiento reparable. |
+| US-24 | Parcial funcional | Merma preemitida genera costo de consumo por proyecto sin reponer stock; material ya consumido conserva su costo sin duplicarlo. Pendientes aprobación de consumo y variaciones. |
+| US-27 | Parcial funcional | El kardex marca merma ligada a salida con cambio físico cero. Pendientes filtros y exportación específicos. |
+| US-35 | Parcial funcional | La merma actualiza costo preliminar por proyecto en los casos no consumidos. Doble partida, validación contable y reglas fiscales siguen pendientes. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.

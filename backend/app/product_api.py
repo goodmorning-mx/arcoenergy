@@ -324,7 +324,8 @@ class StockInput(BaseModel):
 class InventoryReturnInput(BaseModel):
     out_movement_id: str
     quantity: float = Field(gt=0)
-    reason: str = "Devolución de material sobrante"
+    condition: Literal["usable", "damaged"] = "usable"
+    reason: str = Field(default="Devolución de material sobrante", max_length=180)
 
 
 class StockReceiptInput(BaseModel):
@@ -1031,10 +1032,10 @@ def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depend
             raise HTTPException(403, "Solo puedes devolver material de una orden asignada a tu cuenta.")
     returned = db.scalar(select(func.coalesce(func.sum(InventoryMovement.quantity), 0)).where(
         InventoryMovement.related_movement_id == source.id,
-        InventoryMovement.movement_type == "return",
+        InventoryMovement.movement_type.in_(["return", "damage"]),
     )) or 0
     if Decimal(str(returned)) + Decimal(str(data.quantity)) > Decimal(str(source.quantity)):
-        raise HTTPException(409, "La cantidad devuelta excede el material retirado en esa salida.")
+        raise HTTPException(409, "La cantidad devuelta o marcada como merma excede el material retirado en esa salida.")
     material = db.get(WorkOrderMaterial, source.work_order_material_id) if source.work_order_material_id else db.scalar(select(WorkOrderMaterial).where(
         WorkOrderMaterial.installation_id == source.installation_id,
         WorkOrderMaterial.item_id == source.item_id,
@@ -1049,21 +1050,38 @@ def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depend
     item = db.get(InventoryItem, source.item_id)
     if item is None:
         raise HTTPException(409, "El artículo de la salida ya no existe en el catálogo.")
-    item.quantity = Decimal(str(item.quantity)) + Decimal(str(data.quantity))
+    is_damaged = data.condition == "damaged"
+    if not is_damaged:
+        item.quantity = Decimal(str(item.quantity)) + Decimal(str(data.quantity))
     movement = InventoryMovement(
         item_id=source.item_id,
         installation_id=source.installation_id,
         related_movement_id=source.id,
         work_order_material_id=material.id if material else None,
         quantity=data.quantity,
-        movement_type="return",
+        movement_type="damage" if is_damaged else "return",
         unit_cost=source.unit_cost,
-        reason=data.reason.strip() or "Devolución de material sobrante",
+        reason=data.reason.strip() or ("Merma de material dañado" if is_damaged else "Devolución de material sobrante"),
         created_by=identity.email or "",
     )
+    if is_damaged and not source.reason.startswith("Salida para consumo"):
+        if material:
+            material.consumed_quantity = Decimal(str(material.consumed_quantity)) + Decimal(str(data.quantity))
+        db.add(InventoryMovement(
+            item_id=source.item_id,
+            installation_id=source.installation_id,
+            related_movement_id=source.id,
+            work_order_material_id=material.id if material else None,
+            quantity=data.quantity,
+            movement_type="consumption",
+            unit_cost=source.unit_cost,
+            reason="Consumo por merma de material dañado",
+            created_by=identity.email or "",
+        ))
     if material:
-        material.preissued_quantity = Decimal(str(material.preissued_quantity)) - Decimal(str(data.quantity))
-        if source.reason.startswith("Salida para consumo"):
+        if not is_damaged:
+            material.preissued_quantity = Decimal(str(material.preissued_quantity)) - Decimal(str(data.quantity))
+        if source.reason.startswith("Salida para consumo") and not is_damaged:
             material.consumed_quantity = Decimal(str(material.consumed_quantity)) - Decimal(str(data.quantity))
             consumption = db.scalar(select(InventoryMovement).where(
                 InventoryMovement.related_movement_id == source.id,
@@ -1103,7 +1121,7 @@ def list_inventory_movements(
     return_rows = aliased(InventoryMovement)
     returned_total = select(func.coalesce(func.sum(return_rows.quantity), 0)).where(
         return_rows.related_movement_id == InventoryMovement.id,
-        return_rows.movement_type == "return",
+        return_rows.movement_type.in_(["return", "damage"]),
     ).correlate(InventoryMovement).scalar_subquery()
     query = select(InventoryMovement, InventoryItem.name, InventoryItem.unit, returned_total.label("returned_quantity")).join(
         InventoryItem, InventoryItem.id == InventoryMovement.item_id
@@ -1123,7 +1141,7 @@ def list_inventory_movements(
     result = []
     for movement, item_name, unit, returned_quantity in rows:
         line = _serialize(movement)
-        line.update({"item_name": item_name, "unit": unit, "signed_quantity": -float(movement.quantity) if movement.movement_type in {"out", "waste"} else (0.0 if movement.movement_type in {"consumption", "consumption_return"} else float(movement.quantity))})
+        line.update({"item_name": item_name, "unit": unit, "signed_quantity": -float(movement.quantity) if movement.movement_type in {"out", "waste"} else (0.0 if movement.movement_type in {"consumption", "consumption_return", "damage"} else float(movement.quantity))})
         if movement.movement_type == "out":
             line["returnable_quantity"] = max(0.0, float(movement.quantity) - float(returned_quantity or 0))
         if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
