@@ -730,6 +730,14 @@ Administración ahora puede consultar en CRM una tarjeta por cada rol disponible
 | --- | --- | --- |
 | US-14 | Parcial funcional | CRM presenta desde el catálogo autenticado del API los permisos efectivos de los cinco roles. Pendientes pruebas integrales de aislamiento con cuentas reales y validar el alcance de cada permiso con sus responsables. |
 
+## Iteración 32 — vigencia de autorización por membresía
+
+Se comprueba que los endpoints vuelven a leer el estado activo y los permisos actuales de la membresía al autorizar cada solicitud. Las pruebas verifican que un permiso que aparece en un token antiguo deja de dar acceso al cambiar de rol y que una membresía inactiva no se considera válida. También se prueba que los datos de costos del catálogo de inventario se devuelven a contabilidad y se ocultan al instalador.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | Pruebas de autorización por membresía activa, cambio de rol y permisos vigentes; costos de inventario ocultos para instaladores y visibles para contabilidad. Pendiente una matriz endpoint/campo revisada con cuentas reales de cada rol y los responsables del negocio. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.

@@ -7,7 +7,28 @@ from sqlalchemy.orm import Session
 from gm_auth.models import AuthIdentity
 
 from app.models import Base, Customer, Installation, InventoryItem, InventoryMovement
-from app.product_api import list_inventory_movements
+from app.product_api import list_inventory, list_inventory_movements
+
+
+def test_inventory_catalog_hides_direct_cost_from_installer_and_exposes_it_to_accountant() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        db.add(InventoryItem(name="Panel solar", unit="pieza", quantity=8, unit_cost=3450))
+        db.commit()
+
+        field_rows = list_inventory(
+            identity=AuthIdentity("installer-1", "arcoenergy", frozenset({"instalador"}), frozenset({"inventory:read"}), "campo@example.test", "Campo"),
+            db=db,
+        )
+        accounting_rows = list_inventory(
+            identity=AuthIdentity("accountant-1", "arcoenergy", frozenset({"contador"}), frozenset({"inventory:read", "inventory:costs:read"}), "contador@example.test", "Contador"),
+            db=db,
+        )
+
+    assert len(field_rows) == len(accounting_rows) == 1
+    assert "unit_cost" not in field_rows[0]
+    assert accounting_rows[0]["unit_cost"] == 3450
 
 
 def test_inventory_kardex_shows_signed_stock_changes_and_hides_cost_from_field_role() -> None:
