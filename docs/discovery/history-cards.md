@@ -890,6 +890,8 @@ La iteración quedó integrada mediante el PR [#71](https://github.com/goodmorni
 
 Las reversas de movimientos manuales ahora requieren un motivo que se conserva en la descripción de la reversa y el enlace al movimiento original. Las transferencias conservan la reversa pareada en ambas cuentas y comparten el motivo. La reversa genérica rechaza movimientos ligados a ventas, gastos, pagos u operaciones derivadas; esos registros deben corregirse desde su operación de origen para no dejar caja y el registro relacionado con saldos distintos. No se permite borrar ni revertir una reversa.
 
+La iteración quedó integrada mediante el PR [#72](https://github.com/goodmorning-mx/arcoenergy/pull/72), merge commit `f0a051e8448c58ea3783110fb9f75bd27ab2e49c`. Factory completó el despliegue DEV en el run [#42401833891](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42401833891), verificó el esquema y el respaldo. `/api/health` respondió HTTP 200; API, CRM y PWA reportan el mismo SHA. Backend: 139 pruebas aprobadas; build CRM y Docker/Chrome pasaron.
+
 | Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
 | --- | --- | --- |
 | US-36 | Parcial funcional | Reversa manual con motivo, enlace al original y corrección pareada de transferencias; pagos de proveedores/clientes ya usan origen. Pendientes reversas integrales de ventas, gastos e inventario. |
