@@ -781,6 +781,15 @@ Al cerrar sesión desde la PWA se borran de IndexedDB las instantáneas locales 
 | US-14 | Parcial funcional | Al salir se eliminan instantáneas operativas privadas del usuario desde PWA; queda pendiente matriz integral de permisos y política de dispositivos. |
 | US-40 | Parcial funcional | Órdenes, inventario y movimientos en caché se limpian al salir sin borrar las acciones locales pendientes; falta validación con usuarios/dispositivos reales y política de borrado remoto. |
 
+## Iteración 38 — estado veraz de las integraciones (2026-11-07)
+
+El endpoint de integraciones ya no confunde configuración parcial con una conexión funcional. Un ID de carpeta de Drive no acredita que se puedan subir o leer documentos; WhatsApp está limitado al flujo click-to-chat, no envío automático. No se modificó la capacidad de almacenamiento. Para cumplir US-13 se necesita implementar el cliente de Drive y configurar credenciales/permisos privados autorizados.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-13 | Pendiente funcional; estado ahora veraz | API informa que Drive no está integrado incluso si existe un ID de carpeta. Faltan carga/lectura, permisos de servicio, retención y sincronización de archivos. |
+| US-3 | Parcial | CRM conserva descarga PDF y vínculo click-to-chat; todavía no archiva PDFs en Drive ni envía adjuntos automáticamente. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.
