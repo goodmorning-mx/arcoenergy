@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from gm_auth.models import AuthIdentity
 
 from app.models import Base, CashMovement, Customer, FinancialAccount, Installation
-from app.product_api import ExpenseInput, add_expense, list_expenses, list_financial_accounts
+from app.product_api import ExpenseInput, PaymentCorrectionInput, add_expense, list_expenses, list_financial_accounts, reverse_expense
 from app.roles import ROLE_PERMISSIONS
 
 
@@ -75,4 +75,40 @@ def test_installer_must_link_expense_to_own_assigned_installation() -> None:
         with pytest.raises(HTTPException) as error:
             add_expense(payload, identity, db)
 
+    assert error.value.status_code == 403
+
+
+def test_expense_correction_appends_offset_and_restores_linked_account() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    identity = AuthIdentity("accountant-1", "arcoenergy", frozenset({"contador"}), ROLE_PERMISSIONS["contador"], "contador@example.test", "Contador")
+    with Session(engine) as db:
+        account = FinancialAccount(name="Banco operativo", account_type="bank", opening_balance=10000, opening_balance_date=date(2026, 11, 1))
+        db.add(account)
+        db.commit()
+        expense = add_expense(ExpenseInput(category="Servicios", description="Pago duplicado", amount=750, account_id=account.id), identity, db)
+        correction = reverse_expense(expense["id"], PaymentCorrectionInput(reason="Captura duplicada"), identity, db)
+        rows = list_expenses(db)
+        movements = db.query(CashMovement).order_by(CashMovement.created_at).all()
+        balance = list_financial_accounts(db)[0]["current_balance"]
+        with pytest.raises(HTTPException) as error:
+            reverse_expense(expense["id"], PaymentCorrectionInput(reason="Segundo intento"), identity, db)
+
+    assert correction["reversal_of_id"] == expense["id"]
+    assert correction["amount"] == -750
+    assert sum(row["amount"] for row in rows) == 0
+    assert len(movements) == 2
+    assert movements[1].direction == "in"
+    assert movements[1].reversal_of_id == movements[0].id
+    assert balance == 10000
+    assert error.value.status_code == 409
+
+
+def test_installer_cannot_correct_expenses() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    identity = AuthIdentity("field-1", "arcoenergy", frozenset({"instalador"}), frozenset({"expenses:write"}), "campo@example.test", "Campo")
+    with Session(engine) as db:
+        with pytest.raises(HTTPException) as error:
+            reverse_expense("missing", PaymentCorrectionInput(reason="Error de captura"), identity, db)
     assert error.value.status_code == 403

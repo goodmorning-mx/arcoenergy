@@ -199,6 +199,7 @@ class OfflineOperation(Base):
 
 class ProjectExpense(Base):
     __tablename__ = "ae_expenses"
+    __table_args__ = (UniqueConstraint("reversal_of_id", name="uq_ae_expenses_reversal"),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     installation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     category: Mapped[str] = mapped_column(String(80), default="Viáticos")
@@ -207,6 +208,7 @@ class ProjectExpense(Base):
     occurred_on: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
     receipt_url: Mapped[str] = mapped_column(Text, default="")
     account_id: Mapped[str | None] = mapped_column(ForeignKey("ae_financial_accounts.id"), nullable=True, index=True)
+    reversal_of_id: Mapped[str | None] = mapped_column(ForeignKey("ae_expenses.id"), nullable=True, index=True)
     created_by: Mapped[str] = mapped_column(String(180), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 

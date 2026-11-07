@@ -897,3 +897,15 @@ La iteración quedó integrada mediante el PR [#72](https://github.com/goodmorni
 | US-36 | Parcial funcional | Reversa manual con motivo, enlace al original y corrección pareada de transferencias; pagos de proveedores/clientes ya usan origen. Pendientes reversas integrales de ventas, gastos e inventario. |
 | US-18 | Funcional básico | Las correcciones directas de caja se limitan a movimientos manuales y transferencias; operaciones comerciales se corrigen desde su origen. Pendientes conciliación y comisiones. |
 | US-35 | Parcial funcional | Se evita desincronizar caja de gastos, ventas y pagos por una reversa genérica. Falta el ciclo de corrección de origen para todas las operaciones relacionadas. |
+
+## Iteración 49 — corrección de gastos desde su origen (2026-11-07)
+
+La corrección de un gasto es append-only: conserva el registro original y agrega un gasto compensatorio enlazado con el motivo y la fecha de corrección. Si el gasto salió de una cuenta de caja o banco, la misma operación registra la entrada compensatoria enlazada al egreso original. Una restricción única impide corregir dos veces el mismo gasto. El endpoint rechaza a instaladores y bloquea inconsistencias entre el gasto y su movimiento de cuenta. El costeo suma ambos registros; reporta el importe neto, conservando sus fechas e historial. El gasto original de campo sin cuenta puede compensarse sin inventar un movimiento bancario.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-17 | Funcional básico | Gastos administrativos corregibles desde su origen con motivo; los registros originales permanecen. Pendientes anticipos/reembolsos y autorización de gastos de campo. |
+| US-18 | Funcional básico | La corrección del gasto restaura caja/banco en pareja y conserva trazabilidad. Pendiente conciliación bancaria. |
+| US-35 | Parcial funcional | Gastos y saldos de cuenta se compensan desde una sola operación; reversas de venta, compra e inventario siguen pendientes. |
+| US-36 | Parcial funcional | Corrección append-only y enlazada para gastos, además de caja manual, transferencias y pagos. Pendientes los demás ciclos de corrección. |
+| US-38 | Parcial funcional | La corrección de gasto compensa el resultado del proyecto/periodo con su fecha de registro. El informe sigue siendo preliminar. |
