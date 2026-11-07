@@ -1180,9 +1180,13 @@ def list_inventory_movements(
     item_id: str | None = None,
     from_date: date | None = None,
     to_date: date | None = None,
+    limit: int = 500,
+    offset: int = 0,
     identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:read")),
     db: Session = Depends(get_db),
 ):
+    if limit < 1 or limit > 500 or offset < 0:
+        raise HTTPException(422, "La página debe tener entre 1 y 500 movimientos y un desplazamiento no negativo.")
     if from_date and to_date and from_date > to_date:
         raise HTTPException(422, "La fecha inicial debe ser anterior a la fecha final.")
     return_rows = aliased(InventoryMovement)
@@ -1203,7 +1207,7 @@ def list_inventory_movements(
         query = query.join(Installation, Installation.id == InventoryMovement.installation_id).where(
             Installation.lead_installer == identity.email
         )
-    query = query.order_by(InventoryMovement.created_at.desc()).limit(500)
+    query = query.order_by(InventoryMovement.created_at.desc(), InventoryMovement.id.desc()).limit(limit).offset(offset)
     rows = db.execute(query).all()
     result = []
     for movement, item_name, unit, returned_quantity in rows:

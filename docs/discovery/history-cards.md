@@ -660,6 +660,14 @@ Se verificó en DEV que ArcoEnergy no presenta modo de prueba, contador de trial
 | US-39 | Parcial funcional | Sin modo trial ni datos demo; servicios productivos de DEV desplegados y versiones alineadas. Falta cargar datos reales aprobados y configurar integraciones externas pendientes. |
 | US-40 | Parcial funcional | PWA requiere autenticación para operaciones; falta probar acceso y tareas con los instaladores reales del cliente. |
 
+## Iteración 24 — paginación del kardex (2026-11-07)
+
+El kardex de almacén ahora puede consultarse en páginas consecutivas de hasta 500 movimientos, con orden estable por fecha e identificador. CRM mantiene los filtros por artículo y fecha al cargar más; la descarga CSV incluye todas las páginas cargadas. El límite de la vista de reportes operativos y la PWA permanece en 500 por consulta. No se cambia el saldo ni se modifica ningún movimiento.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-27 | Parcial funcional | El kardex del CRM filtra artículo/fecha, pagina conjuntos mayores a 500 y exporta las filas cargadas, respetando el permiso de costo. Falta exportación completa en un solo archivo y probar volumen real superior al disponible en DEV. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.
