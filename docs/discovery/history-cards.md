@@ -620,7 +620,14 @@ La PWA amplía su cola local por cuenta instaladora a consumos, devoluciones/mer
 | --- | --- | --- |
 | US-9 | Parcial funcional | PWA puede encolar consumos, devoluciones y mermas sin conexión con sincronización posterior; prueba en teléfonos, actualización de cachés y conflictos de cantidades pendientes. |
 | US-10 | Parcial funcional | Recibos idempotentes impiden repetir decrementos, devoluciones/mermas y movimientos por reintentos. Falta validación de conflictos operativos con almacén. |
+| US-28 | Parcial funcional | La PWA busca códigos con cámara, lector o entrada manual usando el inventario cacheado tras una consulta autenticada; falta validar formatos y dispositivos reales. |
 | US-40 | Parcial funcional | Checklist, gastos y operaciones de material quedan en colas locales separadas, por usuario y con confirmación del servidor; notificaciones de fondo y validación de campo siguen pendientes. |
+
+## Verificación actual de DEV (2026-11-07)
+
+La Iteración 20 está integrada en `dev` en `bdfc6cd7aecbcc0047d956ecc8bbe331d37842b6`. Factory terminó el despliegue y su paso de verificación de esquema; `/api/health/ready`, `/app/login`, `/crm/login` y `/login` respondieron HTTP 200, y API, PWA y CRM publican ese mismo SHA. La pantalla Equipo permite al administrador crear cuentas con correo y contraseña temporal y asignar los cinco roles definidos; se confirmó una cuenta real de administrador, pero no hay evidencia de cuentas reales creadas para contador, marketing, instalador ni cliente. No se crean usuarios ficticios para hacer pasar esa validación. Se necesitan los datos reales de las personas y la validación de acceso por sus responsables.
+
+El código vigente no incorpora credenciales, clientes ni inventario de muestra. Las referencias históricas a las semillas demo documentan su retirada y sus resguardos, no un modo de prueba disponible para el usuario.
 
 ### Corrección necesaria para desplegar Iteración 16
 
