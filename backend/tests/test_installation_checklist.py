@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from gm_auth.models import AuthIdentity
 
-from app.models import Activity, Base, Customer, Installation
+from app.models import Activity, Base, Customer, Installation, InstallationAssignment
 from app.product_api import InstallationChecklistInput, InstallationChecklistItemInput, update_installation_checklist
 from app.roles import ROLE_PERMISSIONS
 
@@ -46,3 +46,19 @@ def test_installer_cannot_edit_another_installers_order_or_add_tasks() -> None:
         with pytest.raises(HTTPException) as invalid_task:
             update_installation_checklist(order.id, InstallationChecklistInput(checklist=[InstallationChecklistItemInput(task="Tarea inventada", done=True)]), manager, db)
         assert invalid_task.value.status_code == 422
+
+
+def test_assigned_crew_member_can_update_checklist_without_being_lead() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    installer = AuthIdentity("installer-2", "arcoenergy", frozenset({"instalador"}), ROLE_PERMISSIONS["instalador"], "crew@example.test", "Cuadrilla")
+    with Session(engine) as db:
+        customer = Customer(name="Cliente solar")
+        db.add(customer); db.flush()
+        order = Installation(customer_id=customer.id, lead_installer="lead@example.test", checklist=[{"task": "Visita", "done": False}])
+        db.add(order); db.flush()
+        db.add(InstallationAssignment(installation_id=order.id, installer_email="crew@example.test", assigned_by="admin@example.test"))
+        db.commit()
+        result = update_installation_checklist(order.id, InstallationChecklistInput(checklist=[InstallationChecklistItemInput(task="Visita", done=True)]), installer, db)
+
+    assert result["checklist"][0]["done"] is True

@@ -685,6 +685,15 @@ La descarga CSV del CRM ahora vuelve a consultar todas las páginas de 500 movim
 | --- | --- | --- |
 | US-27 | Parcial funcional | CRM filtra por artículo/fecha, pagina resultados y exporta el conjunto filtrado completo. Falta validar rendimiento con históricos de producción. |
 
+## Iteración 27 — asignación y confirmación de cuadrilla
+
+Una orden de trabajo puede asignarse a varias cuentas activas con rol instalador. Cada integrante ve la orden en la PWA y puede confirmar su propia asignación; la bitácora conserva la confirmación. La autorización de checklist, consumo, devolución y gasto acepta cualquier integrante asignado, no solamente a la persona responsable. Las órdenes existentes conservan su instalador líder al migrar. La actualización de la PWA requiere conexión para confirmar; notificaciones push cuando la app está cerrada todavía requieren configurar un proveedor externo.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-7 | Parcial funcional | CRM permite asignar una cuadrilla y la PWA confirma individualmente; falta validar el flujo con instaladores reales y configurar push de fondo. |
+| US-40 | Parcial funcional | Las órdenes se filtran por asignación y cada instalador confirma desde su cuenta; falta validar en dispositivos y con cuentas reales del cliente. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.
