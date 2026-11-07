@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 
 type IntakeMaterial = { id: string; item_id: string; item_name: string; requested_quantity: number; preissued_quantity: number; remaining_to_issue: number };
-type IntakeInstallation = { id: string; folio?: string | null; status: string; customer?: { name: string; city: string }; materials?: IntakeMaterial[] };
+type IntakeInstallation = { id: string; folio?: string | null; status: string; customer?: { name: string; city: string }; materials?: IntakeMaterial[]; material_request_drive_file_id?: string; material_request_filename?: string };
 type ReturnSource = { id: string; installation_id?: string | null; item_name: string; quantity: number; unit: string; movement_type: string; returnable_quantity?: number };
 type Mode = 'issue' | 'return';
 
@@ -29,6 +29,8 @@ export function InventoryIssueIntake({
   const [condition, setCondition] = useState<'usable' | 'damaged'>('usable');
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
+  const [archiveNotice, setArchiveNotice] = useState('');
+  const [downloading, setDownloading] = useState(false);
   const fileUrl = useMemo(() => file ? URL.createObjectURL(file) : '', [file]);
   const installation = installations.find(row => row.id === installationId);
   const issueMaterials = (installation?.materials || []).filter(row => row.remaining_to_issue > 0);
@@ -40,10 +42,52 @@ export function InventoryIssueIntake({
   function chooseFile(event: ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0] || null;
     setFailure('');
+    setArchiveNotice('');
     if (!selected) { setFile(null); return; }
     if (!acceptedFile(selected)) { setFailure('Elige una imagen JPG, PNG, WebP o un archivo PDF.'); event.target.value = ''; return; }
     if (selected.size > 12 * 1024 * 1024) { setFailure('El archivo debe pesar 12 MB o menos.'); event.target.value = ''; return; }
     setFile(selected);
+  }
+
+  async function archiveRequest(): Promise<{ reference: string; archived: boolean }> {
+    if (!file || !installation) throw new Error('Adjunta una solicitud y selecciona una orden.');
+    const extensionType = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }[file.name.toLowerCase().split('.').pop() || ''];
+    const contentType = file.type || extensionType || 'application/octet-stream';
+    const response = await fetch(`/api/v1/installations/${installation.id}/material-request-file`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType, 'X-Document-Name': encodeURIComponent(file.name) },
+      body: file,
+    });
+    if (response.ok) {
+      const result = await response.json();
+      setArchiveNotice('La solicitud quedó archivada de forma privada en Drive.');
+      return { reference: `Drive:${result.filename}`.slice(0, 80), archived: true };
+    }
+    const result = await response.json().catch(() => ({}));
+    if (response.status === 503 || response.status === 502) {
+      const message = response.status === 503
+        ? 'Drive aún no está configurado; el movimiento se registrará sin archivar el documento.'
+        : 'Drive no pudo guardar el documento; el movimiento se registrará y el archivo no quedará respaldado.';
+      setArchiveNotice(message);
+      return { reference: file.name.slice(0, 70), archived: false };
+    }
+    throw new Error(result.detail || 'No se pudo validar la solicitud para archivarla.');
+  }
+
+  async function downloadArchivedRequest() {
+    if (!installation) return;
+    setDownloading(true);
+    try {
+      const response = await fetch(`/api/v1/installations/${installation.id}/material-request-file`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) throw new Error('No se pudo descargar el documento de Drive.');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a'); anchor.href = url;
+      anchor.download = installation.material_request_filename || 'solicitud-materiales';
+      anchor.click(); URL.revokeObjectURL(url);
+    } catch (error) {
+      setFailure(error instanceof Error ? error.message : 'No se pudo descargar el documento de Drive.');
+    } finally { setDownloading(false); }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -79,6 +123,9 @@ export function InventoryIssueIntake({
 
     setBusy(true);
     try {
+      const archived = await archiveRequest();
+      if (mode === 'issue') payload.document_reference = archived.reference;
+      else payload.reason = `${String(payload.reason || '')}${archived.archived ? ` · ${archived.reference}` : ''}`.slice(0, 180);
       const response = await fetch(path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -90,7 +137,7 @@ export function InventoryIssueIntake({
       setFile(null); setQuantities({}); setMovementId(''); setReturnQuantity('');
       const input = document.getElementById('work-order-scan') as HTMLInputElement | null;
       if (input) input.value = '';
-      announce(mode === 'issue' ? 'Salida física registrada desde la solicitud revisada.' : condition === 'damaged' ? 'Merma ligada a la solicitud y a la orden registrada.' : 'Devolución ligada a la solicitud y a la orden registrada.');
+      announce(`${mode === 'issue' ? 'Salida física registrada desde la solicitud revisada.' : condition === 'damaged' ? 'Merma ligada a la solicitud y a la orden registrada.' : 'Devolución ligada a la solicitud y a la orden registrada.'}${archived.archived ? ' Documento archivado en Drive.' : ' Atención: documento no archivado en Drive.'}`, archived.archived ? 'success' : 'info');
     } catch (error) {
       setFailure(error instanceof Error ? error.message : 'No se pudo registrar el movimiento.');
     } finally { setBusy(false); }
@@ -101,12 +148,14 @@ export function InventoryIssueIntake({
     <p className="muted-copy">Adjunta la foto/PDF, transcribe y revisa cantidades contra la solicitud, y confirma el movimiento. La lectura automática de escritura a mano no está habilitada.</p>
     <div className="issue-mode" role="group" aria-label="Tipo de movimiento"><button type="button" className={mode === 'issue' ? 'selected' : ''} onClick={() => { setMode('issue'); setFailure(''); }}>Salida de material</button><button type="button" className={mode === 'return' ? 'selected' : ''} onClick={() => { setMode('return'); setFailure(''); }}>Devolución / merma</button></div>
     <form className="issue-form" onSubmit={event => void submit(event)}>
-      <label className="field"><span>Orden de trabajo</span><select value={installationId} onChange={event => { setInstallationId(event.target.value); setQuantities({}); setMovementId(''); setReturnQuantity(''); }} required><option value="">Selecciona una orden</option>{installations.filter(row => row.status !== 'closed').map(row => <option key={row.id} value={row.id}>{row.folio || 'Orden'} · {row.customer?.name || 'Cliente'} · {row.customer?.city || 'Ubicación pendiente'}</option>)}</select></label>
-      <label className="field"><span>Solicitud de materiales · foto o PDF</span><input id="work-order-scan" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" onChange={chooseFile} required/><small className="muted-copy">Máximo 12 MB. El archivo se previsualiza en este dispositivo; por ahora no se conserva en Drive.</small></label>
+      <label className="field"><span>Orden de trabajo</span><select value={installationId} onChange={event => { setInstallationId(event.target.value); setQuantities({}); setMovementId(''); setReturnQuantity(''); setArchiveNotice(''); }} required><option value="">Selecciona una orden</option>{installations.filter(row => row.status !== 'closed').map(row => <option key={row.id} value={row.id}>{row.folio || 'Orden'} · {row.customer?.name || 'Cliente'} · {row.customer?.city || 'Ubicación pendiente'}</option>)}</select></label>
+      <label className="field"><span>Solicitud de materiales · foto o PDF</span><input id="work-order-scan" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" onChange={chooseFile} required/><small className="muted-copy">Máximo 12 MB. Al confirmar, se intenta archivar la solicitud en la carpeta privada de Drive.</small></label>
+      {installation?.material_request_drive_file_id && <div className="archived-document"><span>Solicitud archivada: <b>{installation.material_request_filename || 'documento'}</b></span><button type="button" className="button button-outline" onClick={() => void downloadArchivedRequest()} disabled={downloading}>{downloading ? 'Descargando…' : 'Descargar de Drive'}</button></div>}
+      {archiveNotice && <p className="muted-copy" role="status">{archiveNotice}</p>}
       {fileUrl && <div className="issue-preview" aria-label="Vista previa de la solicitud">{isPdf ? <iframe src={fileUrl} title="Solicitud de materiales en PDF" /> : <img src={fileUrl} alt="Solicitud de materiales adjunta para revisión"/>}<span>{file?.name}</span></div>}
       {mode === 'issue' ? <div className="issue-lines"><h3>Material solicitado · captura revisada</h3>{issueMaterials.length ? issueMaterials.map(material => <label className="issue-line" key={material.id}><span><b>{material.item_name}</b><small>Solicitado: {material.requested_quantity} · Por entregar: {material.remaining_to_issue}</small></span><input aria-label={`Cantidad de salida para ${material.item_name}`} type="number" min="0" max={material.remaining_to_issue} step="0.01" placeholder="0" value={quantities[material.id] || ''} onChange={event => setQuantities(current => ({ ...current, [material.id]: event.target.value }))}/></label>) : <p className="muted-copy">Esta orden no tiene material pendiente por entregar.</p>}</div> : <div className="issue-lines"><h3>Artículo devuelto o dañado</h3><label className="field"><span>Salida original</span><select value={movementId} onChange={event => { setMovementId(event.target.value); setReturnQuantity(''); }} required><option value="">Selecciona material de esta orden</option>{returnSources.map(row => <option key={row.id} value={row.id}>{row.item_name} · quedan {row.returnable_quantity} {row.unit}</option>)}</select></label>{movementId && <><label className="field"><span>Cantidad</span><input type="number" min="0.01" max={returnSources.find(row => row.id === movementId)?.returnable_quantity} step="0.01" value={returnQuantity} onChange={event => setReturnQuantity(event.target.value)} required/></label><label className="field"><span>Condición</span><select value={condition} onChange={event => setCondition(event.target.value as 'usable' | 'damaged')}><option value="usable">Reutilizable · vuelve al almacén</option><option value="damaged">Dañado · registrar merma</option></select></label><label className="field"><span>Nota (opcional)</span><input name="note" maxLength={80} placeholder="Condición o comentario"/></label></>}</div>}
       {failure && <p className="error-message" role="alert">{failure}</p>}
-      <div className="issue-confirm"><p>El stock se actualiza al confirmar. La solicitud original no se procesa automáticamente y el archivo no se almacena todavía.</p><button className="button button-primary" disabled={busy || !file || !installation || (mode === 'issue' ? !issueMaterials.length : !movementId)}>{busy ? 'Registrando…' : mode === 'issue' ? 'Confirmar salida física' : 'Confirmar devolución'}</button></div>
+      <div className="issue-confirm"><p>El stock se actualiza al confirmar. Las cantidades se revisan manualmente; el documento se guarda en Drive cuando la conexión está configurada.</p><button className="button button-primary" disabled={busy || !file || !installation || (mode === 'issue' ? !issueMaterials.length : !movementId)}>{busy ? 'Registrando…' : mode === 'issue' ? 'Confirmar salida física' : 'Confirmar devolución'}</button></div>
     </form>
   </section>;
 }

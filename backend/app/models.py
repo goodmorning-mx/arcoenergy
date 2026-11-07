@@ -107,6 +107,10 @@ class Installation(Base):
     status: Mapped[str] = mapped_column(String(40), default="assigned")
     checklist: Mapped[list] = mapped_column(JSON, default=list)
     notes: Mapped[str] = mapped_column(Text, default="")
+    material_request_drive_file_id: Mapped[str] = mapped_column(String(200), default="")
+    material_request_filename: Mapped[str] = mapped_column(String(255), default="")
+    material_request_content_type: Mapped[str] = mapped_column(String(100), default="")
+    material_request_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class InstallationAssignment(Base):
