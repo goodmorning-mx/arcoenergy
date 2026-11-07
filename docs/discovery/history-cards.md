@@ -853,3 +853,13 @@ El API ahora devuelve a cada integrante únicamente los seguimientos pendientes 
 | --- | --- | --- |
 | US-4 | Parcial funcional | El API filtra seguimientos por responsable, registra su historial y permite a administración la gestión global. Pendientes avisos automáticos y validación con vendedores reales. |
 | US-14 | Parcial funcional | El API impide consultar o completar seguimientos de otra persona y limita la reasignación a administración. Falta revisión completa de permisos por entidad/campo con stakeholders y cuentas reales. |
+
+## Iteración 45 — transferencias entre cuentas de efectivo y banco (2026-11-07)
+
+El CRM puede registrar una transferencia desde la cuenta seleccionada hacia otra cuenta activa. El API escribe en una sola transacción una salida y una entrada por el mismo importe, con identificador y descripción compartidos. La operación no aumenta los ingresos ni los gastos consolidados; su reversa genera los dos movimientos compensatorios y conserva los originales. Se rechazan cuentas iguales y fechas anteriores a los saldos iniciales de cualquiera de las cuentas. No se registran comisiones ni se afirma conciliación bancaria.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-18 | Funcional básico | Caja/bancos ahora admite transferencias internas pareadas y reversa auditable. Sigue pendiente conciliar movimientos con estados de cuenta y contabilizar comisiones externas. |
+| US-19 | Parcial funcional | Flujo por periodo y cuenta puede reflejar ambos lados de una transferencia sin clasificarla como ingreso o gasto. Quedan conciliación y validación final del flujo con contabilidad. |
+| US-35 | Parcial funcional | Cada transferencia vincula sus dos movimientos y se revierte de forma atómica. No sustituye doble partida contable ni conciliación bancaria. |

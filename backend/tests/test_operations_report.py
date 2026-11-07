@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.models import Base, CashMovement, Customer, FinancialAccount, Installation, InventoryItem, InventoryMovement, ProjectExpense, Supplier
-from app.product_api import operations_report
+from app.product_api import CashTransferInput, create_cash_transfer, operations_report
 from app.roles import ROLE_PERMISSIONS
 
 
@@ -95,3 +95,28 @@ def test_operations_report_calculates_period_cash_flow_from_active_account_movem
     assert flow["closing_balance"] == Decimal("1500.00")
     assert {row["name"] for row in flow["accounts"]} == {"Caja", "Banco nuevo"}
     assert next(row for row in flow["accounts"] if row["name"] == "Banco nuevo")["closing_balance"] == Decimal("150.00")
+
+
+def test_operations_report_separates_internal_transfers_from_cash_inflows_and_outflows():
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        cash = FinancialAccount(name="Caja", account_type="cash", opening_balance=1000, opening_balance_date=date(2026, 10, 1))
+        bank = FinancialAccount(name="Banco", account_type="bank", opening_balance=200, opening_balance_date=date(2026, 10, 1))
+        db.add_all([cash, bank]); db.commit(); db.refresh(cash); db.refresh(bank)
+        identity = AuthIdentity("accountant", "arcoenergy", frozenset({"contador"}), ROLE_PERMISSIONS["contador"], "contador@example.test", "Contador")
+        create_cash_transfer(CashTransferInput(
+            source_account_id=cash.id, destination_account_id=bank.id, amount=Decimal("250"),
+            description="Depósito", occurred_on=date(2026, 11, 5),
+        ), identity, db)
+        report = operations_report(from_date=date(2026, 11, 1), to_date=date(2026, 11, 30), identity=identity, db=db)
+
+    flow = report["cash_flow"]
+    assert flow["inflows"] == Decimal("0")
+    assert flow["outflows"] == Decimal("0")
+    assert flow["transfers_in"] == flow["transfers_out"] == Decimal("250.00")
+    assert flow["closing_balance"] == Decimal("1200.00")
+    cash_row = next(row for row in flow["accounts"] if row["name"] == "Caja")
+    bank_row = next(row for row in flow["accounts"] if row["name"] == "Banco")
+    assert cash_row["transfers_out"] == Decimal("250.00") and cash_row["closing_balance"] == Decimal("750.00")
+    assert bank_row["transfers_in"] == Decimal("250.00") and bank_row["closing_balance"] == Decimal("450.00")
