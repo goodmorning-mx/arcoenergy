@@ -137,6 +137,21 @@ class Sale(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
+class SaleCorrection(Base):
+    __tablename__ = "ae_sale_corrections"
+    __table_args__ = (
+        UniqueConstraint("sale_id", name="uq_ae_sale_correction_sale"),
+        UniqueConstraint("cash_movement_id", name="uq_ae_sale_correction_cash_movement"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    sale_id: Mapped[str] = mapped_column(ForeignKey("ae_sales.id"), nullable=False)
+    cash_movement_id: Mapped[str] = mapped_column(ForeignKey("ae_cash_movements.id"), nullable=False)
+    amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    reason: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(180), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
 class WorkOrderMaterial(Base):
     __tablename__ = "ae_work_order_materials"
     __table_args__ = (UniqueConstraint("installation_id", "item_id", name="uq_ae_work_order_material_item"),)

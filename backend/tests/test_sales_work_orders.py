@@ -7,8 +7,8 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from gm_auth.models import AuthIdentity, memberships, users
 
-from app.models import Base, CashMovement, Customer, FinancialAccount, Installation, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, Quote, Receivable, Sale, WorkOrderMaterial
-from app.product_api import ExpenseInput, InventoryReturnInput, SaleInput, SaleMaterialInput, StockInput, _installment_due_date, add_expense, consume_inventory, create_sale, list_financial_accounts, profitability_report, return_inventory
+from app.models import Activity, Base, CashMovement, Customer, FinancialAccount, Installation, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, Quote, Receivable, Sale, SaleCorrection, WorkOrderMaterial
+from app.product_api import ExpenseInput, InventoryReturnInput, PaymentCorrectionInput, SaleInput, SaleMaterialInput, StockInput, _installment_due_date, add_expense, consume_inventory, create_sale, list_financial_accounts, list_inventory, profitability_report, return_inventory, reverse_cash_sale
 from app.roles import ROLE_PERMISSIONS
 from app import product_api
 
@@ -200,6 +200,8 @@ def test_credit_sale_creates_installment_schedule_without_changing_cash(monkeypa
         created = create_sale(SaleInput(quote_id=quote.id, sale_type="credit", due_date=date(2026, 1, 31),
             installment_count=3, installment_frequency="monthly",
             lead_installer="field@example.test", materials=[SaleMaterialInput(item_id=item.id, quantity=1)]), identity, db)
+        with pytest.raises(HTTPException) as correction_error:
+            reverse_cash_sale(created["id"], PaymentCorrectionInput(reason="No procede"), identity, db)
         receivables = db.scalars(select(Receivable).where(Receivable.quote_id == quote.id).order_by(Receivable.installment_number)).all()
         cash_balance = list_financial_accounts(db)[0]["current_balance"]
 
@@ -211,6 +213,71 @@ def test_credit_sale_creates_installment_schedule_without_changing_cash(monkeypa
     assert sum((row.amount for row in receivables), Decimal("0.00")) == Decimal("71000.00")
     assert all(row.paid_amount == Decimal("0.00") for row in receivables)
     assert cash_balance == Decimal("1000.00")
+    assert correction_error.value.status_code == 409
+
+
+def test_preinstallation_cash_sale_correction_restores_cash_and_releases_stock(monkeypatch) -> None:
+    monkeypatch.setattr(product_api.auth_service, "engine", installer_directory())
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    admin = AuthIdentity("admin-1", "arcoenergy", frozenset({"administrador"}), ROLE_PERMISSIONS["administrador"], "admin@example.test", "Admin")
+    with Session(engine) as db:
+        customer = Customer(name="Cliente Venta", city="Tampico")
+        account = FinancialAccount(name="Banco de ventas", account_type="bank", opening_balance=5000, opening_balance_date=date.today())
+        item = InventoryItem(name="Panel 600 W", quantity=10, unit_cost=900)
+        quote = Quote(folio="AE-Q-REVERSE", customer_id="", panel_count=8, panel_brand="Solar", panel_watts=600,
+            structure_name="Fija", inverter="Inversor 5 kW", payment_method="Contado", panel_subtotal=80000,
+            structure_cost=10000, inverter_cost=15000, total=105000, status="accepted", pricing_approved=True)
+        db.add_all([customer, account, item]); db.flush(); quote.customer_id = customer.id; db.add(quote); db.commit()
+        sale = create_sale(SaleInput(quote_id=quote.id, sale_type="cash", account_id=account.id,
+            lead_installer="field@example.test", materials=[SaleMaterialInput(item_id=item.id, quantity=4)]), admin, db)
+        assert sale["can_reverse"] is True
+        assert list_inventory(admin, db)[0]["available_quantity"] == Decimal("6.00")
+
+        corrected = reverse_cash_sale(sale["id"], PaymentCorrectionInput(reason="Cliente canceló compra"), admin, db)
+        balance = list_financial_accounts(db)[0]["current_balance"]
+        inventory = list_inventory(admin, db)[0]
+        report = profitability_report(installation_id=sale["installation_id"], db=db)
+        original = db.get(Sale, sale["id"])
+        movements = db.query(CashMovement).filter(CashMovement.source_id == sale["id"]).all()
+        correction = db.query(SaleCorrection).filter_by(sale_id=sale["id"]).one()
+        activities = db.query(Activity).filter_by(kind="corrección de venta").all()
+        with pytest.raises(HTTPException) as duplicate:
+            reverse_cash_sale(sale["id"], PaymentCorrectionInput(reason="Doble captura"), admin, db)
+
+    assert corrected["correction"]["reason"] == "Cliente canceló compra"
+    assert corrected["can_reverse"] is False
+    assert original is not None and original.total == Decimal("105000.00")
+    assert correction.amount == Decimal("105000.00")
+    assert correction.cash_movement_id == movements[1].id
+    assert movements[1].direction == "out" and movements[1].reversal_of_id == movements[0].id
+    assert balance == Decimal("5000.00")
+    assert inventory["available_quantity"] == Decimal("10.00")
+    assert report["totals"]["sales"] == Decimal("0.00")
+    assert len(activities) == 1
+    assert duplicate.value.status_code == 409
+
+
+def test_cash_sale_correction_is_blocked_after_installer_confirmation(monkeypatch) -> None:
+    monkeypatch.setattr(product_api.auth_service, "engine", installer_directory())
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    admin = AuthIdentity("admin-1", "arcoenergy", frozenset({"administrador"}), ROLE_PERMISSIONS["administrador"], "admin@example.test", "Admin")
+    installer = AuthIdentity("installer-1", "arcoenergy", frozenset({"instalador"}), ROLE_PERMISSIONS["instalador"], "field@example.test", "Field")
+    with Session(engine) as db:
+        customer = Customer(name="Cliente Activo")
+        account = FinancialAccount(name="Caja", account_type="cash", opening_balance=1000, opening_balance_date=date.today())
+        item = InventoryItem(name="Panel", quantity=2, unit_cost=900)
+        quote = Quote(folio="AE-Q-CONFIRM", customer_id="", panel_count=4, panel_brand="Solar", panel_watts=600,
+            structure_name="Fija", inverter="Inversor 3 kW", payment_method="Contado", panel_subtotal=20000,
+            structure_cost=5000, inverter_cost=5000, total=30000, status="accepted", pricing_approved=True)
+        db.add_all([customer, account, item]); db.flush(); quote.customer_id = customer.id; db.add(quote); db.commit()
+        sale = create_sale(SaleInput(quote_id=quote.id, sale_type="cash", account_id=account.id, lead_installer=installer.email,
+            materials=[SaleMaterialInput(item_id=item.id, quantity=1)]), admin, db)
+        product_api.confirm_installation_assignment(sale["installation_id"], installer, db)
+        with pytest.raises(HTTPException) as error:
+            reverse_cash_sale(sale["id"], PaymentCorrectionInput(reason="Venta equivocada"), admin, db)
+    assert error.value.status_code == 409
 
 
 def test_installment_calendar_handles_weekly_and_biweekly_dates() -> None:

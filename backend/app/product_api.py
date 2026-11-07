@@ -29,7 +29,7 @@ from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
 from app.drive_storage import download_private_file, folder_status, save_private_file, save_quote_pdf
-from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, Purchase, PurchaseLine, Quote, QuotePackage, Receivable, Sale, Supplier, SupplierPayment, WorkOrderMaterial
+from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, Purchase, PurchaseLine, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 
 settings = get_settings()
@@ -987,6 +987,15 @@ def _sale_result(db: Session, sale: Sale):
     receivables = db.scalars(select(Receivable).where(Receivable.quote_id == sale.quote_id).order_by(Receivable.installment_number)).all()
     materials = db.scalars(select(WorkOrderMaterial).where(WorkOrderMaterial.installation_id == sale.installation_id)).all()
     assignments = db.scalars(select(InstallationAssignment).where(InstallationAssignment.installation_id == sale.installation_id)).all()
+    correction = db.scalar(select(SaleCorrection).where(SaleCorrection.sale_id == sale.id))
+    progressed_tasks = any(task.get("done") and task.get("task") not in {"Confirmar materiales", "Asignar cuadrilla"} for task in (installation.checklist or [])) if installation else True
+    has_stock_activity = db.scalar(select(InventoryMovement.id).where(InventoryMovement.installation_id == sale.installation_id).limit(1)) is not None
+    can_reverse = bool(
+        correction is None and sale.sale_type == "cash" and installation and installation.status == "assigned"
+        and not progressed_tasks and not has_stock_activity
+        and not any(row.confirmed_at for row in assignments)
+        and all(Decimal(line.preissued_quantity) == 0 and Decimal(line.consumed_quantity) == 0 for line in materials)
+    )
     item_names = {item.id: item.name for item in db.scalars(select(InventoryItem).where(InventoryItem.id.in_([line.item_id for line in materials]))).all()} if materials else {}
     return {
         **_serialize(sale),
@@ -996,6 +1005,8 @@ def _sale_result(db: Session, sale: Sale):
         "receivable": _serialize(receivables[0]) if receivables else None,
         "receivables": [_serialize(row) for row in receivables],
         "installment_count": len(receivables),
+        "correction": _serialize(correction),
+        "can_reverse": can_reverse,
         "materials": [{**_serialize(line), "item_name": item_names.get(line.item_id, "Artículo"), "quantity": line.requested_quantity, "remaining_quantity": max(Decimal(line.requested_quantity) - Decimal(line.consumed_quantity), Decimal("0"))} for line in materials],
     }
 
@@ -1016,6 +1027,64 @@ def _installment_due_date(first_due_date: date, installment_index: int, frequenc
 def list_sales(db: Session = Depends(get_db)):
     rows = db.scalars(select(Sale).order_by(Sale.created_at.desc())).all()
     return [_sale_result(db, row) for row in rows]
+
+
+@router.post("/sales/{sale_id}/reverse", status_code=201, dependencies=[Depends(require_permissions(auth_service, "sales:write"))])
+def reverse_cash_sale(sale_id: str, data: PaymentCorrectionInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    if not ({"administrador", "admin", "contador"} & set(identity.roles)):
+        raise HTTPException(403, "Solo administración o contabilidad puede corregir una venta.")
+    sale = db.scalar(select(Sale).where(Sale.id == sale_id).with_for_update())
+    if sale is None:
+        raise HTTPException(404, "Venta no encontrada.")
+    if sale.sale_type != "cash":
+        raise HTTPException(409, "La corrección de ventas a crédito debe considerar cuotas y cobranza; usa el flujo de cuentas por cobrar.")
+    if db.scalar(select(SaleCorrection.id).where(SaleCorrection.sale_id == sale.id)):
+        raise HTTPException(409, "Esta venta ya tiene una corrección registrada.")
+    installation = db.scalar(select(Installation).where(Installation.id == sale.installation_id).with_for_update())
+    if installation is None:
+        raise HTTPException(409, "La venta no conserva su orden de trabajo relacionada.")
+    assignments = db.scalars(select(InstallationAssignment).where(InstallationAssignment.installation_id == installation.id).with_for_update()).all()
+    materials = db.scalars(select(WorkOrderMaterial).where(WorkOrderMaterial.installation_id == installation.id).with_for_update()).all()
+    progressed_tasks = any(task.get("done") and task.get("task") not in {"Confirmar materiales", "Asignar cuadrilla"} for task in (installation.checklist or []))
+    has_stock_activity = db.scalar(select(InventoryMovement.id).where(InventoryMovement.installation_id == installation.id).limit(1)) is not None
+    if installation.status != "assigned" or progressed_tasks or has_stock_activity or any(row.confirmed_at for row in assignments) or any(
+        Decimal(line.preissued_quantity) != 0 or Decimal(line.consumed_quantity) != 0 for line in materials
+    ):
+        raise HTTPException(409, "No se puede revertir: la orden ya inició o tiene materiales emitidos, consumidos o confirmados.")
+
+    cash_rows = db.scalars(select(CashMovement).where(
+        CashMovement.source_type == "sale", CashMovement.source_id == sale.id,
+    ).with_for_update()).all()
+    if len(cash_rows) != 1:
+        raise HTTPException(409, "La venta no conserva exactamente un ingreso de caja/banco enlazado; revisa el historial.")
+    cash = cash_rows[0]
+    if cash.reversal_of_id is not None or db.scalar(select(CashMovement.id).where(CashMovement.reversal_of_id == cash.id)):
+        raise HTTPException(409, "El ingreso de esta venta ya tiene una corrección registrada.")
+
+    reversal = CashMovement(
+        account_id=cash.account_id, direction="out", amount=cash.amount,
+        category="Corrección de venta", description=f"Corrección de venta {sale.folio}: {data.reason}",
+        occurred_on=date.today(), source_type="sale_reversal", source_id=sale.id,
+        reversal_of_id=cash.id, created_by=identity.email or "",
+    )
+    db.add(reversal); db.flush()
+    db.add(SaleCorrection(
+        sale_id=sale.id, cash_movement_id=reversal.id, amount=sale.total,
+        reason=data.reason, created_by=identity.email or "",
+    ))
+    installation.status = "cancelled"
+    db.add(Activity(
+        customer_id=sale.customer_id, kind="corrección de venta",
+        note=f"{sale.folio} · orden {installation.folio or installation.id} cancelada: {data.reason}",
+        created_by=identity.email or "",
+    ))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Esta venta ya tiene una corrección registrada.")
+    db.refresh(sale)
+    return _sale_result(db, sale)
 
 
 @router.post("/sales", status_code=201, dependencies=[Depends(require_permissions(auth_service, "sales:write"))])
@@ -1061,7 +1130,7 @@ def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_depen
         if item is None: raise HTTPException(404, "Uno de los materiales de la orden ya no existe en el almacén.")
         reserved = db.scalar(select(func.coalesce(func.sum(WorkOrderMaterial.requested_quantity - WorkOrderMaterial.preissued_quantity), 0))
             .join(Installation, Installation.id == WorkOrderMaterial.installation_id)
-            .where(WorkOrderMaterial.item_id == item_id, Installation.status != "closed")) or 0
+            .where(WorkOrderMaterial.item_id == item_id, Installation.status.notin_(("closed", "cancelled")))) or 0
         available = Decimal(str(item.quantity)) - Decimal(str(reserved))
         if available < quantity:
             raise HTTPException(409, f"Existencia disponible insuficiente de {item.name}: disponibles {available}, requeridos {quantity}.")
@@ -1128,7 +1197,7 @@ def list_installations(identity: AuthIdentity = Depends(require_permissions(auth
         assigned_ids = select(InstallationAssignment.installation_id).where(
             InstallationAssignment.installer_email == (identity.email or "").strip().lower()
         )
-        query = query.where(or_(func.lower(Installation.lead_installer) == (identity.email or "").strip().lower(), Installation.id.in_(assigned_ids)))
+        query = query.where(Installation.status != "cancelled").where(or_(func.lower(Installation.lead_installer) == (identity.email or "").strip().lower(), Installation.id.in_(assigned_ids)))
     rows = db.scalars(query).all()
     result = []
     for row in rows:
@@ -1251,6 +1320,8 @@ def confirm_installation_assignment(
     installation = db.scalar(select(Installation).where(Installation.id == installation_id).with_for_update())
     if installation is None:
         raise HTTPException(404, "Orden de trabajo no encontrada.")
+    if installation.status == "cancelled":
+        raise HTTPException(409, "La orden fue cancelada y ya no acepta confirmaciones.")
     email = identity.email.strip().lower()
     assignment = db.scalar(select(InstallationAssignment).where(
         InstallationAssignment.installation_id == installation_id,
@@ -1313,6 +1384,8 @@ def update_installation_checklist(
     installation = db.scalar(select(Installation).where(Installation.id == installation_id).with_for_update())
     if installation is None:
         raise HTTPException(404, "Orden de trabajo no encontrada.")
+    if installation.status == "cancelled":
+        raise HTTPException(409, "La orden fue cancelada y ya no acepta cambios de checklist.")
     if "instalador" in identity.roles:
         if not _installer_has_assignment(db, installation, identity.email or ""):
             raise HTTPException(403, "Solo puedes actualizar la lista de una orden asignada a tu cuenta.")
@@ -1356,7 +1429,7 @@ def list_inventory(identity: AuthIdentity = Depends(require_permissions(auth_ser
     reserved = {row[0]: Decimal(row[1] or 0) for row in db.execute(
         select(WorkOrderMaterial.item_id, func.sum(WorkOrderMaterial.requested_quantity - WorkOrderMaterial.preissued_quantity))
         .join(Installation, Installation.id == WorkOrderMaterial.installation_id)
-        .where(Installation.status != "closed")
+        .where(Installation.status.notin_(("closed", "cancelled")))
         .group_by(WorkOrderMaterial.item_id)
     ).all()}
     rows = []
@@ -1374,8 +1447,8 @@ def issue_work_order_materials(data: StockIssueInput, identity: AuthIdentity = D
     installation = db.scalar(select(Installation).where(Installation.id == data.installation_id).with_for_update())
     if installation is None:
         raise HTTPException(404, "Orden de trabajo no encontrada.")
-    if installation.status == "closed":
-        raise HTTPException(409, "No se puede emitir material para una orden cerrada.")
+    if installation.status in {"closed", "cancelled"}:
+        raise HTTPException(409, "No se puede emitir material para una orden cerrada o cancelada.")
 
     issued = []
     for line in data.lines:
@@ -1398,7 +1471,7 @@ def issue_work_order_materials(data: StockIssueInput, identity: AuthIdentity = D
             .where(
                 WorkOrderMaterial.item_id == item.id,
                 WorkOrderMaterial.installation_id != installation.id,
-                Installation.status != "closed",
+                Installation.status.notin_(("closed", "cancelled")),
             )
         ) or 0
         available_for_this_order = Decimal(str(item.quantity)) - Decimal(str(reserved_for_other_orders))
@@ -1498,6 +1571,12 @@ def consume_inventory(data: StockInput, identity: AuthIdentity = Depends(require
         if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
             serialized_item.pop("unit_cost", None)
         return {"movement": _serialize(movement), "physical_issue": _serialize(physical_issue) if physical_issue else None, "item": serialized_item}
+    if data.installation_id:
+        installation = db.scalar(select(Installation).where(Installation.id == data.installation_id).with_for_update())
+        if installation is None:
+            raise HTTPException(404, "Orden de trabajo no encontrada.")
+        if installation.status in {"closed", "cancelled"}:
+            raise HTTPException(409, "No se puede registrar consumo en una orden cerrada o cancelada.")
     item = db.scalar(select(InventoryItem).where(InventoryItem.id == data.item_id).with_for_update())
     if not item: raise HTTPException(404, "Artículo no encontrado.")
     material = db.scalar(select(WorkOrderMaterial).where(
@@ -1712,6 +1791,7 @@ def list_inventory_movements(
 def add_expense(data: ExpenseInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "expenses:write")), db: Session = Depends(get_db)):
     installation = db.get(Installation, data.installation_id) if data.installation_id else None
     if data.installation_id and not installation: raise HTTPException(404, "Instalación no encontrada.")
+    if installation and installation.status == "cancelled": raise HTTPException(409, "No se puede registrar un gasto en una orden cancelada.")
     if "instalador" in identity.roles and (installation is None or not _installer_has_assignment(db, installation, identity.email or "")):
         raise HTTPException(403, "Selecciona una orden asignada a tu cuenta para registrar gastos de campo.")
     operation = _find_offline_operation(data, "expense", identity, db)
@@ -2645,6 +2725,19 @@ def profitability_report(
         row["city"] = customer.city
         row["sales"] += Decimal(sale.total)
 
+    corrections_query = select(SaleCorrection, Sale, Installation, Customer).join(
+        Sale, Sale.id == SaleCorrection.sale_id,
+    ).join(Installation, Installation.id == Sale.installation_id).join(Customer, Customer.id == Sale.customer_id)
+    if installation_id:
+        corrections_query = corrections_query.where(Sale.installation_id == installation_id)
+    if start_at is not None and end_at is not None:
+        corrections_query = corrections_query.where(SaleCorrection.created_at >= start_at, SaleCorrection.created_at < end_at)
+    for correction, sale, installation, customer in db.execute(corrections_query).all():
+        row = project_row(installation.id)
+        row["project"] = customer.name
+        row["city"] = customer.city
+        row["sales"] -= Decimal(correction.amount)
+
     material_query = select(InventoryMovement).where(InventoryMovement.movement_type.in_(["consumption", "consumption_return"]))
     if installation_id:
         material_query = material_query.where(InventoryMovement.installation_id == installation_id)
@@ -2721,7 +2814,7 @@ def operations_report(
     reserved = {row[0]: Decimal(row[1] or 0) for row in db.execute(
         select(WorkOrderMaterial.item_id, func.sum(WorkOrderMaterial.requested_quantity - WorkOrderMaterial.preissued_quantity))
         .join(Installation, Installation.id == WorkOrderMaterial.installation_id)
-        .where(Installation.status != "closed")
+        .where(Installation.status.notin_(("closed", "cancelled")))
         .group_by(WorkOrderMaterial.item_id)
     ).all()}
     can_read_costs = bool({"inventory:costs:read", "inventory:manage"} & identity.permissions)
@@ -2872,7 +2965,7 @@ def dashboard(identity: AuthIdentity = Depends(require_permissions(auth_service,
         "customers": db.scalar(select(func.count()).select_from(Customer)) or 0,
         "quotes_open": db.scalar(select(func.count()).select_from(Quote).where(active_quotes)) or 0,
         "quotes_amount": float(db.scalar(select(func.coalesce(func.sum(Quote.total), 0)).where(active_quotes)) or 0),
-        "installations_active": db.scalar(select(func.count()).select_from(Installation).where(Installation.status != "closed")) or 0,
+        "installations_active": db.scalar(select(func.count()).select_from(Installation).where(Installation.status.notin_(("closed", "cancelled")))) or 0,
         "receivables_open": 0.0,
         "due_receivables": [],
         "low_stock_items": [],
@@ -2888,7 +2981,7 @@ def dashboard(identity: AuthIdentity = Depends(require_permissions(auth_service,
         reserved = {item_id: Decimal(quantity or 0) for item_id, quantity in db.execute(
             select(WorkOrderMaterial.item_id, func.sum(WorkOrderMaterial.requested_quantity - WorkOrderMaterial.preissued_quantity))
             .join(Installation, Installation.id == WorkOrderMaterial.installation_id)
-            .where(Installation.status != "closed").group_by(WorkOrderMaterial.item_id)
+            .where(Installation.status.notin_(("closed", "cancelled"))).group_by(WorkOrderMaterial.item_id)
         ).all()}
         inventory_items = db.scalars(select(InventoryItem).where(InventoryItem.minimum_quantity > 0).order_by(InventoryItem.name)).all()
         result["low_stock_items"] = [{"id": item.id, "name": item.name, "unit": item.unit,
