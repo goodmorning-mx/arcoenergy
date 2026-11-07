@@ -641,6 +641,15 @@ Se cotejaron el Word “COMENTARIOS Y MEJORAS PARA EL SISTEMA DE ARCO ENERGY” 
 | US-32 | Parcial | Ventas y órdenes tienen folios relacionados; no existe una entidad de proyecto independiente ni formato de código aprobado. |
 | US-33 | Parcial | La comparación confirma enlaces entre ventas/caja/cartera/inventario y compras/proveedor/caja o CxP; las reglas contables, impuestos y tratamiento de Plan 24 esperan validación del contador. |
 
+## Iteración 22 — gráfico y detalle de disponibilidad (2026-11-07)
+
+El reporte de existencias ahora incluye un gráfico circular de artículos disponibles, con stock bajo y agotados, además de una tabla detallada de existencia física, reservado, disponible, mínimo y categoría. El gráfico cuenta artículos por estado y no suma unidades incompatibles, por ejemplo paneles y metros de cable. La tabla mantiene las cantidades y unidades de cada artículo. No se incorpora valuación al gráfico para roles sin permiso de costos.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-19 | Parcial funcional | Reportes muestra disponibilidad y alertas de artículos bajo mínimo; faltan indicadores/gráficas y periodo de flujo de efectivo validados por administración y contador. |
+| US-29 | Parcial funcional | Reporte ofrece gráfico circular por estado y tabla detallada de stock; faltan reportes dedicados restantes, paginación y validación de fórmulas contables. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.
