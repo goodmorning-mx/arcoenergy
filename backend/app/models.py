@@ -107,6 +107,17 @@ class Installation(Base):
     notes: Mapped[str] = mapped_column(Text, default="")
 
 
+class InstallationAssignment(Base):
+    __tablename__ = "ae_installation_assignments"
+    __table_args__ = (UniqueConstraint("installation_id", "installer_email", name="uq_ae_installation_assignment_email"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    installation_id: Mapped[str] = mapped_column(ForeignKey("ae_installations.id", ondelete="CASCADE"), nullable=False, index=True)
+    installer_email: Mapped[str] = mapped_column(String(180), nullable=False, index=True)
+    assigned_by: Mapped[str] = mapped_column(String(180), default="")
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
 class Sale(Base):
     __tablename__ = "ae_sales"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

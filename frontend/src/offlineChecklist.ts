@@ -3,6 +3,8 @@ export type Installation = {
   folio?: string | null;
   scheduled_at: string | null;
   lead_installer: string;
+  assigned_installers?: string[];
+  confirmed_installers?: string[];
   status: string;
   notes: string;
   customer?: { name: string; city: string };

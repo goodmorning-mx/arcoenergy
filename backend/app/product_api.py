@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, sessionmaker
 from gm_agent import AgentService, Conversation, Message, OpenAIProvider
@@ -27,7 +27,7 @@ from gm_auth.models import memberships, users
 from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
-from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, Purchase, PurchaseLine, Quote, QuotePackage, Receivable, Sale, Supplier, SupplierPayment, WorkOrderMaterial
+from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, Purchase, PurchaseLine, Quote, QuotePackage, Receivable, Sale, Supplier, SupplierPayment, WorkOrderMaterial
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 
 settings = get_settings()
@@ -288,6 +288,7 @@ class InstallationInput(BaseModel):
     quote_id: str | None = None
     scheduled_at: datetime | None = None
     lead_installer: str = ""
+    assigned_installers: list[str] = Field(default_factory=list, max_length=10)
     notes: str = ""
 
 
@@ -312,6 +313,7 @@ class SaleInput(BaseModel):
     due_date: date | None = None
     scheduled_at: datetime | None = None
     lead_installer: str = Field(min_length=1, max_length=180)
+    assigned_installers: list[str] = Field(default_factory=list, max_length=10)
     notes: str = Field(default="", max_length=5000)
     materials: list[SaleMaterialInput] = Field(min_length=1, max_length=100)
 
@@ -730,17 +732,55 @@ def update_followup(followup_id: str, data: FollowUpDoneInput, identity: AuthIde
     return _serialize(row)
 
 
+def _validate_installer_emails(emails: list[str], primary_email: str = "") -> list[str]:
+    normalized = sorted({email.strip().lower() for email in [*emails, primary_email] if email and email.strip()})
+    if not normalized or len(normalized) > 10:
+        raise HTTPException(422, "Selecciona de 1 a 10 instaladores para la cuadrilla.")
+    with auth_service.engine.connect() as connection:
+        active = set(connection.execute(
+            select(func.lower(users.c.email))
+            .join(memberships, memberships.c.user_id == users.c.id)
+            .where(
+                func.lower(users.c.email).in_(normalized),
+                users.c.is_active.is_(True),
+                memberships.c.organization_id == settings.organization_id,
+                memberships.c.roles.contains(["instalador"]),
+            )
+        ).scalars().all())
+    if active != set(normalized):
+        raise HTTPException(422, "Cada integrante debe tener una cuenta activa con rol de instalador.")
+    return normalized
+
+
+def _record_installation_assignments(db: Session, installation_id: str, emails: list[str], assigned_by: str) -> None:
+    db.add_all([
+        InstallationAssignment(installation_id=installation_id, installer_email=email, assigned_by=assigned_by)
+        for email in emails
+    ])
+
+
+def _installer_has_assignment(db: Session, installation: Installation, email: str) -> bool:
+    normalized = (email or "").strip().lower()
+    if not normalized:
+        return False
+    if installation.lead_installer.strip().lower() == normalized:
+        return True
+    return db.scalar(select(InstallationAssignment.id).where(
+        InstallationAssignment.installation_id == installation.id,
+        InstallationAssignment.installer_email == normalized,
+    )) is not None
+
+
 @router.post("/installations", status_code=201, dependencies=[Depends(require_permissions(auth_service, "installations:write"))])
-def create_installation(data: InstallationInput, db: Session = Depends(get_db)):
+def create_installation(data: InstallationInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
     if not db.get(Customer, data.customer_id): raise HTTPException(404, "Cliente no encontrado.")
-    if data.lead_installer:
-        with auth_service.engine.connect() as connection:
-            member = connection.execute(select(users.c.id).join(memberships, memberships.c.user_id == users.c.id).where(users.c.email == data.lead_installer.lower(), users.c.is_active.is_(True), memberships.c.organization_id == settings.organization_id, memberships.c.roles.contains(["instalador"]))).first()
-        if member is None:
-            raise HTTPException(422, "Selecciona una cuenta activa con rol de instalador.")
-    row = Installation(customer_id=data.customer_id, quote_id=data.quote_id, scheduled_at=data.scheduled_at, lead_installer=data.lead_installer, notes=data.notes, checklist=[{"task":"Confirmar materiales","done":False},{"task":"Asignar cuadrilla","done":False},{"task":"Visita de instalación","done":False},{"task":"Registrar consumos","done":False},{"task":"Cerrar proyecto","done":False}])
-    db.add(row); db.commit(); db.refresh(row)
-    return _serialize(row)
+    installers = _validate_installer_emails(data.assigned_installers, data.lead_installer)
+    primary = (data.lead_installer.strip().lower() or installers[0])
+    row = Installation(customer_id=data.customer_id, quote_id=data.quote_id, scheduled_at=data.scheduled_at, lead_installer=primary, notes=data.notes, checklist=[{"task":"Confirmar materiales","done":False},{"task":"Asignar cuadrilla","done":True},{"task":"Visita de instalación","done":False},{"task":"Registrar consumos","done":False},{"task":"Cerrar proyecto","done":False}])
+    db.add(row); db.flush()
+    _record_installation_assignments(db, row.id, installers, identity.email or "")
+    db.commit(); db.refresh(row)
+    return {**_serialize(row), "assigned_installers": installers, "confirmed_installers": []}
 
 
 def _sale_result(db: Session, sale: Sale):
@@ -749,12 +789,13 @@ def _sale_result(db: Session, sale: Sale):
     installation = db.get(Installation, sale.installation_id)
     receivable = db.scalar(select(Receivable).where(Receivable.quote_id == sale.quote_id))
     materials = db.scalars(select(WorkOrderMaterial).where(WorkOrderMaterial.installation_id == sale.installation_id)).all()
+    assignments = db.scalars(select(InstallationAssignment).where(InstallationAssignment.installation_id == sale.installation_id)).all()
     item_names = {item.id: item.name for item in db.scalars(select(InventoryItem).where(InventoryItem.id.in_([line.item_id for line in materials]))).all()} if materials else {}
     return {
         **_serialize(sale),
         "quote": {"id": quote.id, "folio": quote.folio, "payment_method": quote.payment_method} if quote else None,
         "customer": {"id": customer.id, "name": customer.name, "phone": customer.phone, "email": customer.email, "city": customer.city} if customer else None,
-        "installation": _serialize(installation),
+        "installation": {**_serialize(installation), "assigned_installers": [row.installer_email for row in assignments] or ([installation.lead_installer] if installation and installation.lead_installer else []), "confirmed_installers": [row.installer_email for row in assignments if row.confirmed_at]},
         "receivable": _serialize(receivable),
         "materials": [{**_serialize(line), "item_name": item_names.get(line.item_id, "Artículo"), "quantity": line.requested_quantity, "remaining_quantity": max(Decimal(line.requested_quantity) - Decimal(line.consumed_quantity), Decimal("0"))} for line in materials],
     }
@@ -777,16 +818,8 @@ def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_depen
     customer = db.get(Customer, quote.customer_id)
     if customer is None: raise HTTPException(409, "El cliente de la cotización ya no está disponible.")
 
+    installer_emails = _validate_installer_emails(data.assigned_installers, data.lead_installer)
     installer_email = data.lead_installer.strip().lower()
-    with auth_service.engine.connect() as connection:
-        installer = connection.execute(select(users.c.id).join(memberships, memberships.c.user_id == users.c.id).where(
-            func.lower(users.c.email) == installer_email,
-            users.c.is_active.is_(True),
-            memberships.c.organization_id == settings.organization_id,
-            memberships.c.roles.contains(["instalador"]),
-        )).first()
-    if installer is None:
-        raise HTTPException(422, "Selecciona una cuenta activa con rol de instalador.")
 
     account = None
     if data.sale_type == "cash":
@@ -838,6 +871,7 @@ def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_depen
         checklist=[{"task":"Confirmar materiales","done":True},{"task":"Asignar cuadrilla","done":True},{"task":"Visita de instalación","done":False},{"task":"Registrar consumos","done":False},{"task":"Cerrar proyecto","done":False}],
     )
     db.add(installation); db.flush()
+    _record_installation_assignments(db, installation.id, installer_emails, identity.email or "")
     sale = Sale(folio=sale_folio, customer_id=customer.id, quote_id=quote.id, installation_id=installation.id,
         sale_type=data.sale_type, total=quote.total, created_by=identity.email or "")
     db.add(sale); db.flush()
@@ -867,17 +901,52 @@ def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_depen
 def list_installations(identity: AuthIdentity = Depends(require_permissions(auth_service, "installations:read")), db: Session = Depends(get_db)):
     query = select(Installation).order_by(Installation.scheduled_at)
     if "instalador" in identity.roles:
-        query = query.where(Installation.lead_installer == identity.email)
+        assigned_ids = select(InstallationAssignment.installation_id).where(
+            InstallationAssignment.installer_email == (identity.email or "").strip().lower()
+        )
+        query = query.where(or_(func.lower(Installation.lead_installer) == (identity.email or "").strip().lower(), Installation.id.in_(assigned_ids)))
     rows = db.scalars(query).all()
     result = []
     for row in rows:
         materials = db.scalars(select(WorkOrderMaterial).where(WorkOrderMaterial.installation_id == row.id)).all()
-        result.append({**_serialize(row), "customer": _serialize(db.get(Customer, row.customer_id)), "materials": [
+        assignments = db.scalars(select(InstallationAssignment).where(InstallationAssignment.installation_id == row.id)).all()
+        result.append({**_serialize(row),
+            "assigned_installers": [assignment.installer_email for assignment in assignments] or ([row.lead_installer] if row.lead_installer else []),
+            "confirmed_installers": [assignment.installer_email for assignment in assignments if assignment.confirmed_at],
+            "customer": _serialize(db.get(Customer, row.customer_id)), "materials": [
             {**_serialize(material), "item_name": (db.get(InventoryItem, material.item_id).name if db.get(InventoryItem, material.item_id) else "Artículo"),
              "remaining_quantity": max(Decimal(material.requested_quantity) - Decimal(material.consumed_quantity), Decimal("0"))}
             for material in materials
         ]})
     return result
+
+
+@router.post("/installations/{installation_id}/confirm")
+def confirm_installation_assignment(
+    installation_id: str,
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "installations:read")),
+    db: Session = Depends(get_db),
+):
+    if "instalador" not in identity.roles or not identity.email:
+        raise HTTPException(403, "Solo un instalador asignado puede confirmar la orden.")
+    installation = db.scalar(select(Installation).where(Installation.id == installation_id).with_for_update())
+    if installation is None:
+        raise HTTPException(404, "Orden de trabajo no encontrada.")
+    email = identity.email.strip().lower()
+    assignment = db.scalar(select(InstallationAssignment).where(
+        InstallationAssignment.installation_id == installation_id,
+        InstallationAssignment.installer_email == email,
+    ).with_for_update())
+    if assignment is None and installation.lead_installer.strip().lower() == email:
+        assignment = InstallationAssignment(installation_id=installation.id, installer_email=email, assigned_by="")
+        db.add(assignment); db.flush()
+    if assignment is None:
+        raise HTTPException(403, "Esta orden no está asignada a tu cuenta.")
+    if assignment.confirmed_at is None:
+        assignment.confirmed_at = datetime.now(timezone.utc)
+        db.add(Activity(customer_id=installation.customer_id, kind="orden confirmada por instalador", note=f"{installation.folio or 'Orden'} · {email}", created_by=email))
+        db.commit()
+    return {"installation_id": installation.id, "installer_email": email, "confirmed_at": assignment.confirmed_at}
 
 
 def _offline_operation_owner(identity: AuthIdentity) -> str:
@@ -926,7 +995,7 @@ def update_installation_checklist(
     if installation is None:
         raise HTTPException(404, "Orden de trabajo no encontrada.")
     if "instalador" in identity.roles:
-        if installation.lead_installer.strip().lower() != (identity.email or "").strip().lower():
+        if not _installer_has_assignment(db, installation, identity.email or ""):
             raise HTTPException(403, "Solo puedes actualizar la lista de una orden asignada a tu cuenta.")
     elif "installations:write" not in identity.permissions:
         raise HTTPException(403, "No tienes permiso para actualizar órdenes de trabajo.")
@@ -1002,7 +1071,7 @@ def create_inventory_item(data: InventoryItemInput, identity: AuthIdentity = Dep
 def consume_inventory(data: StockInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:write")), db: Session = Depends(get_db)):
     if "instalador" in identity.roles:
         installation = db.get(Installation, data.installation_id) if data.installation_id else None
-        if installation is None or installation.lead_installer.lower() != (identity.email or "").lower():
+        if installation is None or not _installer_has_assignment(db, installation, identity.email or ""):
             raise HTTPException(403, "Solo puedes registrar consumos en una orden asignada a tu cuenta.")
     operation = _find_offline_operation(data, "consume", identity, db)
     if operation:
@@ -1081,7 +1150,7 @@ def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depend
         raise HTTPException(404, "No se encontró una salida de instalación válida para devolver.")
     if "instalador" in identity.roles:
         installation = db.get(Installation, source.installation_id)
-        if installation is None or installation.lead_installer.lower() != (identity.email or "").lower():
+        if installation is None or not _installer_has_assignment(db, installation, identity.email or ""):
             raise HTTPException(403, "Solo puedes devolver material de una orden asignada a tu cuenta.")
     operation = _find_offline_operation(data, "return", identity, db)
     if operation:
@@ -1204,9 +1273,13 @@ def list_inventory_movements(
     if to_date:
         query = query.where(InventoryMovement.created_at < datetime.combine(to_date + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc))
     if "instalador" in identity.roles:
-        query = query.join(Installation, Installation.id == InventoryMovement.installation_id).where(
-            Installation.lead_installer == identity.email
+        assigned_ids = select(InstallationAssignment.installation_id).where(
+            func.lower(InstallationAssignment.installer_email) == (identity.email or "").strip().lower()
         )
+        query = query.join(Installation, Installation.id == InventoryMovement.installation_id).where(or_(
+            func.lower(Installation.lead_installer) == (identity.email or "").strip().lower(),
+            Installation.id.in_(assigned_ids),
+        ))
     query = query.order_by(InventoryMovement.created_at.desc(), InventoryMovement.id.desc()).limit(limit).offset(offset)
     rows = db.execute(query).all()
     result = []
@@ -1225,7 +1298,7 @@ def list_inventory_movements(
 def add_expense(data: ExpenseInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "expenses:write")), db: Session = Depends(get_db)):
     installation = db.get(Installation, data.installation_id) if data.installation_id else None
     if data.installation_id and not installation: raise HTTPException(404, "Instalación no encontrada.")
-    if "instalador" in identity.roles and (installation is None or installation.lead_installer.lower() != (identity.email or "").lower()):
+    if "instalador" in identity.roles and (installation is None or not _installer_has_assignment(db, installation, identity.email or "")):
         raise HTTPException(403, "Selecciona una orden asignada a tu cuenta para registrar gastos de campo.")
     operation = _find_offline_operation(data, "expense", identity, db)
     if operation:
