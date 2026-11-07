@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from gm_auth.models import AuthIdentity, memberships, users
 
 from app.models import Base, CashMovement, Customer, FinancialAccount, Installation, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, Quote, Receivable, Sale, WorkOrderMaterial
-from app.product_api import ExpenseInput, InventoryReturnInput, SaleInput, SaleMaterialInput, StockInput, add_expense, consume_inventory, create_sale, list_financial_accounts, profitability_report, return_inventory
+from app.product_api import ExpenseInput, InventoryReturnInput, SaleInput, SaleMaterialInput, StockInput, _installment_due_date, add_expense, consume_inventory, create_sale, list_financial_accounts, profitability_report, return_inventory
 from app.roles import ROLE_PERMISSIONS
 from app import product_api
 
@@ -182,7 +182,7 @@ def test_retry_of_consumption_and_expense_is_idempotent_and_rejects_reused_paylo
         assert db.query(CashMovement).filter_by(source_type="expense").count() == 1
 
 
-def test_credit_sale_creates_receivable_without_changing_cash(monkeypatch) -> None:
+def test_credit_sale_creates_installment_schedule_without_changing_cash(monkeypatch) -> None:
     monkeypatch.setattr(product_api.auth_service, "engine", installer_directory())
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
@@ -197,11 +197,42 @@ def test_credit_sale_creates_receivable_without_changing_cash(monkeypatch) -> No
         db.add_all([customer, account, item]); db.flush(); quote.customer_id = customer.id
         db.add(quote); db.commit(); db.refresh(quote); db.refresh(item)
 
-        created = create_sale(SaleInput(quote_id=quote.id, sale_type="credit", due_date=date.today(),
+        created = create_sale(SaleInput(quote_id=quote.id, sale_type="credit", due_date=date(2026, 1, 31),
+            installment_count=3, installment_frequency="monthly",
             lead_installer="field@example.test", materials=[SaleMaterialInput(item_id=item.id, quantity=1)]), identity, db)
-        receivable = db.scalars(select(Receivable).where(Receivable.quote_id == quote.id)).one()
+        receivables = db.scalars(select(Receivable).where(Receivable.quote_id == quote.id).order_by(Receivable.installment_number)).all()
         cash_balance = list_financial_accounts(db)[0]["current_balance"]
 
     assert created["sale_type"] == "credit"
-    assert receivable.amount == Decimal("71000.00") and receivable.paid_amount == Decimal("0.00")
+    assert created["installment_count"] == 3
+    assert [row.installment_number for row in receivables] == [1, 2, 3]
+    assert [row.amount for row in receivables] == [Decimal("23666.66"), Decimal("23666.66"), Decimal("23666.68")]
+    assert [row.due_date for row in receivables] == [date(2026, 1, 31), date(2026, 2, 28), date(2026, 3, 31)]
+    assert sum((row.amount for row in receivables), Decimal("0.00")) == Decimal("71000.00")
+    assert all(row.paid_amount == Decimal("0.00") for row in receivables)
     assert cash_balance == Decimal("1000.00")
+
+
+def test_installment_calendar_handles_weekly_and_biweekly_dates() -> None:
+    first_due = date(2026, 11, 6)
+    assert _installment_due_date(first_due, 2, "weekly") == date(2026, 11, 20)
+    assert _installment_due_date(first_due, 2, "biweekly") == date(2026, 12, 4)
+
+
+def test_credit_sale_rejects_more_installments_than_total_cents(monkeypatch) -> None:
+    monkeypatch.setattr(product_api.auth_service, "engine", installer_directory())
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    identity = AuthIdentity("admin-1", "arcoenergy", frozenset({"administrador"}), ROLE_PERMISSIONS["administrador"], "admin@example.test", "Admin")
+    with Session(engine) as db:
+        customer = Customer(name="Cliente Crédito")
+        quote = Quote(folio="AE-Q-CENTS", customer_id="", panel_count=1, panel_brand="Solar", panel_watts=600,
+            structure_name="Fija", inverter="Inversor 5 kW", payment_method="Financiamiento", panel_subtotal=0.02,
+            structure_cost=0, inverter_cost=0, total=0.02, status="accepted", pricing_approved=True)
+        item = InventoryItem(name="Inversor", unit="pza", quantity=2, unit_cost=0)
+        db.add_all([customer, item]); db.flush(); quote.customer_id = customer.id
+        db.add(quote); db.commit()
+        with pytest.raises(HTTPException) as error:
+            create_sale(SaleInput(quote_id=quote.id, sale_type="credit", due_date=date.today(), installment_count=3,
+                lead_installer="field@example.test", materials=[SaleMaterialInput(item_id=item.id, quantity=1)]), identity, db)
+    assert error.value.status_code == 422

@@ -863,3 +863,12 @@ El CRM puede registrar una transferencia desde la cuenta seleccionada hacia otra
 | US-18 | Funcional básico | Caja/bancos ahora admite transferencias internas pareadas y reversa auditable. Sigue pendiente conciliar movimientos con estados de cuenta y contabilizar comisiones externas. |
 | US-19 | Parcial funcional | Flujo por periodo y cuenta puede reflejar ambos lados de una transferencia sin clasificarla como ingreso o gasto. Quedan conciliación y validación final del flujo con contabilidad. |
 | US-35 | Parcial funcional | Cada transferencia vincula sus dos movimientos y se revierte de forma atómica. No sustituye doble partida contable ni conciliación bancaria. |
+
+## Iteración 46 — calendario de cuotas de venta financiada (2026-11-07)
+
+Al registrar una venta a crédito, CRM permite indicar primer vencimiento, entre una y 60 cuotas y frecuencia semanal, quincenal o mensual. El total de la cotización aprobada se divide en centavos y el residuo queda en la última cuota; en frecuencias mensuales se conserva el día del primer vencimiento y se ajusta al último día de los meses más cortos. Cada cuota queda como una cuenta por cobrar individual y aparece en cartera. El cambio no calcula intereses, no agrega comisiones y no activa notificaciones automáticas. Las reglas de Plan 24 y el tratamiento financiero siguen sujetos a validación contable.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-11 | Parcial funcional | La venta financiada genera calendario configurable y cartera por cuota. Falta validar fórmulas e intereses de cada plan con el contador y automatizar recordatorios tras aprobar canal y mensajes. |
+| US-16 | Parcial funcional | Cuotas individuales con monto, número y vencimiento pueden cobrarse y consultarse en cartera. Falta aprobación de reglas financieras y envío automático de avisos. |

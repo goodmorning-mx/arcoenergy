@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_DOWN
 import hashlib
 import json
 from io import BytesIO
@@ -354,6 +355,8 @@ class SaleInput(BaseModel):
     sale_type: Literal["cash", "credit"]
     account_id: str | None = None
     due_date: date | None = None
+    installment_count: int = Field(default=1, ge=1, le=60)
+    installment_frequency: Literal["weekly", "biweekly", "monthly"] = "monthly"
     scheduled_at: datetime | None = None
     lead_installer: str = Field(min_length=1, max_length=180)
     assigned_installers: list[str] = Field(default_factory=list, max_length=10)
@@ -981,7 +984,7 @@ def _sale_result(db: Session, sale: Sale):
     quote = db.get(Quote, sale.quote_id)
     customer = db.get(Customer, sale.customer_id)
     installation = db.get(Installation, sale.installation_id)
-    receivable = db.scalar(select(Receivable).where(Receivable.quote_id == sale.quote_id))
+    receivables = db.scalars(select(Receivable).where(Receivable.quote_id == sale.quote_id).order_by(Receivable.installment_number)).all()
     materials = db.scalars(select(WorkOrderMaterial).where(WorkOrderMaterial.installation_id == sale.installation_id)).all()
     assignments = db.scalars(select(InstallationAssignment).where(InstallationAssignment.installation_id == sale.installation_id)).all()
     item_names = {item.id: item.name for item in db.scalars(select(InventoryItem).where(InventoryItem.id.in_([line.item_id for line in materials]))).all()} if materials else {}
@@ -990,9 +993,23 @@ def _sale_result(db: Session, sale: Sale):
         "quote": {"id": quote.id, "folio": quote.folio, "payment_method": quote.payment_method} if quote else None,
         "customer": {"id": customer.id, "name": customer.name, "phone": customer.phone, "email": customer.email, "city": customer.city} if customer else None,
         "installation": {**_serialize(installation), "assigned_installers": [row.installer_email for row in assignments] or ([installation.lead_installer] if installation and installation.lead_installer else []), "confirmed_installers": [row.installer_email for row in assignments if row.confirmed_at]},
-        "receivable": _serialize(receivable),
+        "receivable": _serialize(receivables[0]) if receivables else None,
+        "receivables": [_serialize(row) for row in receivables],
+        "installment_count": len(receivables),
         "materials": [{**_serialize(line), "item_name": item_names.get(line.item_id, "Artículo"), "quantity": line.requested_quantity, "remaining_quantity": max(Decimal(line.requested_quantity) - Decimal(line.consumed_quantity), Decimal("0"))} for line in materials],
     }
+
+
+def _installment_due_date(first_due_date: date, installment_index: int, frequency: str) -> date:
+    if frequency == "weekly":
+        return first_due_date + timedelta(days=7 * installment_index)
+    if frequency == "biweekly":
+        return first_due_date + timedelta(days=14 * installment_index)
+    month_index = first_due_date.year * 12 + first_due_date.month - 1 + installment_index
+    year, month_zero_based = divmod(month_index, 12)
+    month = month_zero_based + 1
+    day = min(first_due_date.day, monthrange(year, month)[1])
+    return date(year, month, day)
 
 
 @router.get("/sales", dependencies=[Depends(require_permissions(auth_service, "sales:read"))])
@@ -1019,6 +1036,8 @@ def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_depen
     if data.sale_type == "cash":
         if not data.account_id or data.due_date:
             raise HTTPException(422, "Una venta de contado requiere una cuenta receptora y no lleva vencimiento de crédito.")
+        if data.installment_count != 1:
+            raise HTTPException(422, "Una venta de contado no puede incluir un plan de cuotas.")
         account = db.scalar(select(FinancialAccount).where(
             FinancialAccount.id == data.account_id,
             FinancialAccount.active.is_(True),
@@ -1027,6 +1046,9 @@ def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_depen
     else:
         if data.account_id or not data.due_date:
             raise HTTPException(422, "Una venta a crédito requiere fecha de vencimiento y no debe seleccionar cuenta de cobro todavía.")
+        total_due = Decimal(quote.total).quantize(Decimal("0.01"))
+        if total_due < Decimal(data.installment_count) * Decimal("0.01"):
+            raise HTTPException(422, "El total no alcanza para generar el número de cuotas solicitado.")
         if db.scalar(select(Receivable.id).where(Receivable.quote_id == quote.id)):
             raise HTTPException(409, "Esta cotización ya tiene cuentas por cobrar registradas.")
 
@@ -1084,9 +1106,17 @@ def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_depen
             category="Venta de contado", description=f"{customer.name} · {sale_folio}",
             occurred_on=date.today(), source_type="sale", source_id=sale.id, created_by=identity.email or ""))
     elif data.due_date is not None:
-        db.add(Receivable(customer_id=customer.id, quote_id=quote.id, installment_number=1,
-            due_date=data.due_date, amount=quote.total, paid_amount=Decimal("0"), status="pending",
-            payment_method=quote.payment_method))
+        total_due = Decimal(quote.total).quantize(Decimal("0.01"))
+        regular_amount = (total_due / data.installment_count).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+        for installment_number in range(1, data.installment_count + 1):
+            amount = regular_amount if installment_number < data.installment_count else total_due - regular_amount * (data.installment_count - 1)
+            due_date = _installment_due_date(data.due_date, installment_number - 1, data.installment_frequency)
+            db.add(Receivable(
+                customer_id=customer.id, quote_id=quote.id, installment_number=installment_number,
+                due_date=due_date, amount=amount, paid_amount=Decimal("0"),
+                status="overdue" if due_date < date.today() else "pending",
+                payment_method=quote.payment_method,
+            ))
     db.commit(); db.refresh(sale)
     return _sale_result(db, sale)
 
