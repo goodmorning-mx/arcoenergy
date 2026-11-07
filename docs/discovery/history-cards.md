@@ -689,6 +689,8 @@ La descarga CSV del CRM ahora vuelve a consultar todas las páginas de 500 movim
 
 Una orden de trabajo puede asignarse a varias cuentas activas con rol instalador. Cada integrante ve la orden en la PWA y puede confirmar su propia asignación; la bitácora conserva la confirmación. La autorización de checklist, consumo, devolución y gasto acepta cualquier integrante asignado, no solamente a la persona responsable. Las órdenes existentes conservan su instalador líder al migrar. La actualización de la PWA requiere conexión para confirmar; notificaciones push cuando la app está cerrada todavía requieren configurar un proveedor externo.
 
+La Iteración 27 se integró con el PR [#50](https://github.com/goodmorning-mx/arcoenergy/pull/50), commit `25a34b9d8acffb17cb83ea32af2e26fa49906efc`, y Factory terminó su despliegue DEV en el run [#42330777914](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42330777914). `/api/health/ready`, `/app/login`, `/crm/login`, `/login`, `/app/` y `/crm/` respondieron HTTP 200; API, PWA y CRM reportaron el mismo SHA. La verificación local de navegador no tuvo navegador conectado; el CI integrado de Chrome pasó.
+
 | Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
 | --- | --- | --- |
 | US-7 | Parcial funcional | CRM permite asignar una cuadrilla y la PWA confirma individualmente; falta validar el flujo con instaladores reales y configurar push de fondo. |
