@@ -802,3 +802,11 @@ La API puede guardar el PDF foliado de una cotización aprobada en una carpeta p
 | --- | --- | --- |
 | US-3 | Parcial funcional | PDF foliado descargable y archivado en Drive cuando la integración tiene acceso; estado visible en CRM. Falta envío directo del adjunto por WhatsApp y captura/validación de credenciales reales en DEV. |
 | US-13 | Parcial funcional | Almacenamiento privado implementado para PDFs de cotización. Faltan documentos contractuales, identificaciones, recibos y sincronización del resto de datos; definir retención, restauración y auditoría. |
+
+## Iteración 40 — compartir cotización como archivo desde CRM y PWA (2026-11-07)
+
+CRM y PWA ofrecen el PDF al diálogo nativo de compartir del dispositivo. En móviles compatibles, el vendedor puede seleccionar WhatsApp y la conversación existente para adjuntar la propuesta. Cuando el navegador no puede compartir archivos, el PDF se descarga y se abre WhatsApp con texto preparado para que el vendedor lo adjunte manualmente. Ninguno de los caminos envía el mensaje automáticamente ni verifica su entrega.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-3 | Parcial funcional | El PDF foliado se puede compartir como archivo desde las interfaces nativas compatibles, con descarga y WhatsApp como fallback. Pendiente validación en dispositivos reales; envío/confirmación automáticos requieren integración y aprobación separadas. |
