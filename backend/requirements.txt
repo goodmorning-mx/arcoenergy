@@ -11,3 +11,4 @@ gm-mcp @ git+https://github.com/goodmorning-mx/gm-mcp.git@631dee26fc057d10a4cc09
 gm-billing @ git+https://github.com/goodmorning-mx/gm-billing.git@11a0beafe3c7618b0cfc472f4c5b8619c98d1aab
 gm-agent @ git+https://github.com/goodmorning-mx/gm-agent.git@06500d8c935ea2cbe5a146b4703f06e3fedceb7f
 reportlab==4.4.4
+google-auth[requests]==2.62.1

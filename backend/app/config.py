@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     admin_bootstrap_password: str = Field(default="", alias="ADMIN_BOOTSTRAP_PASSWORD")
     organization_id: str = Field(default="arcoenergy", alias="ORGANIZATION_ID")
     google_drive_folder_id: str = Field(default="", alias="GOOGLE_DRIVE_FOLDER_ID")
+    google_drive_service_account_json: str = Field(default="", alias="GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON")
     whatsapp_phone: str = Field(default="", alias="WHATSAPP_PHONE")
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
 

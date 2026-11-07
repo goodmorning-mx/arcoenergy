@@ -69,6 +69,7 @@ class Quote(Base):
     total: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     status: Mapped[str] = mapped_column(String(40), default="draft")
     pricing_approved: Mapped[bool] = mapped_column(Boolean, default=False)
+    drive_file_id: Mapped[str] = mapped_column(String(200), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 

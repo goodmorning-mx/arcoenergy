@@ -27,6 +27,7 @@ from gm_auth.models import memberships, users
 from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
+from app.drive_storage import folder_status, save_quote_pdf
 from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, Purchase, PurchaseLine, Quote, QuotePackage, Receivable, Sale, Supplier, SupplierPayment, WorkOrderMaterial
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 
@@ -838,7 +839,18 @@ def quote_pdf(quote_id: str, db: Session = Depends(get_db)):
     disclaimer = "Propuesta comercial sujeta a validación final de alcance y condiciones."
     pdf.drawString(48, 65, disclaimer)
     pdf.save(); buffer.seek(0)
-    return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{row.folio}.pdf"', "X-Drive-Status": "pending-configuration"})
+    pdf_bytes = buffer.getvalue()
+    drive_status = "pending-configuration"
+    if settings.google_drive_service_account_json and settings.google_drive_folder_id:
+        try:
+            row.drive_file_id = save_quote_pdf(folio=row.folio, pdf=pdf_bytes, existing_file_id=row.drive_file_id)
+            db.commit()
+            drive_status = "saved"
+        except Exception:
+            db.rollback()
+            drive_status = "upload-failed"
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{row.folio}.pdf"', "X-Drive-Status": drive_status})
 
 
 @router.post("/followups", status_code=201, dependencies=[Depends(require_permissions(auth_service, "customers:write"))])
@@ -2086,12 +2098,14 @@ def reverse_customer_payment(
 
 @router.get("/integrations", dependencies=[Depends(require_permissions(auth_service, "team:manage"))])
 def integration_status():
+    drive = folder_status(settings)
     return {
         "google_drive": {
-            "connected": False,
-            "status": "integration_not_implemented",
+            **drive,
             "folder_configured": bool(settings.google_drive_folder_id),
-            "planned_file_types": ["quotes", "contracts", "receipts"],
+            "service_account_configured": bool(getattr(settings, "google_drive_service_account_json", "")),
+            "stored_file_types": ["quotes"],
+            "planned_file_types": ["contracts", "receipts"],
         },
         "whatsapp": {
             "connected": False,

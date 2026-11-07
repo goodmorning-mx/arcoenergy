@@ -100,7 +100,7 @@ Do not add Traefik labels, `docker_compose_domains`, Coolify domains, server pat
 Do not copy every variable from `.env.example` into both Coolify applications. Use only the variables required by each resource:
 
 - Frontend build-time: `VITE_API_URL`, and `VITE_BASE_PATH=/app/` for hybrid.
-- Backend runtime: `APP_NAME`, `APP_ENV`, `CORS_ORIGINS`, `DATABASE_URL`.
+- Backend runtime: `APP_NAME`, `APP_ENV`, `CORS_ORIGINS`, `DATABASE_URL`; optional `GOOGLE_DRIVE_FOLDER_ID` and secret `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` for private quote PDF storage. Enable the Google Drive API and share the destination folder with the service account email. Leave both Drive values unset until authorized; the product reports Drive as unconfigured and keeps local PDF download available.
 - Gateway runtime: `REACT_UPSTREAM`, `NEXT_UPSTREAM`, `API_UPSTREAM` as internal
   service URLs. The local hybrid gateway maps to port `8081`.
 - Local Compose only: `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, plus local placeholder defaults.

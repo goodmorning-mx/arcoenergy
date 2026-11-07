@@ -315,6 +315,8 @@ export default function App() {
       const response = await fetch(`${apiBase}/quotes/${quote.id}/pdf`, { headers: { Authorization: `Bearer ${accessToken}` } });
       if (!response.ok) throw new Error('No se pudo generar el PDF.');
       const url = URL.createObjectURL(await response.blob()); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${quote.folio}.pdf`; anchor.click(); URL.revokeObjectURL(url);
+      const driveStatus = response.headers.get('X-Drive-Status');
+      announce(driveStatus === 'saved' ? `PDF ${quote.folio} descargado y archivado en Drive.` : driveStatus === 'upload-failed' ? `PDF ${quote.folio} descargado; Drive no pudo archivarlo.` : `PDF ${quote.folio} descargado; Drive no está configurado y no se archivó.`, driveStatus === 'upload-failed' ? 'error' : 'success');
     } catch (error) { announce(error instanceof Error ? error.message : 'No se pudo descargar el PDF.', 'error'); }
   }
 
@@ -351,7 +353,7 @@ export default function App() {
     if (!accessToken) return;
     try {
       const quote = await request<Quote>('/quotes', accessToken, { method: 'POST', body: JSON.stringify({ customer_id: customerId, panel_count: packageCount, installation_address: installationAddress, installation_city: installationCity, inverter, payment_method: paymentMethod }) });
-      setQuoteOpen(false); await refresh(); await downloadQuote(quote); announce(`Cotización ${quote.folio} guardada como borrador.`);
+      setQuoteOpen(false); await refresh(); await downloadQuote(quote);
     } catch (error) { announce(error instanceof Error ? error.message : 'No se pudo generar la cotización.', 'error'); }
   }
 
