@@ -696,6 +696,15 @@ La Iteración 27 se integró con el PR [#50](https://github.com/goodmorning-mx/a
 | US-7 | Parcial funcional | CRM permite asignar una cuadrilla y la PWA confirma individualmente; falta validar el flujo con instaladores reales y configurar push de fondo. |
 | US-40 | Parcial funcional | Las órdenes se filtran por asignación y cada instalador confirma desde su cuenta; falta validar en dispositivos y con cuentas reales del cliente. |
 
+## Iteración 28 — vista previa de impactos operativos (2026-11-06)
+
+Antes de registrar una compra, venta, pago a proveedor o cobro de cliente, CRM resume las afectaciones actuales a existencias, caja/banco y saldos relacionados. La compra aumenta existencias; su anticipo sale de la cuenta seleccionada y el remanente queda con el proveedor. Una venta de contado recibe el total en la cuenta seleccionada; una venta a crédito abre el saldo por cobrar. Ambas reservan los materiales en la orden y la existencia física baja cuando se registra su salida. Los pagos reducen o aumentan caja/banco y el saldo de la cuenta correspondiente. No se presentan estos resúmenes como pólizas contables; impuestos, pagos mixtos y Plan 24 requieren validación del contador.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-33 | Parcial funcional | CRM anticipa los efectos vinculados para cuatro acciones operativas. Falta validar reglas contables, impuestos, pagos mixtos y Plan 24 con el contador. |
+| US-35 | Parcial funcional | Vista previa de saldo bancario/caja, inventario reservado y cuentas por cobrar/pagar según las reglas actuales. Falta aprobación del flujo contable y de valuación. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.
