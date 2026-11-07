@@ -419,6 +419,18 @@ class SupplierPaymentInput(BaseModel):
     reference: str = Field(default="", max_length=180)
 
 
+class PaymentCorrectionInput(BaseModel):
+    reason: str = Field(min_length=5, max_length=120)
+
+    @field_validator("reason")
+    @classmethod
+    def reason_must_contain_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 5:
+            raise ValueError("Describe el motivo de la corrección (mínimo 5 caracteres).")
+        return normalized
+
+
 class ReceivableInput(BaseModel):
     customer_id: str
     due_date: date
@@ -1210,6 +1222,8 @@ def reverse_cash_movement(movement_id: str, identity: AuthIdentity = Depends(ide
     original = db.scalar(select(CashMovement).where(CashMovement.id == movement_id).with_for_update())
     if original is None:
         raise HTTPException(404, "Movimiento de cuenta no encontrado.")
+    if original.source_type in {"supplier_payment", "customer_payment"}:
+        raise HTTPException(409, "Corrige este pago desde su compra o cuenta por cobrar para actualizar también el saldo relacionado.")
     if original.reversal_of_id is not None:
         raise HTTPException(409, "Una reversa no puede revertirse; registra un nuevo movimiento de corrección.")
     if db.scalar(select(CashMovement.id).where(CashMovement.reversal_of_id == movement_id)):
@@ -1255,6 +1269,8 @@ def _purchase_result(db: Session, purchase: Purchase):
     inventory_items = {item.id: item.name for item in db.scalars(
         select(InventoryItem).where(InventoryItem.id.in_([line.item_id for line in lines]))
     ).all()} if lines else {}
+    payments = db.scalars(select(SupplierPayment).where(SupplierPayment.purchase_id == purchase.id).order_by(SupplierPayment.paid_on, SupplierPayment.created_at)).all()
+    reversed_payment_ids = {row[0] for row in db.execute(select(SupplierPayment.reversal_of_id).where(SupplierPayment.reversal_of_id.is_not(None))).all()}
     return {
         **_serialize(purchase),
         "supplier": {"id": supplier.id, "name": supplier.name} if supplier else None,
@@ -1263,6 +1279,9 @@ def _purchase_result(db: Session, purchase: Purchase):
             {**_serialize(line), "item_name": inventory_items.get(line.item_id, "Artículo")}
             for line in lines
         ],
+        "payments": [{**_serialize(payment), "is_reversal": payment.reversal_of_id is not None,
+            "can_reverse": payment.reversal_of_id is None and payment.id not in reversed_payment_ids}
+            for payment in payments],
     }
 
 
@@ -1510,6 +1529,50 @@ def add_supplier_payment(purchase_id: str, data: SupplierPaymentInput, identity:
     return _purchase_result(db, purchase)
 
 
+@router.post("/purchases/{purchase_id}/payments/{payment_id}/reverse", status_code=201, dependencies=[Depends(require_permissions(auth_service, "purchases:write"))])
+def reverse_supplier_payment(
+    purchase_id: str, payment_id: str, data: PaymentCorrectionInput,
+    identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db),
+):
+    purchase = db.scalar(select(Purchase).where(Purchase.id == purchase_id).with_for_update())
+    if purchase is None:
+        raise HTTPException(404, "Compra no encontrada.")
+    original = db.scalar(select(SupplierPayment).where(
+        SupplierPayment.id == payment_id, SupplierPayment.purchase_id == purchase_id,
+    ).with_for_update())
+    if original is None:
+        raise HTTPException(404, "Pago de proveedor no encontrado en esta compra.")
+    if original.reversal_of_id is not None:
+        raise HTTPException(409, "Una corrección no puede revertirse; registra un nuevo pago correcto si corresponde.")
+    if db.scalar(select(SupplierPayment.id).where(SupplierPayment.reversal_of_id == original.id)):
+        raise HTTPException(409, "Este pago ya tiene una corrección registrada.")
+    if Decimal(purchase.paid_amount) < Decimal(original.amount):
+        raise HTTPException(409, "El saldo pagado de la compra no coincide con el pago seleccionado; requiere conciliación.")
+    cash_original = db.scalar(select(CashMovement).where(CashMovement.id == original.cash_movement_id).with_for_update())
+    if cash_original is None:
+        raise HTTPException(409, "El pago no tiene movimiento de caja/banco relacionado.")
+    if db.scalar(select(CashMovement.id).where(CashMovement.reversal_of_id == cash_original.id)):
+        raise HTTPException(409, "El movimiento de caja ya fue revertido; requiere conciliación antes de corregir el pago.")
+    cash_reversal = CashMovement(
+        account_id=cash_original.account_id, direction="in" if cash_original.direction == "out" else "out",
+        amount=cash_original.amount, category="Corrección de pago a proveedor",
+        description=f"Reversa del pago {original.id} · {data.reason.strip()}", occurred_on=date.today(),
+        source_type="supplier_payment_reversal", source_id=original.id, reversal_of_id=cash_original.id,
+        created_by=identity.email or "",
+    )
+    db.add(cash_reversal); db.flush()
+    correction = SupplierPayment(
+        purchase_id=purchase.id, account_id=original.account_id, cash_movement_id=cash_reversal.id,
+        amount=original.amount, paid_on=date.today(), reference=f"Corrección de pago {original.id}: {data.reason}",
+        reversal_of_id=original.id, created_by=identity.email or "",
+    )
+    db.add(correction); db.flush(); cash_reversal.source_id = correction.id
+    purchase.paid_amount = Decimal(purchase.paid_amount) - Decimal(original.amount)
+    purchase.status = "paid" if purchase.paid_amount >= purchase.total else "partially_paid" if purchase.paid_amount > 0 else "open"
+    db.commit(); db.refresh(purchase)
+    return _purchase_result(db, purchase)
+
+
 @router.post("/receivables", status_code=201, dependencies=[Depends(require_permissions(auth_service, "receivables:write"))])
 def add_receivable(data: ReceivableInput, db: Session = Depends(get_db)):
     if not db.get(Customer, data.customer_id): raise HTTPException(404, "Cliente no encontrado.")
@@ -1528,8 +1591,12 @@ def _receivable_result(db: Session, row: Receivable):
     status = "paid" if balance <= 0 else "overdue" if row.due_date < date.today() else "partial" if row.paid_amount > 0 else "pending"
     payments = db.scalars(select(CustomerPayment).where(CustomerPayment.receivable_id == row.id).order_by(CustomerPayment.paid_on.desc(), CustomerPayment.created_at.desc())).all()
     account_names = {account.id: account.name for account in db.scalars(select(FinancialAccount).where(FinancialAccount.id.in_([payment.account_id for payment in payments]))).all()} if payments else {}
+    reversed_payment_ids = {entry[0] for entry in db.execute(select(CustomerPayment.reversal_of_id).where(CustomerPayment.reversal_of_id.is_not(None))).all()}
     return {**_serialize(row), "customer": _serialize(db.get(Customer, row.customer_id)), "balance": balance, "status": status,
-        "payments": [{**_serialize(payment), "account_name": account_names.get(payment.account_id, "Cuenta")} for payment in payments]}
+        "payments": [{**_serialize(payment), "account_name": account_names.get(payment.account_id, "Cuenta"),
+            "is_reversal": payment.reversal_of_id is not None,
+            "can_reverse": payment.reversal_of_id is None and payment.id not in reversed_payment_ids}
+            for payment in payments]}
 
 
 @router.post("/receivables/{receivable_id}/payments", status_code=201, dependencies=[Depends(require_permissions(auth_service, "receivables:write"))])
@@ -1552,6 +1619,51 @@ def record_payment(receivable_id: str, data: PaymentInput, identity: AuthIdentit
     row.status = "paid" if row.paid_amount >= row.amount else "partial"
     db.commit(); db.refresh(row)
     return {**_receivable_result(db, row), "payment": _serialize(payment), "account_name": account.name}
+
+
+@router.post("/receivables/{receivable_id}/payments/{payment_id}/reverse", status_code=201, dependencies=[Depends(require_permissions(auth_service, "receivables:write"))])
+def reverse_customer_payment(
+    receivable_id: str, payment_id: str, data: PaymentCorrectionInput,
+    identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db),
+):
+    receivable = db.scalar(select(Receivable).where(Receivable.id == receivable_id).with_for_update())
+    if receivable is None:
+        raise HTTPException(404, "Cuenta por cobrar no encontrada.")
+    original = db.scalar(select(CustomerPayment).where(
+        CustomerPayment.id == payment_id, CustomerPayment.receivable_id == receivable_id,
+    ).with_for_update())
+    if original is None:
+        raise HTTPException(404, "Pago de cliente no encontrado en esta cuenta por cobrar.")
+    if original.reversal_of_id is not None:
+        raise HTTPException(409, "Una corrección no puede revertirse; registra un nuevo pago correcto si corresponde.")
+    if db.scalar(select(CustomerPayment.id).where(CustomerPayment.reversal_of_id == original.id)):
+        raise HTTPException(409, "Este pago ya tiene una corrección registrada.")
+    if Decimal(receivable.paid_amount) < Decimal(original.amount):
+        raise HTTPException(409, "El saldo pagado no coincide con el pago seleccionado; requiere conciliación.")
+    cash_original = db.scalar(select(CashMovement).where(CashMovement.id == original.cash_movement_id).with_for_update())
+    if cash_original is None:
+        raise HTTPException(409, "El pago no tiene movimiento de caja/banco relacionado.")
+    if db.scalar(select(CashMovement.id).where(CashMovement.reversal_of_id == cash_original.id)):
+        raise HTTPException(409, "El movimiento de caja ya fue revertido; requiere conciliación antes de corregir el pago.")
+    customer = db.get(Customer, receivable.customer_id)
+    cash_reversal = CashMovement(
+        account_id=cash_original.account_id, direction="out" if cash_original.direction == "in" else "in",
+        amount=cash_original.amount, category="Corrección de cobranza",
+        description=f"Reversa del pago {original.id} · {data.reason.strip()}", occurred_on=date.today(),
+        source_type="customer_payment_reversal", source_id=original.id, reversal_of_id=cash_original.id,
+        created_by=identity.email or "",
+    )
+    db.add(cash_reversal); db.flush()
+    correction = CustomerPayment(
+        receivable_id=receivable.id, account_id=original.account_id, cash_movement_id=cash_reversal.id,
+        amount=original.amount, paid_on=date.today(), reference=f"Corrección de pago {original.id}: {data.reason}",
+        reversal_of_id=original.id, created_by=identity.email or "",
+    )
+    db.add(correction); db.flush(); cash_reversal.source_id = correction.id
+    receivable.paid_amount = Decimal(receivable.paid_amount) - Decimal(original.amount)
+    receivable.status = "paid" if receivable.paid_amount >= receivable.amount else "partial" if receivable.paid_amount > 0 else "overdue" if receivable.due_date < date.today() else "pending"
+    db.commit(); db.refresh(receivable)
+    return _receivable_result(db, receivable)
 
 
 @router.get("/integrations", dependencies=[Depends(require_permissions(auth_service, "team:manage"))])
