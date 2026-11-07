@@ -17,7 +17,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("ae_followups", sa.Column("assigned_to", sa.String(length=180), nullable=False, server_default=""))
+    followup_columns = {column["name"] for column in sa.inspect(op.get_bind()).get_columns("ae_followups")}
+    if "assigned_to" not in followup_columns:
+        op.add_column("ae_followups", sa.Column("assigned_to", sa.String(length=180), nullable=False, server_default=""))
     followups = sa.table("ae_followups", sa.column("created_by", sa.String()), sa.column("assigned_to", sa.String()))
     op.execute(followups.update().where(followups.c.assigned_to == "").values(assigned_to=followups.c.created_by))
 
@@ -54,4 +56,6 @@ def downgrade() -> None:
         history.c.iteration == "Iteración 29 · responsabilidad de seguimientos · 2026-11-06",
         history.c.recorded_by == "system:implementation-iteration",
     ))
-    op.drop_column("ae_followups", "assigned_to")
+    followup_columns = {column["name"] for column in sa.inspect(op.get_bind()).get_columns("ae_followups")}
+    if "assigned_to" in followup_columns:
+        op.drop_column("ae_followups", "assigned_to")
