@@ -7,7 +7,7 @@ from gm_auth.models import AuthIdentity
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.models import Base, Customer, Installation, InventoryItem, InventoryMovement, ProjectExpense, Supplier
+from app.models import Base, CashMovement, Customer, FinancialAccount, Installation, InventoryItem, InventoryMovement, ProjectExpense, Supplier
 from app.product_api import operations_report
 from app.roles import ROLE_PERMISSIONS
 
@@ -62,3 +62,36 @@ def test_operations_report_hides_inventory_costs_without_cost_permission_and_che
     assert report["stock"]["estimated_value"] is None
     assert "unit_cost" not in report["stock"]["items"][0]
     assert invalid.value.status_code == 422
+    assert report["cash_flow"] is None
+
+
+def test_operations_report_calculates_period_cash_flow_from_active_account_movements():
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        account = FinancialAccount(name="Caja", account_type="cash", opening_balance=1000,
+            opening_balance_date=date(2026, 10, 1), active=True)
+        opening_in_period = FinancialAccount(name="Banco nuevo", account_type="bank", opening_balance=200,
+            opening_balance_date=date(2026, 11, 15), active=True)
+        inactive = FinancialAccount(name="Cuenta cerrada", account_type="bank", opening_balance=9000,
+            opening_balance_date=date(2026, 1, 1), active=False)
+        db.add_all([account, opening_in_period, inactive]); db.flush()
+        db.add_all([
+            CashMovement(account_id=account.id, direction="in", amount=200, category="Venta", description="Anterior", occurred_on=date(2026, 10, 10)),
+            CashMovement(account_id=account.id, direction="out", amount=50, category="Compra", description="Anterior", occurred_on=date(2026, 10, 15)),
+            CashMovement(account_id=account.id, direction="in", amount=500, category="Venta", description="Periodo", occurred_on=date(2026, 11, 5)),
+            CashMovement(account_id=account.id, direction="out", amount=300, category="Gasto", description="Periodo", occurred_on=date(2026, 11, 10)),
+            CashMovement(account_id=opening_in_period.id, direction="out", amount=50, category="Gasto", description="Periodo", occurred_on=date(2026, 11, 20)),
+        ])
+        db.commit()
+        accountant = AuthIdentity("accountant", "arcoenergy", frozenset({"contador"}), ROLE_PERMISSIONS["contador"], "contador@example.test", "Contador")
+        report = operations_report(from_date=date(2026, 11, 1), to_date=date(2026, 11, 30), identity=accountant, db=db)
+
+    flow = report["cash_flow"]
+    assert flow["opening_balance"] == Decimal("1150.00")
+    assert flow["opening_entries"] == Decimal("200.00")
+    assert flow["inflows"] == Decimal("500.00")
+    assert flow["outflows"] == Decimal("350.00")
+    assert flow["closing_balance"] == Decimal("1500.00")
+    assert {row["name"] for row in flow["accounts"]} == {"Caja", "Banco nuevo"}
+    assert next(row for row in flow["accounts"] if row["name"] == "Banco nuevo")["closing_balance"] == Decimal("150.00")
