@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+import hashlib
+import json
 from io import BytesIO
 import re
 from typing import Literal
@@ -25,7 +27,7 @@ from gm_auth.models import memberships, users
 from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
-from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InventoryItem, InventoryMovement, ProjectExpense, Purchase, PurchaseLine, Quote, QuotePackage, Receivable, Sale, Supplier, SupplierPayment, WorkOrderMaterial
+from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, Purchase, PurchaseLine, Quote, QuotePackage, Receivable, Sale, Supplier, SupplierPayment, WorkOrderMaterial
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 
 settings = get_settings()
@@ -319,6 +321,7 @@ class StockInput(BaseModel):
     quantity: float = Field(gt=0)
     reason: str = "consumo en instalación"
     installation_id: str | None = None
+    operation_id: str | None = Field(default=None, min_length=8, max_length=80)
 
 
 class InventoryReturnInput(BaseModel):
@@ -326,6 +329,7 @@ class InventoryReturnInput(BaseModel):
     quantity: float = Field(gt=0)
     condition: Literal["usable", "damaged"] = "usable"
     reason: str = Field(default="Devolución de material sobrante", max_length=180)
+    operation_id: str | None = Field(default=None, min_length=8, max_length=80)
 
 
 class StockReceiptInput(BaseModel):
@@ -357,6 +361,7 @@ class ExpenseInput(BaseModel):
     amount: Decimal = Field(gt=0)
     receipt_url: str = ""
     occurred_on: date = Field(default_factory=date.today)
+    operation_id: str | None = Field(default=None, min_length=8, max_length=80)
 
 
 class FinancialAccountInput(BaseModel):
@@ -875,6 +880,41 @@ def list_installations(identity: AuthIdentity = Depends(require_permissions(auth
     return result
 
 
+def _offline_operation_owner(identity: AuthIdentity) -> str:
+    return (identity.email or identity.user_id).strip().casefold()
+
+
+def _find_offline_operation(data: BaseModel, operation_type: str, identity: AuthIdentity, db: Session) -> OfflineOperation | None:
+    operation_id = getattr(data, "operation_id", None)
+    if not operation_id:
+        return None
+    owner = _offline_operation_owner(identity)
+    payload = data.model_dump(mode="json", exclude={"operation_id"})
+    payload_hash = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    existing = db.scalar(select(OfflineOperation).where(
+        OfflineOperation.owner_email == owner,
+        OfflineOperation.operation_id == operation_id,
+    ))
+    if existing and (existing.operation_type != operation_type or existing.payload_hash != payload_hash):
+        raise HTTPException(409, "El identificador de operación ya se usó con otros datos.")
+    return existing
+
+
+def _record_offline_operation(data: BaseModel, operation_type: str, result_id: str, identity: AuthIdentity, db: Session) -> None:
+    operation_id = getattr(data, "operation_id", None)
+    if not operation_id:
+        return
+    payload = data.model_dump(mode="json", exclude={"operation_id"})
+    payload_hash = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    db.add(OfflineOperation(
+        owner_email=_offline_operation_owner(identity),
+        operation_id=operation_id,
+        operation_type=operation_type,
+        payload_hash=payload_hash,
+        result_id=result_id,
+    ))
+
+
 @router.patch("/installations/{installation_id}/checklist")
 def update_installation_checklist(
     installation_id: str,
@@ -964,6 +1004,17 @@ def consume_inventory(data: StockInput, identity: AuthIdentity = Depends(require
         installation = db.get(Installation, data.installation_id) if data.installation_id else None
         if installation is None or installation.lead_installer.lower() != (identity.email or "").lower():
             raise HTTPException(403, "Solo puedes registrar consumos en una orden asignada a tu cuenta.")
+    operation = _find_offline_operation(data, "consume", identity, db)
+    if operation:
+        movement = db.get(InventoryMovement, operation.result_id)
+        item = db.get(InventoryItem, movement.item_id) if movement else None
+        if movement is None or item is None:
+            raise HTTPException(409, "El registro original de esta operación ya no está disponible.")
+        physical_issue = db.get(InventoryMovement, movement.related_movement_id) if movement.related_movement_id else None
+        serialized_item = _serialize(item)
+        if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
+            serialized_item.pop("unit_cost", None)
+        return {"movement": _serialize(movement), "physical_issue": _serialize(physical_issue) if physical_issue else None, "item": serialized_item}
     item = db.scalar(select(InventoryItem).where(InventoryItem.id == data.item_id).with_for_update())
     if not item: raise HTTPException(404, "Artículo no encontrado.")
     material = db.scalar(select(WorkOrderMaterial).where(
@@ -1003,7 +1054,9 @@ def consume_inventory(data: StockInput, identity: AuthIdentity = Depends(require
         reason=(data.reason.strip() or "Consumo confirmado en orden de trabajo"),
         created_by=identity.email or "",
     )
-    db.add(movement); db.commit(); db.refresh(movement)
+    db.add(movement); db.flush()
+    _record_offline_operation(data, "consume", movement.id, identity, db)
+    db.commit(); db.refresh(movement)
     serialized_item = _serialize(item)
     if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
         serialized_item.pop("unit_cost", None)
@@ -1030,6 +1083,18 @@ def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depend
         installation = db.get(Installation, source.installation_id)
         if installation is None or installation.lead_installer.lower() != (identity.email or "").lower():
             raise HTTPException(403, "Solo puedes devolver material de una orden asignada a tu cuenta.")
+    operation = _find_offline_operation(data, "return", identity, db)
+    if operation:
+        movement = db.get(InventoryMovement, operation.result_id)
+        item = db.get(InventoryItem, movement.item_id) if movement else None
+        if movement is None or item is None:
+            raise HTTPException(409, "El registro original de esta operación ya no está disponible.")
+        serialized_item = _serialize(item)
+        serialized_movement = _serialize(movement)
+        if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
+            serialized_item.pop("unit_cost", None)
+            serialized_movement.pop("unit_cost", None)
+        return {"movement": serialized_movement, "item": serialized_item}
     returned = db.scalar(select(func.coalesce(func.sum(InventoryMovement.quantity), 0)).where(
         InventoryMovement.related_movement_id == source.id,
         InventoryMovement.movement_type.in_(["return", "damage"]),
@@ -1099,7 +1164,9 @@ def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depend
                     reason="Consumo corregido por devolución de sobrante",
                     created_by=identity.email or "",
                 ))
-    db.add(movement); db.commit(); db.refresh(movement)
+    db.add(movement); db.flush()
+    _record_offline_operation(data, "return", movement.id, identity, db)
+    db.commit(); db.refresh(movement)
     serialized_item = _serialize(item)
     serialized_movement = _serialize(movement)
     if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
@@ -1156,19 +1223,29 @@ def add_expense(data: ExpenseInput, identity: AuthIdentity = Depends(require_per
     if data.installation_id and not installation: raise HTTPException(404, "Instalación no encontrada.")
     if "instalador" in identity.roles and (installation is None or installation.lead_installer.lower() != (identity.email or "").lower()):
         raise HTTPException(403, "Selecciona una orden asignada a tu cuenta para registrar gastos de campo.")
+    operation = _find_offline_operation(data, "expense", identity, db)
+    if operation:
+        row = db.get(ProjectExpense, operation.result_id)
+        if row is None:
+            raise HTTPException(409, "El registro original de esta operación ya no está disponible.")
+        account = db.get(FinancialAccount, row.account_id) if row.account_id else None
+        result = _serialize(row)
+        result["account_name"] = account.name if account else None
+        return result
     if "instalador" not in identity.roles and not data.account_id:
         raise HTTPException(422, "Selecciona la cuenta de caja o banco que pagó este gasto.")
     account = None
     if data.account_id:
         account = db.scalar(select(FinancialAccount).where(FinancialAccount.id == data.account_id, FinancialAccount.active.is_(True)).with_for_update())
         if account is None: raise HTTPException(404, "Selecciona una cuenta de caja o banco activa.")
-    row = ProjectExpense(**data.model_dump(), created_by=identity.email); db.add(row); db.flush()
+    row = ProjectExpense(**data.model_dump(exclude={"operation_id"}), created_by=identity.email); db.add(row); db.flush()
     if account:
         movement = CashMovement(account_id=account.id, direction="out", amount=data.amount,
             category=f"Gasto · {data.category}", description=data.description,
             occurred_on=data.occurred_on, source_type="expense", source_id=row.id,
             created_by=identity.email or "")
         db.add(movement)
+    _record_offline_operation(data, "expense", row.id, identity, db)
     db.commit(); db.refresh(row)
     result = _serialize(row)
     result["account_name"] = account.name if account else None

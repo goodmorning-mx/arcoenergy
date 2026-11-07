@@ -19,18 +19,34 @@ export type ChecklistQueueItem = {
   queued_at: string;
 };
 
+export type FieldActionQueueItem = {
+  operation_id: string;
+  owner: string;
+  kind: 'consume' | 'return' | 'expense';
+  path: string;
+  payload: Record<string, string | number>;
+  summary: string;
+  queued_at: string;
+};
+
 const DATABASE = 'arcoenergy-field-cache';
-const VERSION = 1;
+const VERSION = 2;
 const INSTALLATIONS = 'installations';
 const CHECKLIST_QUEUE = 'checklist-queue';
+const ACTION_QUEUE = 'actions-queue';
+const INVENTORY = 'inventory';
+const MOVEMENTS = 'movements';
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DATABASE, VERSION);
     request.onupgradeneeded = () => {
       const database = request.result;
-      database.createObjectStore(INSTALLATIONS, { keyPath: 'owner' });
-      database.createObjectStore(CHECKLIST_QUEUE, { keyPath: 'key' });
+      if (!database.objectStoreNames.contains(INSTALLATIONS)) database.createObjectStore(INSTALLATIONS, { keyPath: 'owner' });
+      if (!database.objectStoreNames.contains(CHECKLIST_QUEUE)) database.createObjectStore(CHECKLIST_QUEUE, { keyPath: 'key' });
+      if (!database.objectStoreNames.contains(ACTION_QUEUE)) database.createObjectStore(ACTION_QUEUE, { keyPath: 'operation_id' });
+      if (!database.objectStoreNames.contains(INVENTORY)) database.createObjectStore(INVENTORY, { keyPath: 'owner' });
+      if (!database.objectStoreNames.contains(MOVEMENTS)) database.createObjectStore(MOVEMENTS, { keyPath: 'owner' });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error || new Error('No se pudo abrir el almacenamiento local.'));
@@ -65,6 +81,24 @@ export async function clearCachedInstallations(owner: string): Promise<void> {
   await withStore(INSTALLATIONS, 'readwrite', store => store.delete(owner));
 }
 
+export async function cacheInventory<T>(owner: string, rows: T[]): Promise<void> {
+  await withStore(INVENTORY, 'readwrite', store => store.put({ owner, rows, saved_at: new Date().toISOString() }));
+}
+
+export async function readCachedInventory<T>(owner: string): Promise<T[] | null> {
+  const value = await withStore<{ owner: string; rows: T[] } | undefined>(INVENTORY, 'readonly', store => store.get(owner));
+  return value?.rows || null;
+}
+
+export async function cacheMovements<T>(owner: string, rows: T[]): Promise<void> {
+  await withStore(MOVEMENTS, 'readwrite', store => store.put({ owner, rows, saved_at: new Date().toISOString() }));
+}
+
+export async function readCachedMovements<T>(owner: string): Promise<T[] | null> {
+  const value = await withStore<{ owner: string; rows: T[] } | undefined>(MOVEMENTS, 'readonly', store => store.get(owner));
+  return value?.rows || null;
+}
+
 export async function queueChecklistChange(item: ChecklistQueueItem): Promise<void> {
   await withStore(CHECKLIST_QUEUE, 'readwrite', store => store.put(item));
 }
@@ -96,6 +130,19 @@ export async function removeChecklistChangeIfCurrent(key: string, done: boolean)
     transaction.onerror = () => { database.close(); reject(transaction.error || new Error('Falló la sincronización local.')); };
     transaction.onabort = () => { database.close(); reject(transaction.error || new Error('Se canceló la sincronización local.')); };
   });
+}
+
+export async function queueFieldAction(item: FieldActionQueueItem): Promise<void> {
+  await withStore(ACTION_QUEUE, 'readwrite', store => store.put(item));
+}
+
+export async function readFieldActionQueue(owner: string): Promise<FieldActionQueueItem[]> {
+  const rows = await withStore<FieldActionQueueItem[]>(ACTION_QUEUE, 'readonly', store => store.getAll());
+  return rows.filter(row => row.owner.toLocaleLowerCase() === owner.toLocaleLowerCase()).sort((a, b) => a.queued_at.localeCompare(b.queued_at));
+}
+
+export async function removeFieldAction(operationId: string): Promise<void> {
+  await withStore(ACTION_QUEUE, 'readwrite', store => store.delete(operationId));
 }
 
 export function checklistQueueKey(owner: string, installationId: string, task: string): string {

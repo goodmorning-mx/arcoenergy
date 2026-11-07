@@ -612,6 +612,16 @@ La devolución de una salida ahora distingue sobrante reutilizable y material da
 | US-27 | Parcial funcional | El kardex marca merma ligada a salida con cambio físico cero. Pendientes filtros y exportación específicos. |
 | US-35 | Parcial funcional | La merma actualiza costo preliminar por proyecto en los casos no consumidos. Doble partida, validación contable y reglas fiscales siguen pendientes. |
 
+## Iteración 20 — operaciones de campo resilientes sin conexión (2026-11-07)
+
+La PWA amplía su cola local por cuenta instaladora a consumos, devoluciones/mermas y gastos, además del checklist. También conserva inventario y movimientos consultados para que el operador pueda preparar acciones cuando no tiene señal. Al reconectar, cada acción se reenvía con el mismo identificador único; el servidor guarda un recibo transaccional junto al movimiento y devuelve el resultado original en reintentos. Si se reutiliza el identificador con datos distintos, la operación se rechaza. Los registros con errores de validación permanecen pendientes hasta corregirse o descartarse explícitamente. La persistencia en dispositivos reales requiere validar almacenamiento, uso compartido y políticas de retención con ArcoEnergy.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-9 | Parcial funcional | PWA puede encolar consumos, devoluciones y mermas sin conexión con sincronización posterior; prueba en teléfonos, actualización de cachés y conflictos de cantidades pendientes. |
+| US-10 | Parcial funcional | Recibos idempotentes impiden repetir decrementos, devoluciones/mermas y movimientos por reintentos. Falta validación de conflictos operativos con almacén. |
+| US-40 | Parcial funcional | Checklist, gastos y operaciones de material quedan en colas locales separadas, por usuario y con confirmación del servidor; notificaciones de fondo y validación de campo siguen pendientes. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.

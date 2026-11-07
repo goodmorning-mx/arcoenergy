@@ -167,6 +167,19 @@ class InventoryMovement(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
+class OfflineOperation(Base):
+    """Server receipt for client-generated IDs on retryable field writes."""
+    __tablename__ = "ae_offline_operations"
+    __table_args__ = (UniqueConstraint("owner_email", "operation_id", name="uq_ae_offline_operation_owner_key"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    owner_email: Mapped[str] = mapped_column(String(180), nullable=False, index=True)
+    operation_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    operation_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    result_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+
+
 class ProjectExpense(Base):
     __tablename__ = "ae_expenses"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

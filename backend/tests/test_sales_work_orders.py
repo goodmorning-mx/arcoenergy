@@ -7,8 +7,8 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from gm_auth.models import AuthIdentity, memberships, users
 
-from app.models import Base, CashMovement, Customer, FinancialAccount, Installation, InventoryItem, InventoryMovement, Quote, Receivable, Sale, WorkOrderMaterial
-from app.product_api import InventoryReturnInput, SaleInput, SaleMaterialInput, StockInput, consume_inventory, create_sale, list_financial_accounts, profitability_report, return_inventory
+from app.models import Base, CashMovement, Customer, FinancialAccount, Installation, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, Quote, Receivable, Sale, WorkOrderMaterial
+from app.product_api import ExpenseInput, InventoryReturnInput, SaleInput, SaleMaterialInput, StockInput, add_expense, consume_inventory, create_sale, list_financial_accounts, profitability_report, return_inventory
 from app.roles import ROLE_PERMISSIONS
 from app import product_api
 
@@ -140,6 +140,46 @@ def test_return_of_legacy_issue_is_limited_to_unconsumed_material() -> None:
         return_inventory(InventoryReturnInput(out_movement_id=issue.id, quantity=2), installer, db)
         assert db.get(InventoryItem, item.id).quantity == Decimal("7.00")
         assert db.get(WorkOrderMaterial, material.id).preissued_quantity == Decimal("3.00")
+
+
+def test_retry_of_consumption_and_expense_is_idempotent_and_rejects_reused_payload() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    admin = AuthIdentity("admin-1", "arcoenergy", frozenset({"administrador"}), ROLE_PERMISSIONS["administrador"], "admin@example.test", "Admin")
+    with Session(engine) as db:
+        customer = Customer(name="Cliente Solar")
+        account = FinancialAccount(name="Caja", account_type="cash", opening_balance=500, opening_balance_date=date.today())
+        item = InventoryItem(name="Panel", quantity=10, unit_cost=900)
+        db.add_all([customer, account, item]); db.flush()
+        installation = Installation(customer_id=customer.id, lead_installer="field@example.test")
+        db.add(installation); db.commit()
+
+        payload = StockInput(item_id=item.id, quantity=2, installation_id=installation.id, operation_id="consume-12345678")
+        first = consume_inventory(payload, admin, db)
+        retry = consume_inventory(payload, admin, db)
+        assert first["movement"]["id"] == retry["movement"]["id"]
+        assert db.get(InventoryItem, item.id).quantity == Decimal("8.00")
+        assert db.query(OfflineOperation).filter_by(operation_id="consume-12345678").count() == 1
+        assert db.query(InventoryMovement).filter_by(movement_type="consumption").count() == 1
+        return_payload = InventoryReturnInput(out_movement_id=first["physical_issue"]["id"], quantity=0.5,
+            operation_id="return-12345678")
+        first_return = return_inventory(return_payload, admin, db)
+        retry_return = return_inventory(return_payload, admin, db)
+        assert first_return["movement"]["id"] == retry_return["movement"]["id"]
+        assert db.get(InventoryItem, item.id).quantity == Decimal("8.50")
+        assert db.query(InventoryMovement).filter_by(movement_type="return").count() == 1
+        with pytest.raises(HTTPException) as conflict:
+            consume_inventory(StockInput(item_id=item.id, quantity=1, installation_id=installation.id, operation_id="consume-12345678"), admin, db)
+        assert conflict.value.status_code == 409
+        assert db.get(InventoryItem, item.id).quantity == Decimal("8.50")
+
+        expense = ExpenseInput(installation_id=installation.id, account_id=account.id, category="Viáticos",
+            description="Gasolina de instalación", amount=250, occurred_on=date.today(), operation_id="expense-12345678")
+        first_expense = add_expense(expense, admin, db)
+        retry_expense = add_expense(expense, admin, db)
+        assert first_expense["id"] == retry_expense["id"]
+        assert db.query(ProjectExpense).count() == 1
+        assert db.query(CashMovement).filter_by(source_type="expense").count() == 1
 
 
 def test_credit_sale_creates_receivable_without_changing_cash(monkeypatch) -> None:
