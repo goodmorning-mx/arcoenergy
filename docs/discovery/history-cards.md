@@ -911,3 +911,16 @@ La implementación se integró mediante el PR [#73](https://github.com/goodmorni
 | US-35 | Parcial funcional | Gastos y saldos de cuenta se compensan desde una sola operación; reversas de venta, compra e inventario siguen pendientes. |
 | US-36 | Parcial funcional | Corrección append-only y enlazada para gastos, además de caja manual, transferencias y pagos. Pendientes los demás ciclos de corrección. |
 | US-38 | Parcial funcional | La corrección de gasto compensa el resultado del proyecto/periodo con su fecha de registro. El informe sigue siendo preliminar. |
+
+## Iteración 50 — corrección de venta de contado preinstalación (2026-11-07)
+
+La venta de contado puede corregirse con un motivo obligatorio solo si la orden sigue asignada, ningún instalador la ha confirmado y todavía no hay actividad física de materiales, checklist de instalación ni cobros derivados. La operación append-only conserva venta y folio, crea la reversa enlazada al ingreso, registra una tarjeta de corrección única, cancela la orden y libera la reserva de inventario dentro de la misma transacción. La cancelación también se conserva en la bitácora del cliente. La PWA impide después confirmar la orden, emitir/consumir material o registrar gastos en ella. Las ventas a crédito y las órdenes que ya comenzaron quedan protegidas y requieren sus propios ciclos de corrección antes de habilitarlas.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-15 | Funcional básico | Se puede corregir una venta de contado preinstalación, enlazando reversa de caja y liberación de reserva. Ventas a crédito y ventas con avance/material emitido requieren flujos adicionales. |
+| US-18 | Funcional básico | La reversa enlazada de venta restaura la misma cuenta de caja/banco. Conciliación sigue pendiente. |
+| US-32 | Parcial funcional | Folio y orden originales se conservan y se marcan cancelados; sigue pendiente la entidad de proyecto independiente. |
+| US-35 | Parcial funcional | Caja, orden y reserva se actualizan en conjunto al corregir una venta elegible. Inventario ya emitido, crédito, reglas fiscales y doble partida siguen pendientes. |
+| US-36 | Parcial funcional | Reversa integral disponible para gastos y ventas elegibles, además de correcciones de caja/transferencias/pagos existentes. Faltan ventas de crédito, compras y movimientos físicos de inventario. |
+| US-38 | Parcial funcional | El reporte incorpora la corrección de venta en el periodo de registro. El resultado todavía es operativo y preliminar. |
