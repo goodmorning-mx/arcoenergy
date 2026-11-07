@@ -63,3 +63,30 @@ def test_inventory_kardex_rejects_inverted_date_range() -> None:
         )
 
     assert error.value.status_code == 422
+
+
+def test_inventory_kardex_supports_stable_offset_pages() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    identity = AuthIdentity("admin-1", "arcoenergy", frozenset({"administrador"}), frozenset({"inventory:read"}), "admin@example.test", "Admin")
+    with Session(engine) as db:
+        item = InventoryItem(name="Panel", unit="pieza")
+        db.add(item)
+        db.flush()
+        for day in (5, 6, 7):
+            db.add(InventoryMovement(
+                item_id=item.id, quantity=day, movement_type="in", reason=str(day),
+                created_by="admin", created_at=datetime(2026, 11, day, tzinfo=timezone.utc),
+            ))
+        db.commit()
+        first = list_inventory_movements(identity=identity, db=db, limit=2, offset=0)
+        second = list_inventory_movements(identity=identity, db=db, limit=2, offset=2)
+        invalid = None
+        try:
+            list_inventory_movements(identity=identity, db=db, limit=501, offset=0)
+        except HTTPException as error:
+            invalid = error
+
+    assert [row["reason"] for row in first] == ["7", "6"]
+    assert [row["reason"] for row in second] == ["5"]
+    assert invalid is not None and invalid.status_code == 422
