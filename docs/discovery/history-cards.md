@@ -868,6 +868,8 @@ El CRM puede registrar una transferencia desde la cuenta seleccionada hacia otra
 
 Al registrar una venta a crédito, CRM permite indicar primer vencimiento, entre una y 60 cuotas y frecuencia semanal, quincenal o mensual. El total de la cotización aprobada se divide en centavos y el residuo queda en la última cuota; en frecuencias mensuales se conserva el día del primer vencimiento y se ajusta al último día de los meses más cortos. Cada cuota queda como una cuenta por cobrar individual y aparece en cartera. El cambio no calcula intereses, no agrega comisiones y no activa notificaciones automáticas. Las reglas de Plan 24 y el tratamiento financiero siguen sujetos a validación contable.
 
+La iteración quedó integrada mediante el PR [#70](https://github.com/goodmorning-mx/arcoenergy/pull/70), merge commit `6ccb42b827350e604ee01f580a0750a5f47cfbbf`. Factory completó el despliegue DEV en el run [#42399926877](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42399926877), verificó la revisión de esquema y un respaldo de la base. `/api/health` respondió HTTP 200; API, CRM y PWA reportan el mismo SHA. Backend: 137 pruebas aprobadas; builds de CRM y validación Docker/Chrome pasaron en CI.
+
 | Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
 | --- | --- | --- |
 | US-11 | Parcial funcional | La venta financiada genera calendario configurable y cartera por cuota. Falta validar fórmulas e intereses de cada plan con el contador y automatizar recordatorios tras aprobar canal y mensajes. |
