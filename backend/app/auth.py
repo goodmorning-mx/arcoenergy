@@ -28,3 +28,10 @@ def bootstrap_admin() -> None:
         admin = connection.execute(select(users.c.id).where(users.c.email == settings.admin_bootstrap_email.lower())).first()
     if admin is None:
         auth_service.create_user(email=settings.admin_bootstrap_email, name="ArcoEnergy Admin", password=settings.admin_bootstrap_password, organization_id=settings.organization_id, roles={"administrador"}, permissions=ROLE_PERMISSIONS["administrador"])
+    else:
+        # Keep the explicitly configured bootstrap principal aligned with the
+        # product's canonical administrator role and current permission map.
+        auth_service.set_membership(
+            user_id=admin[0], organization_id=settings.organization_id,
+            roles={"administrador"}, permissions=set(ROLE_PERMISSIONS["administrador"]),
+        )
