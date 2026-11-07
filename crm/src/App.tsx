@@ -21,7 +21,7 @@ type ProjectExpense = { id: string; installation_id: string | null; account_id: 
 type FinancialAccount = { id: string; name: string; account_type: 'cash' | 'bank'; opening_balance: number; opening_balance_date: string; current_balance: number; movement_count: number };
 type CashMovement = { id: string; account_id: string; direction: 'in' | 'out'; amount: number; category: string; description: string; occurred_on: string; source_type: string; source_id: string | null; reversal_of_id: string | null; created_by: string };
 type Supplier = { id: string; name: string; rfc: string; phone: string; email: string; payment_terms: 'cash' | 'credit'; credit_days: number; active: boolean; current_balance: number };
-type Purchase = { id: string; folio: string; supplier_id: string; supplier?: { id: string; name: string }; invoice_number: string; payment_terms: 'cash' | 'credit'; purchase_date: string; due_date: string | null; total: number; paid_amount: number; balance: number; status: string; payments?: Array<{ id: string; amount: number; paid_on: string; reference: string; is_reversal: boolean; can_reverse: boolean }>; lines: Array<{ id: string; item_name: string; quantity: number; unit_cost: number; line_total: number }> };
+type Purchase = { id: string; folio: string; supplier_id: string; supplier?: { id: string; name: string }; invoice_number: string; invoice_drive_file_id?: string; invoice_filename?: string; invoice_content_type?: string; payment_terms: 'cash' | 'credit'; purchase_date: string; due_date: string | null; total: number; paid_amount: number; balance: number; status: string; payments?: Array<{ id: string; amount: number; paid_on: string; reference: string; is_reversal: boolean; can_reverse: boolean }>; lines: Array<{ id: string; item_name: string; quantity: number; unit_cost: number; line_total: number }> };
 type CfdiProposal = { invoice_reference:string; purchase_date:string; supplier_rfc:string; supplier_name:string; declared_subtotal:number; global_discount:number; declared_total:number; requires_accounting_review:boolean; concepts:Array<{identifier:string;product_service_key:string;description:string;quantity:number;unit:string;net_line_amount:number;unit_cost_before_global_adjustments:number}> };
 type Receivable = { id: string; customer_id: string; customer?: Customer; quote_id: string | null; due_date: string; amount: number; paid_amount: number; balance: number; installment_number: number; payment_method: string; status: 'pending' | 'partial' | 'overdue' | 'paid'; payments?: Array<{ id: string; amount: number; paid_on: string; reference: string; account_name: string; is_reversal: boolean; can_reverse: boolean }> };
 type Installer = { email: string; name: string };
@@ -528,6 +528,8 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
   const [cfdiProposal, setCfdiProposal] = useState<CfdiProposal|null>(null);
   const [cfdiBusy, setCfdiBusy] = useState(false);
   const [cfdiError, setCfdiError] = useState('');
+  const [invoiceFile, setInvoiceFile] = useState<File|null>(null);
+  const [invoiceDownloadId, setInvoiceDownloadId] = useState('');
   const supplier = suppliers.find(item => item.id === supplierId);
   const total = lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unit_cost || 0), 0);
   const materialSummary = lines.filter(line => line.item_id).map(line => {
@@ -558,14 +560,32 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
         initial_payment: Number(data.get('initial_payment') || 0), payment_account_id: String(data.get('payment_account_id') || '') || null,
         payment_reference: String(data.get('payment_reference') || '').trim(),
       }) });
+      let invoiceArchiveNotice = '';
+      if (invoiceFile) {
+        try {
+          const typeByExtension: Record<string, string> = { xml: 'application/xml', pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+          const contentType = invoiceFile.type || typeByExtension[invoiceFile.name.toLowerCase().split('.').pop() || ''] || 'application/octet-stream';
+          const response = await fetch(`/api/v1/purchases/${purchase.id}/invoice-file`, {
+            method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType, 'X-Document-Name': encodeURIComponent(invoiceFile.name) }, body: invoiceFile,
+          });
+          if (!response.ok) {
+            const detail = await response.json().catch(() => ({}));
+            invoiceArchiveNotice = response.status === 503 || response.status === 502
+              ? ' Compra registrada; la factura no quedó archivada en Drive.'
+              : ` Compra registrada; no se pudo archivar la factura: ${detail.detail || 'revisa el documento'}.`;
+          }
+        } catch {
+          invoiceArchiveNotice = ' Compra registrada; no se pudo confirmar el archivo de la factura en Drive.';
+        }
+      }
       onItems([purchase, ...items]); form.reset(); setLines([{ item_id: '', quantity: '1', unit_cost: '' }]);
-      setSupplierId(''); setTerms('cash'); setInitialPayment('0'); setInvoiceNumber(''); setPurchaseDate(today); setCfdiProposal(null); setCfdiError('');
+      setSupplierId(''); setTerms('cash'); setInitialPayment('0'); setInvoiceNumber(''); setPurchaseDate(today); setCfdiProposal(null); setCfdiError(''); setInvoiceFile(null);
       const [, supplierRows, accountRows, inventoryRows] = await Promise.all([
         request<Purchase[]>('/purchases', token).then(onItems), request<Supplier[]>('/suppliers', token),
         request<FinancialAccount[]>('/accounts', token), request<InventoryItem[]>('/inventory', token),
       ]);
       onSuppliers(supplierRows); onAccounts(accountRows); onInventory(inventoryRows);
-      announce(`Compra ${purchase.folio} registrada; el almacén y el saldo del proveedor se actualizaron.`);
+      announce(`Compra ${purchase.folio} registrada; el almacén y el saldo del proveedor se actualizaron.${invoiceArchiveNotice}`, invoiceArchiveNotice ? 'info' : 'success');
     } catch (error) { announce(error instanceof Error ? error.message : 'No se pudo registrar la compra.', 'error'); }
   }
 
@@ -591,7 +611,7 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    setCfdiError(''); setCfdiBusy(true);
+    setCfdiError(''); setInvoiceFile(null); setCfdiBusy(true);
     try {
       if (!file.name.toLowerCase().endsWith('.xml')) throw new Error('Selecciona el XML CFDI de la factura.');
       if (file.size > 2 * 1024 * 1024) throw new Error('El archivo XML debe ser menor a 2 MiB.');
@@ -605,7 +625,7 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
       });
       const supplierMatches = suppliers.filter(item => item.active && normalizedCode(item.rfc) === normalizedCode(proposal.supplier_rfc));
       const matchedSupplier = supplierMatches.length === 1 ? supplierMatches[0] : undefined;
-      setCfdiProposal(proposal); setLines(importedLines); setInvoiceNumber(proposal.invoice_reference); setPurchaseDate(proposal.purchase_date);
+      setCfdiProposal(proposal); setInvoiceFile(file); setLines(importedLines); setInvoiceNumber(proposal.invoice_reference); setPurchaseDate(proposal.purchase_date);
       if (matchedSupplier) { setSupplierId(matchedSupplier.id); setTerms(matchedSupplier.payment_terms); setInitialPayment(matchedSupplier.payment_terms === 'cash' ? String(importedLines.reduce((sum,line)=>sum+Number(line.quantity)*Number(line.unit_cost),0)) : '0'); }
       else if (supplierMatches.length > 1) setCfdiError('Hay varios proveedores activos con ese RFC; selecciona el proveedor correcto y valida el registro duplicado.');
       announce(`CFDI leído. Revisa proveedor, artículos, importes y cuenta antes de registrar la compra. ${importedLines.filter(line=>line.item_id).length} de ${importedLines.length} artículos identificados.`);
@@ -613,10 +633,33 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
     finally { setCfdiBusy(false); }
   }
 
+  function chooseInvoiceDocument(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) { setInvoiceFile(null); return; }
+    const extension = file.name.toLowerCase().split('.').pop() || '';
+    if (extension === 'xml') { void importCfdi(event); return; }
+    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)
+      || ['pdf', 'jpg', 'jpeg', 'png', 'webp'].includes(extension);
+    if (!allowed) { setCfdiError('Adjunta un XML CFDI, PDF, JPG, PNG o WebP.'); event.target.value = ''; return; }
+    if (file.size > 12 * 1024 * 1024) { setCfdiError('PDF y fotografías deben pesar 12 MB o menos.'); event.target.value = ''; return; }
+    setCfdiError(''); setCfdiProposal(null); setInvoiceFile(file);
+  }
+
+  async function downloadInvoice(purchase: Purchase) {
+    setInvoiceDownloadId(purchase.id);
+    try {
+      const response = await fetch(`/api/v1/purchases/${purchase.id}/invoice-file`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) throw new Error('No se pudo descargar la factura de Drive.');
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement('a'); anchor.href = url; anchor.download = purchase.invoice_filename || 'factura'; anchor.click(); URL.revokeObjectURL(url);
+    } catch (error) { announce(error instanceof Error ? error.message : 'No se pudo descargar la factura.', 'error'); }
+    finally { setInvoiceDownloadId(''); }
+  }
+
   return <>
     {canWrite && <section className="surface-card table-surface purchase-entry"><div className="section-title"><div><span className="eyebrow">ENTRADA DE ALMACÉN + CUENTAS POR PAGAR</span><h2>Registrar compra de materiales</h2></div></div>
       <form className="form-grid" onSubmit={submitPurchase}>
-        <div className="cfdi-import span-two"><label className="field"><span>Precargar desde XML CFDI (opcional)</span><input type="file" accept=".xml,application/xml,text/xml" onChange={event=>void importCfdi(event)} disabled={cfdiBusy}/></label><small>El archivo se procesa para proponer datos; no se guarda. Confirma proveedor, artículos, cantidades e importes antes de registrar.</small>{cfdiBusy&&<p role="status">Leyendo factura…</p>}{cfdiError&&<p className="error-message" role="alert">{cfdiError}</p>}{cfdiProposal&&<div className="cfdi-review"><div><b>CFDI leído · revisión requerida</b><button type="button" className="text-button" onClick={()=>{setCfdiProposal(null);setCfdiError('');}}>Quitar precarga</button></div><p>{cfdiProposal.supplier_name||'Proveedor sin nombre'} · RFC {cfdiProposal.supplier_rfc} · {cfdiProposal.invoice_reference} · {cfdiProposal.purchase_date}</p><p>Subtotal declarado {money(Number(cfdiProposal.declared_subtotal))} · Descuento global {money(Number(cfdiProposal.global_discount))} · Total factura {money(Number(cfdiProposal.declared_total))}</p><p>{lines.filter(line=>line.item_id).length}/{lines.length} conceptos relacionados a artículos. Importe de compra revisado: {money(total)}.</p>{(!cfdiSupplierMatches||!cfdiLinesMapped||!cfdiTotalMatches)&&<p className="cfdi-warning">No se puede registrar esta precarga hasta relacionar cada artículo, seleccionar el proveedor con RFC coincidente y hacer coincidir el total. Impuestos, descuentos globales y fletes no se distribuyen automáticamente; ajusta los costos con la regla del contador o quita la precarga para capturarla manualmente.</p>}{cfdiProposal.requires_accounting_review&&<p className="cfdi-warning">El total incluye diferencia contra el subtotal neto de conceptos. Revisa tratamiento de impuestos/ajustes antes de confirmar.</p>}</div>}</div>
+        <div className="cfdi-import span-two"><label className="field"><span>Factura fuente · XML CFDI, PDF o foto</span><input type="file" accept=".xml,.pdf,application/xml,text/xml,application/pdf,image/jpeg,image/png,image/webp" onChange={chooseInvoiceDocument} disabled={cfdiBusy}/></label><small>El XML precarga datos para revisión. PDF o foto requieren captura manual de proveedor, artículos, cantidades e importes. Al registrar se intentará archivar el archivo en Drive si está conectado.</small>{invoiceFile&&<small>Archivo adjunto a esta compra: {invoiceFile.name}</small>}{cfdiBusy&&<p role="status">Leyendo factura…</p>}{cfdiError&&<p className="error-message" role="alert">{cfdiError}</p>}{cfdiProposal&&<div className="cfdi-review"><div><b>CFDI leído · revisión requerida</b><button type="button" className="text-button" onClick={()=>{setCfdiProposal(null);setCfdiError('');}}>Quitar precarga</button></div><p>{cfdiProposal.supplier_name||'Proveedor sin nombre'} · RFC {cfdiProposal.supplier_rfc} · {cfdiProposal.invoice_reference} · {cfdiProposal.purchase_date}</p><p>Subtotal declarado {money(Number(cfdiProposal.declared_subtotal))} · Descuento global {money(Number(cfdiProposal.global_discount))} · Total factura {money(Number(cfdiProposal.declared_total))}</p><p>{lines.filter(line=>line.item_id).length}/{lines.length} conceptos relacionados a artículos. Importe de compra revisado: {money(total)}.</p>{(!cfdiSupplierMatches||!cfdiLinesMapped||!cfdiTotalMatches)&&<p className="cfdi-warning">No se puede registrar esta precarga hasta relacionar cada artículo, seleccionar el proveedor con RFC coincidente y hacer coincidir el total. Impuestos, descuentos globales y fletes no se distribuyen automáticamente; ajusta los costos con la regla del contador o quita la precarga para capturarla manualmente.</p>}{cfdiProposal.requires_accounting_review&&<p className="cfdi-warning">El total incluye diferencia contra el subtotal neto de conceptos. Revisa tratamiento de impuestos/ajustes antes de confirmar.</p>}</div>}</div>
         <label className="field span-two"><span>Proveedor</span><select value={supplierId} onChange={event => { const value = event.target.value; setSupplierId(value); const selected = suppliers.find(row => row.id === value); setTerms(selected?.payment_terms || 'cash'); setInitialPayment(selected?.payment_terms === 'cash' ? String(total) : '0'); }} required><option value="">Selecciona proveedor</option>{suppliers.filter(item => item.active).map(item => <option key={item.id} value={item.id}>{item.name} · {item.payment_terms === 'credit' ? `Crédito ${item.credit_days} días` : 'Contado'}</option>)}</select>{!suppliers.length && <small className="muted-copy">Registra primero un proveedor en el apartado Proveedores.</small>}</label>
         <Field label="Factura / referencia" name="invoice_number" value={invoiceNumber} onChange={setInvoiceNumber} placeholder="Folio de factura"/><Field label="Fecha de compra" name="purchase_date" type="date" value={purchaseDate} onChange={setPurchaseDate} required/>
         <label className="field"><span>Forma acordada</span><select value={terms} onChange={event => { const value = event.target.value as 'cash' | 'credit'; setTerms(value); setInitialPayment(value === 'cash' ? String(total) : '0'); }}><option value="cash">Contado</option><option value="credit" disabled={!supplier?.credit_days}>Crédito</option></select></label>
@@ -633,7 +676,7 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
       </form>
     </section>}
     <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">COMPRAS REGISTRADAS</span><h2>{items.length} compras · {money(items.reduce((sum, item) => sum + Number(item.balance), 0))} por pagar</h2></div></div>
-      <div className="data-table-wrap"><table className="data-table"><thead><tr><th>FOLIO / PROVEEDOR</th><th>FACTURA / MATERIALES</th><th>FECHAS</th><th>TOTAL</th><th>PAGADO / HISTORIAL</th><th>SALDO</th><th>ESTADO</th><th/></tr></thead><tbody>{items.map(item => <tr key={item.id}><td><b>{item.folio}</b><small className="sub-cell">{item.supplier?.name || 'Proveedor'}</small></td><td>{item.invoice_number || 'Sin factura'}<small className="sub-cell">{item.lines.map(line => `${line.item_name} × ${line.quantity}`).join(' · ')}</small></td><td>{new Date(`${item.purchase_date}T12:00:00`).toLocaleDateString('es-MX')}<small className="sub-cell">{item.due_date ? `Vence ${new Date(`${item.due_date}T12:00:00`).toLocaleDateString('es-MX')}` : 'Contado'}</small></td><td><b>{money(Number(item.total))}</b></td><td>{money(Number(item.paid_amount))}<div className="payment-history">{(item.payments||[]).map(payment=><div key={payment.id}><span>{new Date(`${payment.paid_on}T12:00:00`).toLocaleDateString('es-MX')} · {money(Number(payment.amount))}{payment.is_reversal?' · Corrección':''}{payment.reference?` · ${payment.reference}`:''}</span>{canWrite&&payment.can_reverse&&<button type="button" className="text-button" onClick={()=>setCorrectionPayment({purchase:item,payment})}>Corregir</button>}</div>)}</div></td><td><b>{money(Number(item.balance))}</b></td><td><span className={`status-chip ${item.status === 'paid' ? 'status-approved' : 'status-overdue'}`}>{item.status === 'paid' ? 'Pagada' : item.status === 'partially_paid' ? 'Pago parcial' : 'Pendiente'}</span></td><td>{canWrite && Number(item.balance) > 0 && <button className="button button-small button-outline" onClick={() => setPaymentPurchase(item)}>Registrar pago</button>}</td></tr>)}</tbody></table>{!items.length && <EmptyState title="Sin compras registradas" body="Al registrar una compra, sus renglones aumentan existencias y el saldo se vincula al proveedor."/>}</div>
+      <div className="data-table-wrap"><table className="data-table"><thead><tr><th>FOLIO / PROVEEDOR</th><th>FACTURA / MATERIALES</th><th>FECHAS</th><th>TOTAL</th><th>PAGADO / HISTORIAL</th><th>SALDO</th><th>ESTADO</th><th/></tr></thead><tbody>{items.map(item => <tr key={item.id}><td><b>{item.folio}</b><small className="sub-cell">{item.supplier?.name || 'Proveedor'}</small></td><td>{item.invoice_number || 'Sin factura'}{item.invoice_drive_file_id&&<button type="button" className="text-button" disabled={invoiceDownloadId===item.id} onClick={()=>void downloadInvoice(item)}>{invoiceDownloadId===item.id?'Descargando factura…':`Descargar ${item.invoice_filename||'factura'}`}</button>}<small className="sub-cell">{item.lines.map(line => `${line.item_name} × ${line.quantity}`).join(' · ')}</small></td><td>{new Date(`${item.purchase_date}T12:00:00`).toLocaleDateString('es-MX')}<small className="sub-cell">{item.due_date ? `Vence ${new Date(`${item.due_date}T12:00:00`).toLocaleDateString('es-MX')}` : 'Contado'}</small></td><td><b>{money(Number(item.total))}</b></td><td>{money(Number(item.paid_amount))}<div className="payment-history">{(item.payments||[]).map(payment=><div key={payment.id}><span>{new Date(`${payment.paid_on}T12:00:00`).toLocaleDateString('es-MX')} · {money(Number(payment.amount))}{payment.is_reversal?' · Corrección':''}{payment.reference?` · ${payment.reference}`:''}</span>{canWrite&&payment.can_reverse&&<button type="button" className="text-button" onClick={()=>setCorrectionPayment({purchase:item,payment})}>Corregir</button>}</div>)}</div></td><td><b>{money(Number(item.balance))}</b></td><td><span className={`status-chip ${item.status === 'paid' ? 'status-approved' : 'status-overdue'}`}>{item.status === 'paid' ? 'Pagada' : item.status === 'partially_paid' ? 'Pago parcial' : 'Pendiente'}</span></td><td>{canWrite && Number(item.balance) > 0 && <button className="button button-small button-outline" onClick={() => setPaymentPurchase(item)}>Registrar pago</button>}</td></tr>)}</tbody></table>{!items.length && <EmptyState title="Sin compras registradas" body="Al registrar una compra, sus renglones aumentan existencias y el saldo se vincula al proveedor."/>}</div>
     </section>
     {paymentPurchase && <Modal title={`Pago a ${paymentPurchase.supplier?.name || 'proveedor'}`} subtitle={`Saldo pendiente: ${money(Number(paymentPurchase.balance))}`} onClose={() => setPaymentPurchase(null)}><form className="form-grid" onSubmit={submitPayment}><Field label="Importe" name="amount" type="number" min="0.01" max={Number(paymentPurchase.balance)} step="0.01" required/><Field label="Fecha de pago" name="paid_on" type="date" defaultValue={today} required/><label className="field span-two"><span>Cuenta de salida</span><select name="account_id" required><option value="">Selecciona caja o banco</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name} · {money(Number(account.current_balance))}</option>)}</select></label><div className="impact-note span-two" role="note"><b>Impacto al aplicar el pago</b><span>Caja/banco: disminuye el importe registrado en la cuenta seleccionada.</span><span>Proveedor: el saldo pendiente de {money(Number(paymentPurchase.balance))} baja por el mismo importe.</span><small>El pago queda ligado a la compra y al movimiento de caja para conservar su historial.</small></div><Field className="span-two" label="Referencia" name="reference" placeholder="Transferencia, recibo…"/><div className="modal-actions span-two"><button type="button" className="button button-outline" onClick={() => setPaymentPurchase(null)}>Cancelar</button><button className="button button-primary">Guardar pago</button></div></form></Modal>}
     {correctionPayment && <Modal title="Corregir pago a proveedor" subtitle={`${correctionPayment.purchase.folio} · ${money(Number(correctionPayment.payment.amount))}`} onClose={() => setCorrectionPayment(null)}><form className="form-grid" onSubmit={submitPaymentCorrection}><p className="muted-copy span-two">Se agregará una reversa enlazada al movimiento de caja y al pago original. El registro original no se borra.</p><label className="field span-two"><span>Motivo de la corrección</span><textarea name="reason" minLength={5} maxLength={120} required placeholder="Explica qué dato o movimiento se corrige…"/></label><div className="modal-actions span-two"><button type="button" className="button button-outline" onClick={() => setCorrectionPayment(null)}>Cancelar</button><button className="button button-primary">Registrar corrección</button></div></form></Modal>}

@@ -1961,6 +1961,108 @@ def list_purchases(db: Session = Depends(get_db)):
     return [_purchase_result(db, row) for row in db.scalars(select(Purchase).order_by(Purchase.purchase_date.desc(), Purchase.created_at.desc())).all()]
 
 
+_PURCHASE_INVOICE_TYPES = {
+    "application/pdf": (".pdf", b"%PDF-"),
+    "image/jpeg": (".jpg", b"\xff\xd8\xff"),
+    "image/png": (".png", b"\x89PNG\r\n\x1a\n"),
+    "image/webp": (".webp", b"RIFF"),
+}
+_PURCHASE_INVOICE_MAX_BYTES = 12 * 1024 * 1024
+
+
+@router.put("/purchases/{purchase_id}/invoice-file")
+async def upload_purchase_invoice_file(
+    purchase_id: str,
+    request: Request,
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "purchases:write")),
+    db: Session = Depends(get_db),
+):
+    purchase = db.get(Purchase, purchase_id)
+    if purchase is None:
+        raise HTTPException(404, "Compra no encontrada.")
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    invoice_type = _PURCHASE_INVOICE_TYPES.get(content_type)
+    if content_type in {"application/xml", "text/xml"}:
+        invoice_type = (".xml", b"")
+    if invoice_type is None:
+        raise HTTPException(415, "Adjunta el XML CFDI, un PDF o una foto JPG, PNG o WebP.")
+    try:
+        declared_length = int(request.headers.get("content-length", "0"))
+    except ValueError:
+        raise HTTPException(400, "Tamaño de archivo no válido.") from None
+    max_bytes = 2 * 1024 * 1024 if invoice_type[0] == ".xml" else _PURCHASE_INVOICE_MAX_BYTES
+    if declared_length > max_bytes:
+        raise HTTPException(413, "El XML debe pesar hasta 2 MiB; PDF y fotos hasta 12 MiB.")
+    collected = bytearray()
+    async for chunk in request.stream():
+        if len(collected) + len(chunk) > max_bytes:
+            raise HTTPException(413, "El XML debe pesar hasta 2 MiB; PDF y fotos hasta 12 MiB.")
+        collected.extend(chunk)
+    content = bytes(collected)
+    if not content:
+        raise HTTPException(400, "El archivo está vacío.")
+    if invoice_type[0] == ".xml":
+        try:
+            xml_text = content.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            raise HTTPException(415, "El XML CFDI debe estar codificado en UTF-8.") from None
+        if "<!DOCTYPE" in xml_text.upper() or "<!ENTITY" in xml_text.upper():
+            raise HTTPException(415, "El XML CFDI contiene declaraciones no permitidas.")
+        _parse_purchase_cfdi_xml(xml_text)
+    elif not content.startswith(invoice_type[1]) or (content_type == "image/webp" and content[8:12] != b"WEBP"):
+        raise HTTPException(415, "El contenido del archivo no coincide con su formato.")
+    raw_name = unquote(request.headers.get("x-document-name", "factura"))
+    raw_name = raw_name.replace("\\", "/").split("/")[-1]
+    filename = re.sub(r"[^\w.() -]", "_", raw_name, flags=re.UNICODE).strip(" .")[:220]
+    if not filename:
+        filename = "factura"
+    extension = invoice_type[0]
+    if not filename.lower().endswith(extension):
+        filename = f"{filename.rsplit('.', 1)[0] if '.' in filename else filename}{extension}"
+    try:
+        drive_id = save_private_file(
+            filename=f"{purchase.folio}-{filename}",
+            content=content,
+            content_type=content_type,
+            existing_file_id=purchase.invoice_drive_file_id,
+        )
+    except RuntimeError as error:
+        if str(error) == "not_configured":
+            raise HTTPException(503, "drive_not_configured") from None
+        raise HTTPException(502, "No se pudo archivar la factura en Drive.") from None
+    except Exception:
+        raise HTTPException(502, "No se pudo archivar la factura en Drive.") from None
+    purchase.invoice_drive_file_id = drive_id
+    purchase.invoice_filename = filename
+    purchase.invoice_content_type = content_type
+    purchase.invoice_updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"saved": True, "filename": filename, "content_type": content_type, "updated_at": purchase.invoice_updated_at.isoformat()}
+
+
+@router.get("/purchases/{purchase_id}/invoice-file")
+def get_purchase_invoice_file(
+    purchase_id: str,
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "purchases:read")),
+    db: Session = Depends(get_db),
+):
+    purchase = db.get(Purchase, purchase_id)
+    if purchase is None:
+        raise HTTPException(404, "Compra no encontrada.")
+    if not purchase.invoice_drive_file_id:
+        raise HTTPException(404, "Esta compra no tiene una factura archivada.")
+    try:
+        stored = download_private_file(purchase.invoice_drive_file_id)
+    except Exception:
+        raise HTTPException(502, "No se pudo recuperar la factura archivada.") from None
+    filename = purchase.invoice_filename or "factura"
+    return Response(
+        content=stored.content,
+        media_type=purchase.invoice_content_type or "application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{urlquote(filename)}"},
+    )
+
+
 @router.post("/purchases", status_code=201, dependencies=[Depends(require_permissions(auth_service, "purchases:write"))])
 def create_purchase(data: PurchaseInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
     supplier = db.scalar(select(Supplier).where(Supplier.id == data.supplier_id, Supplier.active.is_(True)))

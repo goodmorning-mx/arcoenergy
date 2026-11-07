@@ -834,3 +834,13 @@ La cabecera del sitio público ahora incluye una entrada “Ingresar” hacia `/
 | US-14 | Parcial funcional | El usuario puede llegar al login desde la web pública y cada portal conserva su acceso. Falta validar la navegación con cuentas reales de todos los roles y completar la matriz de permisos. |
 | US-39 | Parcial funcional | La cabecera del sitio facilita el acceso al CRM desde escritorio; el área interna mantiene login y privilegios. Faltan datos reales y capacidades aún abiertas en las demás tarjetas. |
 | US-40 | Parcial funcional | El portal PWA sigue en `/app/login` y enlazado desde el acceso CRM y el pie público. Falta probar con instaladores/clientes provisionados. |
+
+## Iteración 43 — fuente de factura ligada a compra (2026-11-07)
+
+La captura de compra permite adjuntar el CFDI XML ya validado, o una foto/PDF como fuente que se transcribe manualmente. Los datos sugeridos desde XML continúan en revisión humana y no confirman la compra por sí solos. Tras registrar la compra, CRM intenta archivar la fuente en Drive privado y la relaciona con el folio; si Drive no está conectado, avisa que el archivo no quedó respaldado y la operación comercial conserva su estado. Los archivos archivados pueden descargarse desde la cuenta autorizada. No se agregó OCR para PDF/fotografías.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-13 | Parcial funcional | El archivo privado de Drive cubre cotizaciones, solicitudes de materiales y fuente de facturas de compra cuando la integración está activa. Faltan conexión real, documentos legales/INE, sincronización general, retención y respaldo. |
+| US-21 | Parcial funcional | Compra multirrenglón conserva la factura asociada en Drive cuando está conectado; el CRM ofrece descarga protegida. Impuestos, fletes y descuentos globales siguen sin distribuirse automáticamente. |
+| US-22 | Parcial funcional | El CFDI XML valida y precarga información para revisión; PDF/foto quedan ligados a la compra y requieren captura manual. Pendientes OCR, Drive conectado en DEV y validación de formatos usados por contabilidad. |
