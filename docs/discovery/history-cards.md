@@ -668,6 +668,15 @@ El kardex de almacén ahora puede consultarse en páginas consecutivas de hasta 
 | --- | --- | --- |
 | US-27 | Parcial funcional | El kardex del CRM filtra artículo/fecha, pagina conjuntos mayores a 500 y exporta las filas cargadas, respetando el permiso de costo. Falta exportación completa en un solo archivo y probar volumen real superior al disponible en DEV. |
 
+## Iteración 25 — etiquetas QR para almacén (2026-11-07)
+
+En el catálogo CRM, administración puede abrir e imprimir una etiqueta QR de cada artículo. El código usa el barcode del catálogo o, si no hay uno, un identificador interno basado en el ID del artículo. El escáner PWA ahora reconoce ambos. No se envía información del negocio a servicios externos para generar el QR. Queda probar impresión y lectura con el papel, cámara y lectores que usa ArcoEnergy.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-20 | Parcial funcional | El CRM genera e imprime etiqueta QR con identificador de catálogo y ya conserva marca/modelo/categoría/barcode. Falta validar tamaño/medio de impresión con almacén. |
+| US-28 | Parcial funcional | El escáner PWA resuelve barcode capturado y el identificador generado de etiqueta; falta validar cámaras, lectores y formatos en dispositivos reales. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.

@@ -1,0 +1,9 @@
+.inventory-label-action{display:block;margin-top:6px;padding:0;border:0;background:none;color:#28734e;font-size:10px;font-weight:700;text-decoration:underline;text-underline-offset:2px}
+.inventory-label-overlay{position:fixed;inset:0;z-index:100;background:#12281fb8;display:grid;place-items:center;padding:20px}
+.inventory-label-card{position:relative;width:min(100%,360px);display:flex;flex-direction:column;align-items:center;gap:10px;padding:28px 22px 22px;border:1px solid #e1e8df;border-radius:16px;background:#fff;box-shadow:0 24px 70px #0f241d40;text-align:center}
+.inventory-label-card h2{margin:4px 0 0;font:800 19px Manrope,sans-serif;color:#18332c}
+.inventory-label-card p{margin:0;color:#78877e;font-size:12px}
+.inventory-label-card code{padding:5px 9px;border-radius:6px;background:#f2f5f0;color:#46594e;font-size:11px;overflow-wrap:anywhere}
+.inventory-label-close{position:absolute;top:8px;right:10px;width:32px;height:32px;border:0;border-radius:50%;background:#f3f5f1;color:#53645a;font-size:21px}
+.inventory-label-actions{display:flex;justify-content:center;gap:9px;margin-top:7px}
+@media print{body *{visibility:hidden!important}.inventory-label-overlay,.inventory-label-overlay *{visibility:visible!important}.inventory-label-overlay{position:fixed;inset:0;padding:0;background:#fff;z-index:9999}.inventory-label-card{width:80mm;min-height:65mm;padding:7mm;border:0;border-radius:0;box-shadow:none}.inventory-label-card svg{width:48mm;height:48mm}.inventory-label-close,.inventory-label-actions{display:none!important}}

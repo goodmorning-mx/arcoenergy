@@ -411,7 +411,7 @@ function BarcodeScanner({ items, onMatch }: { items: StockItem[]; onMatch: (item
   }, [scanning]);
 
   function identify(value: string) {
-    const item = items.find(row => row.barcode && normalized(row.barcode) === normalized(value));
+    const item = items.find(row => (row.barcode && normalized(row.barcode) === normalized(value)) || normalized(`AE-${row.id}`) === normalized(value));
     if (!item) { setNotice(`El código ${value} no está asignado a un artículo del catálogo.`); return; }
     setNotice(`Artículo identificado: ${item.name}`);
     setScanning(false);
