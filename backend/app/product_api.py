@@ -403,6 +403,27 @@ class InventoryItemInput(BaseModel):
     unit_cost: Decimal = Field(default=Decimal("0"), ge=0)
 
 
+class InventoryItemUpdateInput(BaseModel):
+    name: str = Field(min_length=2, max_length=180)
+    description: str = Field(default="", max_length=1000)
+    category: str = Field(default="", max_length=100)
+    brand: str = Field(default="", max_length=100)
+    model: str = Field(default="", max_length=120)
+    supplier_id: str | None = None
+    barcode: str | None = Field(default=None, max_length=120)
+    unit: str = Field(default="pieza", max_length=40)
+    minimum_quantity: float = Field(default=0, ge=0)
+    unit_cost: Decimal = Field(default=Decimal("0"), ge=0)
+
+    @field_validator("name", "unit")
+    @classmethod
+    def trim_required_catalog_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Este campo es obligatorio.")
+        return value
+
+
 class ExpenseInput(BaseModel):
     installation_id: str | None = None
     account_id: str | None = None
@@ -1188,6 +1209,43 @@ def create_inventory_item(data: InventoryItemInput, identity: AuthIdentity = Dep
         db.add(InventoryMovement(item_id=row.id, quantity=data.initial_quantity, movement_type="in", unit_cost=data.unit_cost, reason="existencia inicial", created_by=identity.email))
     db.commit(); db.refresh(row)
     return _serialize(row)
+
+
+@router.put("/inventory/items/{item_id}")
+def update_inventory_item(item_id: str, data: InventoryItemUpdateInput,
+                          identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:manage")),
+                          db: Session = Depends(get_db)):
+    row = db.scalar(select(InventoryItem).where(InventoryItem.id == item_id).with_for_update())
+    if row is None:
+        raise HTTPException(404, "Artículo de inventario no encontrado.")
+    if data.supplier_id and not db.get(Supplier, data.supplier_id):
+        raise HTTPException(422, "Selecciona un proveedor registrado.")
+    barcode = data.barcode.strip() if data.barcode else None
+    if barcode and db.scalar(select(InventoryItem.id).where(
+        InventoryItem.barcode == barcode, InventoryItem.id != item_id,
+    )):
+        raise HTTPException(409, "Ese código ya está asignado a otro artículo.")
+
+    row.name = data.name.strip()
+    row.description = data.description.strip()
+    row.category = data.category.strip()
+    row.brand = data.brand.strip()
+    row.model = data.model.strip()
+    row.supplier_id = data.supplier_id
+    row.barcode = barcode
+    row.unit = data.unit.strip()
+    row.minimum_quantity = data.minimum_quantity
+    row.unit_cost = data.unit_cost
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(409, "Ese código ya está asignado a otro artículo.") from error
+    db.refresh(row)
+    result = _serialize(row)
+    if "inventory:costs:read" not in identity.permissions:
+        result.pop("unit_cost", None)
+    return result
 
 
 @router.post("/inventory/consume", status_code=201)
