@@ -874,3 +874,12 @@ La iteración quedó integrada mediante el PR [#70](https://github.com/goodmorni
 | --- | --- | --- |
 | US-11 | Parcial funcional | La venta financiada genera calendario configurable y cartera por cuota. Falta validar fórmulas e intereses de cada plan con el contador y automatizar recordatorios tras aprobar canal y mensajes. |
 | US-16 | Parcial funcional | Cuotas individuales con monto, número y vencimiento pueden cobrarse y consultarse en cartera. Falta aprobación de reglas financieras y envío automático de avisos. |
+
+## Iteración 47 — respuesta mínima para el portal de cliente (2026-11-07)
+
+El endpoint autenticado del portal de cliente deja de serializar directamente los modelos internos de cotización e instalación. La respuesta conserva los datos que la PWA presenta: folio, paneles, inversor, total y estado de la propuesta; folio/fecha/estado/checklist de instalación; y cuotas. Omite costos internos, IDs de Drive, notas privadas de coordinación y correos de instaladores. El filtro por correo autenticado del cliente se mantiene y se añaden pruebas de campos devueltos. Falta validar el portal con cuentas reales y completar la matriz de permisos con los responsables.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | El portal limita los campos a la vista del cliente además de filtrar registros por correo. Faltan pruebas con cuentas reales de cada rol y validación integral de permisos por entidad/campo. |
+| US-40 | Parcial funcional | La PWA cliente recibe solo datos para propuestas, órdenes y pagos. Falta validar la experiencia con cuentas reales de cliente. |

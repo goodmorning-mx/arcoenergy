@@ -2486,10 +2486,24 @@ def client_portal_data(identity: AuthIdentity, db: Session):
     if not customers:
         raise HTTPException(404, "No hay una cuenta de cliente asociada a este correo.")
     customer_ids = [customer.id for customer in customers]
+    quotes = db.scalars(select(Quote).where(Quote.customer_id.in_(customer_ids)).order_by(Quote.created_at.desc())).all()
+    installations = db.scalars(select(Installation).where(Installation.customer_id.in_(customer_ids)).order_by(Installation.scheduled_at)).all()
+    # Return a customer-facing projection. Never serialize internal cost fields,
+    # customer links, installer emails, work notes or private Drive file IDs.
     return {
         "customers": [{"id": row.id, "name": row.name, "city": row.city, "status": row.status} for row in customers],
-        "quotes": [_serialize(row) for row in db.scalars(select(Quote).where(Quote.customer_id.in_(customer_ids)).order_by(Quote.created_at.desc())).all()],
-        "installations": [_serialize(row) for row in db.scalars(select(Installation).where(Installation.customer_id.in_(customer_ids)).order_by(Installation.scheduled_at)).all()],
+        "quotes": [{
+            "id": row.id, "folio": row.folio, "panel_count": row.panel_count,
+            "panel_brand": row.panel_brand, "panel_watts": row.panel_watts,
+            "inverter": row.inverter, "total": row.total, "status": row.status,
+            "created_at": row.created_at,
+        } for row in quotes],
+        "installations": [{
+            "folio": row.folio, "scheduled_at": row.scheduled_at,
+            "status": row.status,
+            "checklist": [{"task": item.get("task", ""), "done": bool(item.get("done"))}
+                          for item in (row.checklist or []) if isinstance(item, dict)],
+        } for row in installations],
         "payments": [{"installment_number": row.installment_number, "due_date": row.due_date, "amount": row.amount, "paid_amount": row.paid_amount, "balance": float(row.amount) - float(row.paid_amount), "status": row.status, "payment_method": row.payment_method} for row in db.scalars(select(Receivable).where(Receivable.customer_id.in_(customer_ids)).order_by(Receivable.due_date)).all()],
     }
 
