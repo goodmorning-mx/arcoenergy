@@ -714,6 +714,14 @@ Todo seguimiento comercial se asigna al usuario que lo programa si no se selecci
 | US-4 | Parcial funcional | Seguimientos con fecha, bitácora, alertas dentro del CRM y responsable asignado/visible; faltan avisos automáticos y validar el flujo con vendedores reales. |
 | US-14 | Parcial funcional | La asignación valida que el responsable pertenezca a la organización, esté activo y tenga permiso comercial; falta completar la matriz de acceso de todas las entidades. |
 
+## Iteración 30 — agenda de cobranza y recordatorios contextuales (2026-11-06)
+
+La cartera puede filtrarse por pagos vencidos, con vencimiento hoy, próximos siete días o ya pagados. El acceso WhatsApp genera un mensaje con el número de cuota, saldo, fecha o días de atraso y forma acordada; el encargado revisa el texto y lo envía en la conversación. La agenda muestra las fechas capturadas, pero las cuotas de un plan se crean manualmente y no hay envío automático.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-11 | Parcial funcional | Agenda filtrable y mensajes contextuales desde WhatsApp; faltan generación del calendario de financiamiento y automatización de envíos, sujetas a reglas y canales aprobados. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.
