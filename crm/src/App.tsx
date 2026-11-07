@@ -324,8 +324,27 @@ export default function App() {
     if (!quote.pricing_approved) { announce('Aprueba el precio del paquete antes de compartir la propuesta.', 'error'); return; }
     const phone = quote.customer?.phone?.replace(/\D/g, '') || '';
     const message = `Hola ${quote.customer?.name || ''}, te comparto la propuesta ${quote.folio} de Arco Energy por ${money(quote.total)}. Adjunto el PDF en esta conversación.`;
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
-    announce('WhatsApp abrió la conversación. Adjunta el PDF descargado antes de enviarlo.', 'info');
+    try {
+      const response = await fetch(`${apiBase}/quotes/${quote.id}/pdf`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!response.ok) throw new Error('No se pudo preparar el PDF para compartir.');
+      const file = new File([await response.blob()], `${quote.folio}.pdf`, { type: 'application/pdf' });
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: `Cotización ${quote.folio}`, text: message });
+          announce('PDF compartido. Elige WhatsApp y la conversación abierta con el cliente.', 'success');
+          return;
+        } catch (error) {
+          if (error instanceof DOMException && error.name === 'AbortError') return;
+          // Lost user activation or platform share failure; continue with download + WhatsApp.
+        }
+      }
+      const url = URL.createObjectURL(file); const anchor = document.createElement('a'); anchor.href = url; anchor.download = file.name; anchor.click(); URL.revokeObjectURL(url);
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+      announce('PDF descargado y WhatsApp abierto. Adjunta el archivo descargado en la conversación.', 'info');
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      announce(error instanceof Error ? error.message : 'No se pudo compartir la cotización.', 'error');
+    }
   }
 
   async function markQuoteSent(quote: Quote) {
