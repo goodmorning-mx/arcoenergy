@@ -535,6 +535,28 @@ class TeamRoleInput(BaseModel):
     role: str
 
 
+class HistorySourceArtifactInput(BaseModel):
+    artifact_type: str = Field(min_length=1, max_length=60)
+    reference: str = Field(min_length=1, max_length=1000)
+    channel: str = Field(default="", max_length=80)
+    location: str = Field(default="", max_length=240)
+    sha256: str | None = Field(default=None, pattern=r"^[a-fA-F0-9]{64}$")
+
+    @field_validator("artifact_type", "reference")
+    @classmethod
+    def required_artifact_fields_have_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Indica el tipo y la referencia durable de la fuente.")
+        return value
+
+
+class HistorySourceLinkInput(BaseModel):
+    artifact_index: int = Field(ge=0, le=19)
+    relation: Literal["literal", "transcription", "paraphrase", "inference", "validation", "reconstruction"]
+    location: str = Field(default="", max_length=240)
+
+
 class HistoryCardInput(BaseModel):
     story_id: str = Field(min_length=1, max_length=30)
     version: int = Field(ge=1)
@@ -542,11 +564,32 @@ class HistoryCardInput(BaseModel):
     stakeholder: str = Field(min_length=1, max_length=180)
     source_literal: str = Field(min_length=1)
     source_type: str = Field(min_length=1, max_length=40)
-    source_reference: str = ""
+    source_reference: str = Field(min_length=1, max_length=1000)
+    source_artifacts: list[HistorySourceArtifactInput] = Field(default_factory=list, max_length=20)
+    source_links: list[HistorySourceLinkInput] = Field(default_factory=list, max_length=20)
+    source_language: str = Field(default="es", min_length=2, max_length=20)
+    source_attribution: str = Field(default="", max_length=180)
+    source_occurred_at: str | None = Field(default=None, max_length=80)
+    source_confidence: Literal["verbatim", "transcription", "paraphrase", "reconstruction", "needs_validation"] = "needs_validation"
     normalized_story: str = Field(min_length=1)
     acceptance_criteria: list[str] = Field(default_factory=list)
     unresolved_questions: list[str] = Field(default_factory=list)
     linked_cards: list[str] = Field(default_factory=list)
+
+    @field_validator("source_literal")
+    @classmethod
+    def source_literal_is_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Conserva el relato literal o la transcripción fuente.")
+        return value
+
+    @field_validator("source_reference")
+    @classmethod
+    def source_reference_is_durable(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Registra una referencia durable al artefacto fuente.")
+        return value
 
 
 @router.get("/history-cards", dependencies=[Depends(require_permissions(auth_service, "team:manage"))])
@@ -559,7 +602,29 @@ def append_history_card(data: HistoryCardInput, identity: AuthIdentity = Depends
     latest = db.scalar(select(func.max(HistoryCard.version)).where(HistoryCard.story_id == data.story_id)) or 0
     if data.version != latest + 1:
         raise HTTPException(409, f"La siguiente versión disponible para {data.story_id} es {latest + 1}.")
-    row = HistoryCard(**data.model_dump(), recorded_by=identity.email)
+    values = data.model_dump()
+    artifacts = values.pop("source_artifacts")
+    links = values["source_links"]
+    if not artifacts:
+        artifacts = [{
+            "artifact_type": data.source_type,
+            "reference": data.source_reference,
+            "channel": data.source_type,
+            "location": "",
+            "sha256": None,
+        }]
+    if not links:
+        relation = {
+            "verbatim": "literal", "transcription": "transcription", "paraphrase": "paraphrase",
+            "reconstruction": "reconstruction", "needs_validation": "reconstruction",
+        }[data.source_confidence]
+        links = [{"artifact_index": 0, "relation": relation, "location": ""}]
+    if any(link["artifact_index"] >= len(artifacts) for link in links):
+        raise HTTPException(422, "Cada relación de fuente debe apuntar a un artefacto registrado.")
+    values["source_artifact"] = {"artifacts": artifacts}
+    values["source_links"] = links
+    values["source_attribution"] = data.source_attribution or data.stakeholder
+    row = HistoryCard(**values, recorded_by=identity.email)
     db.add(row)
     try:
         db.commit()
