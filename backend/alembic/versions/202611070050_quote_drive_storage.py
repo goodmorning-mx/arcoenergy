@@ -35,7 +35,9 @@ def _append_revision(bind, history, story_id, iteration, criteria, questions):
 
 
 def upgrade() -> None:
-    op.add_column("ae_quotes", sa.Column("drive_file_id", sa.String(length=200), nullable=False, server_default=""))
+    columns = {column["name"] for column in sa.inspect(op.get_bind()).get_columns("ae_quotes")}
+    if "drive_file_id" not in columns:
+        op.add_column("ae_quotes", sa.Column("drive_file_id", sa.String(length=200), nullable=False, server_default=""))
     bind = op.get_bind()
     history = sa.Table("ae_history_cards", sa.MetaData(), autoload_with=bind)
     iteration = "Iteración 39 · archivo privado de cotizaciones en Drive · 2026-11-07"
