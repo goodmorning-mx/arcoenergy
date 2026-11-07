@@ -879,6 +879,8 @@ La iteración quedó integrada mediante el PR [#70](https://github.com/goodmorni
 
 El endpoint autenticado del portal de cliente deja de serializar directamente los modelos internos de cotización e instalación. La respuesta conserva los datos que la PWA presenta: folio, paneles, inversor, total y estado de la propuesta; folio/fecha/estado/checklist de instalación; y cuotas. Omite costos internos, IDs de Drive, notas privadas de coordinación y correos de instaladores. El filtro por correo autenticado del cliente se mantiene y se añaden pruebas de campos devueltos. Falta validar el portal con cuentas reales y completar la matriz de permisos con los responsables.
 
+La iteración quedó integrada mediante el PR [#71](https://github.com/goodmorning-mx/arcoenergy/pull/71), merge commit `9a83ca8c747475d65e40b6ae702f3bc681ac2f58`. Factory completó el despliegue DEV en el run [#42400874022](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42400874022), verificó esquema y respaldo. API, CRM y PWA reportan el mismo SHA. Backend: 137 pruebas aprobadas; build PWA y validación Docker/Chrome pasaron.
+
 | Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
 | --- | --- | --- |
 | US-14 | Parcial funcional | El portal limita los campos a la vista del cliente además de filtrar registros por correo. Faltan pruebas con cuentas reales de cada rol y validación integral de permisos por entidad/campo. |
