@@ -95,6 +95,19 @@ def require_any_permission(service, *allowed: str):
     return dependency
 
 
+def _current_permissions(identity: AuthIdentity) -> frozenset[str]:
+    """Read current grants for conditional record scoping, never stale token claims."""
+    with auth_service.engine.connect() as connection:
+        row = connection.execute(
+            select(users.c.is_active, memberships.c.permissions)
+            .join(memberships, memberships.c.user_id == users.c.id)
+            .where(users.c.id == identity.user_id, memberships.c.organization_id == identity.organization_id)
+        ).mappings().first()
+    if row is None or not row["is_active"]:
+        raise HTTPException(401, "Active organization membership required.")
+    return frozenset(row["permissions"] or [])
+
+
 def get_db():
     with SessionLocal() as session:
         yield session
@@ -859,6 +872,9 @@ def create_followup(data: FollowUpInput, identity: AuthIdentity = Depends(identi
     assigned_to = (data.assigned_to or identity.email or "").strip().lower()
     if not assigned_to:
         raise HTTPException(422, "Selecciona a la persona responsable del seguimiento.")
+    current_email = (identity.email or "").strip().lower()
+    if assigned_to != current_email and "team:manage" not in _current_permissions(identity):
+        raise HTTPException(403, "Solo administración puede asignar seguimientos a otra persona.")
     with auth_service.engine.connect() as connection:
         member = connection.execute(
             select(users.c.email, memberships.c.permissions)
@@ -878,8 +894,14 @@ def create_followup(data: FollowUpInput, identity: AuthIdentity = Depends(identi
 
 
 @router.get("/followups", dependencies=[Depends(require_permissions(auth_service, "customers:read"))])
-def list_followups(db: Session = Depends(get_db)):
-    rows = db.scalars(select(FollowUp).where(FollowUp.done.is_(False)).order_by(FollowUp.due_date)).all()
+def list_followups(identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    query = select(FollowUp).where(FollowUp.done.is_(False))
+    if "team:manage" not in _current_permissions(identity):
+        owner = (identity.email or "").strip().lower()
+        if not owner:
+            return []
+        query = query.where(func.lower(FollowUp.assigned_to) == owner)
+    rows = db.scalars(query.order_by(FollowUp.due_date)).all()
     return [{**_serialize(row), "customer": _serialize(db.get(Customer, row.customer_id))} for row in rows]
 
 
@@ -887,6 +909,8 @@ def list_followups(db: Session = Depends(get_db)):
 def update_followup(followup_id: str, data: FollowUpDoneInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
     row = db.get(FollowUp, followup_id)
     if row is None: raise HTTPException(404, "Seguimiento no encontrado.")
+    if "team:manage" not in _current_permissions(identity) and (row.assigned_to or "").strip().lower() != (identity.email or "").strip().lower():
+        raise HTTPException(403, "Solo la persona responsable puede actualizar este seguimiento.")
     row.done = data.done
     if data.done:
         db.add(Activity(customer_id=row.customer_id, kind="seguimiento completado", note=f"Seguimiento del {row.due_date}: {row.note}", created_by=identity.email))

@@ -1,5 +1,6 @@
 from datetime import date, datetime, timedelta, timezone
 from importlib.util import module_from_spec, spec_from_file_location
+import json
 from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
@@ -14,7 +15,7 @@ from sqlalchemy import Boolean, Column, Date, DateTime, MetaData, String, Text, 
 from sqlalchemy.orm import Session
 
 from app.models import Base, Customer, FollowUp, HistoryCard
-from app.product_api import FollowUpInput, auth_service, create_followup
+from app.product_api import FollowUpDoneInput, FollowUpInput, auth_service, create_followup, list_followups, update_followup
 from app.roles import ROLE_PERMISSIONS
 
 
@@ -57,6 +58,54 @@ def test_followup_is_assigned_to_active_commercial_member_and_records_owner() ->
         assert error.value.status_code == 422
 
 
+def test_followups_are_scoped_to_responsible_user_and_admin() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    users.create(engine)
+    memberships.create(engine)
+    seller = AuthIdentity("seller-id", "arcoenergy", frozenset({"marketing"}), ROLE_PERMISSIONS["marketing"], "seller@example.test", "Vendedora")
+    other = AuthIdentity("other-id", "arcoenergy", frozenset({"marketing"}), ROLE_PERMISSIONS["marketing"], "other@example.test", "Otro vendedor")
+    admin = AuthIdentity("admin-id", "arcoenergy", frozenset({"administrador"}), ROLE_PERMISSIONS["administrador"], "admin@example.test", "Admin")
+
+    with engine.begin() as connection:
+        now = datetime.now(timezone.utc)
+        connection.execute(users.insert(), [
+            {"id": identity.user_id, "email": identity.email, "name": identity.name, "password_hash": "x", "is_active": True, "created_at": now}
+            for identity in (seller, other, admin)
+        ])
+        connection.execute(memberships.insert(), [
+            {"user_id": identity.user_id, "organization_id": "arcoenergy", "roles": list(identity.roles), "permissions": list(identity.permissions), "created_at": now}
+            for identity in (seller, other, admin)
+        ])
+
+    with patch.object(auth_service, "engine", engine), Session(engine) as db:
+        customer = Customer(name="Cliente solar")
+        db.add(customer); db.flush()
+        mine = FollowUp(customer_id=customer.id, due_date=date.today(), note="Mi llamada", assigned_to=seller.email)
+        theirs = FollowUp(customer_id=customer.id, due_date=date.today(), note="Llamada ajena", assigned_to=other.email)
+        db.add_all([mine, theirs]); db.commit()
+
+        assert [row["id"] for row in list_followups(seller, db)] == [mine.id]
+        assert {row["id"] for row in list_followups(admin, db)} == {mine.id, theirs.id}
+        stale_admin_token = AuthIdentity(seller.user_id, seller.organization_id, admin.roles, admin.permissions, seller.email, seller.name)
+        assert [row["id"] for row in list_followups(stale_admin_token, db)] == [mine.id]
+
+        with pytest.raises(HTTPException) as error:
+            update_followup(theirs.id, FollowUpDoneInput(done=True), seller, db)
+        assert error.value.status_code == 403
+
+        completed = update_followup(mine.id, FollowUpDoneInput(done=True), seller, db)
+        assert completed["done"] is True
+
+        reassignment = FollowUpInput(
+            customer_id=customer.id, due_date=date.today() + timedelta(days=3),
+            note="No puedo reasignar", assigned_to=other.email,
+        )
+        with pytest.raises(HTTPException) as error:
+            create_followup(reassignment, seller, db)
+        assert error.value.status_code == 403
+
+
 def test_followup_assignment_migration_backfills_creator_and_appends_us4_revision() -> None:
     migration_path = Path(__file__).parents[1] / "alembic" / "versions" / "202611060040_followup_responsibility_card_revision.py"
     spec = spec_from_file_location(migration_path.stem, migration_path)
@@ -92,4 +141,34 @@ def test_followup_assignment_migration_backfills_creator_and_appends_us4_revisio
 
     assert followup["assigned_to"] == "owner@example.test"
     assert "responsable miembro activo" in " ".join(history["acceptance_criteria"])
+
+
+def test_followup_access_migration_appends_versions_without_rewriting_literal_sources() -> None:
+    migration_path = Path(__file__).parents[1] / "alembic" / "versions" / "202611070055_followup_access_scope_card_revision.py"
+    spec = spec_from_file_location(migration_path.stem, migration_path)
+    assert spec and spec.loader
+    migration = module_from_spec(spec)
+    spec.loader.exec_module(migration)
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    records = json.loads((Path(__file__).parents[1] / "app" / "history_card_initial.json").read_text(encoding="utf-8"))
+    now = datetime.now(timezone.utc)
+    for row in records:
+        row.update(id=str(uuid4()), recorded_by="source-import", created_at=now)
+    with engine.begin() as connection:
+        connection.execute(HistoryCard.__table__.insert(), records)
+        originals = {
+            row["story_id"]: row["source_literal"] for row in connection.execute(
+                select(HistoryCard.story_id, HistoryCard.source_literal).where(HistoryCard.story_id.in_(["US-4", "US-14"]))
+            ).mappings()
+        }
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+        revisions = connection.execute(select(HistoryCard.__table__).where(
+            HistoryCard.story_id.in_(["US-4", "US-14"]), HistoryCard.iteration == migration.ITERATION,
+        )).mappings().all()
+
+    assert {row["story_id"] for row in revisions} == {"US-4", "US-14"}
+    assert all(row["version"] == 2 and row["source_literal"] == originals[row["story_id"]] for row in revisions)
 
