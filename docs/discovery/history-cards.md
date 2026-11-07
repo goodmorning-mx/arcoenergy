@@ -902,6 +902,8 @@ La iteración quedó integrada mediante el PR [#72](https://github.com/goodmorni
 
 La corrección de un gasto es append-only: conserva el registro original y agrega un gasto compensatorio enlazado con el motivo y la fecha de corrección. Si el gasto salió de una cuenta de caja o banco, la misma operación registra la entrada compensatoria enlazada al egreso original. Una restricción única impide corregir dos veces el mismo gasto. El endpoint rechaza a instaladores y bloquea inconsistencias entre el gasto y su movimiento de cuenta. El costeo suma ambos registros; reporta el importe neto, conservando sus fechas e historial. El gasto original de campo sin cuenta puede compensarse sin inventar un movimiento bancario.
 
+La implementación se integró mediante el PR [#73](https://github.com/goodmorning-mx/arcoenergy/pull/73), merge commit `a9e4d44d68cdfd070f186de6e30157f7b8714ad3`. Factory completó el despliegue DEV en el run [#42403422316](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42403422316), con migración de esquema y respaldo confirmados. `/api/health` y las tres rutas de acceso respondieron HTTP 200; API, CRM y PWA reportan el mismo SHA. Backend: 141 pruebas aprobadas; builds de CRM/Next, Docker/Chrome y PWA pasaron en CI. El chequeo de reporte de evento externo de CI falló por una dependencia ajena a esta funcionalidad, como en iteraciones anteriores.
+
 | Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
 | --- | --- | --- |
 | US-17 | Funcional básico | Gastos administrativos corregibles desde su origen con motivo; los registros originales permanecen. Pendientes anticipos/reembolsos y autorización de gastos de campo. |
