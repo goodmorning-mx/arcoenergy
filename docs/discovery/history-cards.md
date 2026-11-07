@@ -577,6 +577,18 @@ Se agrega lectura asistida de CFDI XML 3.3/4.0 en MXN como propuesta revisable p
 
 La base de DEV tiene una cuenta que coincide con el correo de arranque guardado como secreto en Factory. La membresía conservaba `admin` y permisos previos; el inicio del backend ahora reconcilia ese usuario configurado a `administrador` con el mapa vigente, sin imprimir ni cambiar su contraseña. Pendiente desplegar esta revisión y verificar el rol a través del acceso autenticado.
 
+## Iteración 17 — correcciones enlazadas de pagos (2026-11-07)
+
+El contador indicó que corregir un pago debe conservar historial y actualizar en paralelo la operación afectada. Ahora un pago a proveedor o un abono de cliente se corrige mediante un nuevo registro con motivo, ligado al original y al movimiento inverso de caja/banco. El saldo por pagar o cobrar se recalcula dentro de la misma transacción. El endpoint genérico ya no permite revertir por separado un movimiento de caja originado por estos pagos. El CRM expone el historial y una acción de corrección para contador/administrador. No se editan ni eliminan los registros originales.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-16 | Funcional básico | Abonos de clientes pueden revertirse con motivo, reabren el saldo y generan el movimiento inverso en la misma cuenta. Pendiente: distribuir pagos entre cuotas, generación automática del plan y conciliación. |
+| US-18 | Funcional básico | Reversas de pagos enlazados corrigen el saldo de caja/banco y la cuenta por cobrar o pagar en la misma operación. Pendiente: conciliación bancaria y otras fuentes externas. |
+| US-31 | Funcional básico | Pagos a proveedores conservan su original; la corrección aumenta cuenta por pagar y repone el saldo de la cuenta. Pendiente: reversa integral de compra e inventario. |
+| US-34 | Parcial funcional | Reversa de pago de proveedor/cliente actualiza movimiento de caja y saldo relacionado con trazabilidad. Quedan otros tipos de operación y conciliación. |
+| US-36 | Parcial funcional | Se corrigen pagos de clientes y proveedores con eventos enlazados y motivo; no se permite revertir por separado el movimiento de caja enlazado. Pendiente extender a compras completas, ventas e inventario. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.

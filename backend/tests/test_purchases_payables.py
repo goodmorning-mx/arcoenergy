@@ -6,8 +6,8 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from app.models import Base, CashMovement, FinancialAccount, InventoryItem, InventoryMovement, Purchase, Supplier
-from app.product_api import PurchaseInput, PurchaseLineInput, SupplierPaymentInput, add_supplier_payment, create_purchase, list_financial_accounts, list_suppliers
+from app.models import Base, CashMovement, FinancialAccount, InventoryItem, InventoryMovement, Purchase, Supplier, SupplierPayment
+from app.product_api import PaymentCorrectionInput, PurchaseInput, PurchaseLineInput, SupplierPaymentInput, add_supplier_payment, create_purchase, list_financial_accounts, list_suppliers, reverse_cash_movement, reverse_supplier_payment
 from gm_auth.models import AuthIdentity
 
 
@@ -77,3 +77,45 @@ def test_cash_purchase_requires_full_payment_and_credit_terms() -> None:
 
     assert error.value.status_code == 422
     assert "de contado" in error.value.detail
+
+
+def test_reversing_supplier_payment_keeps_history_and_restores_payable_and_account() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    identity = AuthIdentity("accountant-1", "arcoenergy", frozenset({"contador"}), frozenset(), "conta@example.com", "Contabilidad")
+    with Session(engine) as db:
+        supplier = Supplier(name="Proveedor Solar", payment_terms="credit", credit_days=15)
+        item = InventoryItem(name="Panel 600 W", unit="pza", quantity=0, minimum_quantity=0, unit_cost=0)
+        account = FinancialAccount(name="Banco", account_type="bank", opening_balance=3000, opening_balance_date=date.today())
+        db.add_all([supplier, item, account]); db.commit(); db.refresh(supplier); db.refresh(item); db.refresh(account)
+        created = create_purchase(PurchaseInput(
+            supplier_id=supplier.id, payment_terms="credit", purchase_date=date.today(),
+            lines=[PurchaseLineInput(item_id=item.id, quantity=2, unit_cost=1000)],
+            initial_payment=Decimal("500"), payment_account_id=account.id,
+        ), identity, db)
+        purchase = db.get(Purchase, created["id"])
+        original_payment = db.scalars(select(SupplierPayment).where(SupplierPayment.purchase_id == purchase.id)).one()
+
+        corrected = reverse_supplier_payment(
+            purchase.id, original_payment.id,
+            PaymentCorrectionInput(reason="Referencia bancaria capturada incorrectamente"), identity, db,
+        )
+        movements = db.scalars(select(CashMovement).where(CashMovement.account_id == account.id).order_by(CashMovement.created_at)).all()
+        payment_rows = db.scalars(select(SupplierPayment).where(SupplierPayment.purchase_id == purchase.id)).all()
+        supplier_balance = list_suppliers(db)[0]["current_balance"]
+        bank_balance = list_financial_accounts(db)[0]["current_balance"]
+
+        with pytest.raises(HTTPException) as duplicate:
+            reverse_supplier_payment(purchase.id, original_payment.id, PaymentCorrectionInput(reason="Duplicado"), identity, db)
+        with pytest.raises(HTTPException) as isolated_cash_reverse:
+            reverse_cash_movement(movements[0].id, identity, db)
+
+    assert corrected["paid_amount"] == Decimal("0.00")
+    assert corrected["balance"] == Decimal("2000.00")
+    assert corrected["status"] == "open"
+    assert supplier_balance == Decimal("2000.00")
+    assert bank_balance == Decimal("3000.00")
+    assert len(payment_rows) == len(movements) == 2
+    assert payment_rows[1].reversal_of_id == original_payment.id
+    assert movements[1].reversal_of_id == movements[0].id
+    assert duplicate.value.status_code == isolated_cash_reverse.value.status_code == 409

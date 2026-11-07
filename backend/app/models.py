@@ -252,6 +252,9 @@ class PurchaseLine(Base):
 
 class SupplierPayment(Base):
     __tablename__ = "ae_supplier_payments"
+    __table_args__ = (
+        UniqueConstraint("reversal_of_id", name="uq_ae_supplier_payment_reversal"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     purchase_id: Mapped[str] = mapped_column(ForeignKey("ae_purchases.id"), nullable=False, index=True)
     account_id: Mapped[str] = mapped_column(ForeignKey("ae_financial_accounts.id"), nullable=False, index=True)
@@ -259,6 +262,7 @@ class SupplierPayment(Base):
     amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     paid_on: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
     reference: Mapped[str] = mapped_column(String(180), default="")
+    reversal_of_id: Mapped[str | None] = mapped_column(ForeignKey("ae_supplier_payments.id", name="fk_ae_supplier_payment_reversal"), nullable=True)
     created_by: Mapped[str] = mapped_column(String(180), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
@@ -279,6 +283,9 @@ class Receivable(Base):
 
 class CustomerPayment(Base):
     __tablename__ = "ae_customer_payments"
+    __table_args__ = (
+        UniqueConstraint("reversal_of_id", name="uq_ae_customer_payment_reversal"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     receivable_id: Mapped[str] = mapped_column(ForeignKey("ae_receivables.id"), nullable=False, index=True)
     account_id: Mapped[str] = mapped_column(ForeignKey("ae_financial_accounts.id"), nullable=False, index=True)
@@ -286,6 +293,7 @@ class CustomerPayment(Base):
     amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     paid_on: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
     reference: Mapped[str] = mapped_column(String(180), default="")
+    reversal_of_id: Mapped[str | None] = mapped_column(ForeignKey("ae_customer_payments.id", name="fk_ae_customer_payment_reversal"), nullable=True)
     created_by: Mapped[str] = mapped_column(String(180), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
