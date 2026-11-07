@@ -747,6 +747,14 @@ CRM permite seleccionar una orden, adjuntar temporalmente una foto o PDF de la s
 | US-25 | Parcial funcional | CRM acepta foto/PDF como referencia temporal y permite revisar cantidades antes de emitir material y registrar devoluciones ligadas. Pendientes OCR, conservación en Drive y validación del formato operativo con almacén. |
 | US-14 | Parcial funcional | Administrador y contador pueden confirmar salidas físicas mediante permiso explícito; instalador, marketing y cliente no reciben ese permiso. Pendiente validar la matriz completa con usuarios reales. |
 
+## Iteración 34 — mantenimiento de ficha de materiales (2026-11-07)
+
+Administración puede corregir la ficha del material desde CRM: nombre, descripción, categoría, marca, modelo, proveedor, código identificador, unidad, mínimo y costo unitario. Las existencias actuales no se editan desde el formulario; deben cambiar mediante movimientos de almacén para conservar su rastro. El código QR/barcode no puede duplicarse y las entradas de kardex históricas conservan su costo registrado aunque se actualice el costo actual del catálogo.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-20 | Parcial funcional | CRM permite corregir los metadatos del catálogo con permiso de administración, valida proveedor y código único y protege el saldo físico. Pendiente acordar unidades de medida válidas y validar impresión/lectura con almacén. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from gm_auth.models import AuthIdentity
 
 from app.models import Base, InventoryItem, Supplier
-from app.product_api import InventoryItemInput, create_inventory_item
+from app.product_api import InventoryItemInput, InventoryItemUpdateInput, create_inventory_item, update_inventory_item
 from app.roles import ROLE_PERMISSIONS
 
 
@@ -40,3 +40,36 @@ def test_inventory_catalog_rejects_unknown_supplier() -> None:
     with Session(engine) as db, pytest.raises(HTTPException) as missing:
         create_inventory_item(InventoryItemInput(name="Panel solar", supplier_id="missing-supplier"), manager, db)
     assert missing.value.status_code == 422
+
+
+def test_inventory_catalog_edit_updates_metadata_without_changing_on_hand_stock() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    manager = AuthIdentity("admin-1", "arcoenergy", frozenset({"administrador"}), ROLE_PERMISSIONS["administrador"], "admin@example.test", "Admin")
+    with Session(engine) as db:
+        original = create_inventory_item(InventoryItemInput(
+            name="Panel 610 W", barcode="A-610", initial_quantity=8, unit_cost=3500,
+        ), manager, db)
+        edited = update_inventory_item(original["id"], InventoryItemUpdateInput(
+            name="Panel 620 W", category="Módulos", brand="Solar Co", model="SC-620",
+            barcode="A-620", unit="pieza", minimum_quantity=2, unit_cost=3700,
+        ), manager, db)
+        stored = db.get(InventoryItem, original["id"])
+        assert edited["name"] == "Panel 620 W"
+        assert stored.quantity == Decimal("8.00")
+        assert stored.unit_cost == Decimal("3700.00")
+
+
+def test_inventory_catalog_edit_rejects_duplicate_code_and_unknown_article() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    manager = AuthIdentity("admin-1", "arcoenergy", frozenset({"administrador"}), ROLE_PERMISSIONS["administrador"], "admin@example.test", "Admin")
+    with Session(engine) as db:
+        first = create_inventory_item(InventoryItemInput(name="Panel solar", barcode="ORIGINAL"), manager, db)
+        create_inventory_item(InventoryItemInput(name="Inversor solar", barcode="DUP"), manager, db)
+        with pytest.raises(HTTPException) as duplicate:
+            update_inventory_item(first["id"], InventoryItemUpdateInput(name="Panel solar", barcode="DUP"), manager, db)
+        assert duplicate.value.status_code == 409
+        with pytest.raises(HTTPException) as missing:
+            update_inventory_item("missing", InventoryItemUpdateInput(name="Panel solar"), manager, db)
+        assert missing.value.status_code == 404
