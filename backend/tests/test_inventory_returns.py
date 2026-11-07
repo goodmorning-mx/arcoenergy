@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 
 import pytest
 from fastapi import HTTPException
@@ -6,8 +7,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from gm_auth.models import AuthIdentity
 
-from app.models import Base, Customer, Installation, InventoryItem, InventoryMovement
-from app.product_api import InventoryReturnInput, list_inventory_movements, return_inventory
+from app.models import Base, Customer, Installation, InventoryItem, InventoryMovement, WorkOrderMaterial
+from app.product_api import InventoryReturnInput, list_inventory_movements, profitability_report, return_inventory
 
 
 def setup_inventory():
@@ -66,4 +67,25 @@ def test_installer_cannot_return_material_from_another_persons_work_order() -> N
         return_inventory(InventoryReturnInput(out_movement_id=issue.id, quantity=1), identity, db)
 
     assert error.value.status_code == 403
+    db.close()
+
+
+def test_damaged_preissued_material_is_recorded_as_waste_and_project_cost_without_restocking() -> None:
+    db, item, installation, issue = setup_inventory()
+    identity = AuthIdentity("admin-1", "arcoenergy", frozenset({"administrador"}), frozenset({"inventory:write", "inventory:read"}), "admin@example.test", "Admin")
+    material = WorkOrderMaterial(installation_id=installation.id, item_id=item.id, requested_quantity=5,
+        preissued_quantity=5, consumed_quantity=0, unit_cost=100)
+    db.add(material); db.commit()
+
+    result = return_inventory(InventoryReturnInput(out_movement_id=issue.id, quantity=2, condition="damaged"), identity, db)
+    report = profitability_report(installation_id=installation.id, db=db)
+    movements = list_inventory_movements(identity=identity, db=db)
+
+    assert result["movement"]["movement_type"] == "damage"
+    assert float(result["item"]["quantity"]) == 0
+    assert db.get(InventoryItem, item.id).quantity == 0
+    assert material.preissued_quantity == 5 and material.consumed_quantity == 2
+    assert report["totals"]["materials_cost"] == Decimal("200.00")
+    assert {(row["movement_type"], row["signed_quantity"]) for row in movements if row["movement_type"] in {"damage", "consumption"}} == {("consumption", 0), ("damage", 0)}
+    assert next(row for row in movements if row["movement_type"] == "out")["returnable_quantity"] == 3
     db.close()

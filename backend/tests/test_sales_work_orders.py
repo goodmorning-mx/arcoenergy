@@ -83,6 +83,10 @@ def test_installer_consumption_decrements_stock_once_and_cannot_exceed_order(mon
         assert consume_result["movement"]["movement_type"] == "consumption"
         assert consume_result["physical_issue"]["movement_type"] == "out"
         assert profitability_report(installation_id=created["installation_id"], db=db)["totals"]["materials_cost"] == Decimal("2700.00")
+        damage = return_inventory(InventoryReturnInput(out_movement_id=consume_result["physical_issue"]["id"], quantity=1, condition="damaged"), installer, db)
+        assert damage["movement"]["movement_type"] == "damage"
+        assert db.get(InventoryItem, item.id).quantity == Decimal("9.00")
+        assert profitability_report(installation_id=created["installation_id"], db=db)["totals"]["materials_cost"] == Decimal("2700.00")
         return_inventory(InventoryReturnInput(out_movement_id=consume_result["physical_issue"]["id"], quantity=1), installer, db)
         corrected = profitability_report(installation_id=created["installation_id"], db=db)
         assert corrected["totals"]["materials_cost"] == Decimal("1800.00")
