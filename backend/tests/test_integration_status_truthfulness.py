@@ -10,9 +10,11 @@ def test_folder_id_does_not_claim_drive_is_connected(monkeypatch):
 
     assert result["google_drive"] == {
         "connected": False,
-        "status": "integration_not_implemented",
+        "status": "credentials_not_configured",
         "folder_configured": True,
-        "planned_file_types": ["quotes", "contracts", "receipts"],
+        "service_account_configured": False,
+        "stored_file_types": ["quotes"],
+        "planned_file_types": ["contracts", "receipts"],
     }
     assert result["whatsapp"] == {
         "connected": False,

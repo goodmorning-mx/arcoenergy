@@ -23,6 +23,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["X-Drive-Status"],
 )
 app.include_router(create_auth_router(auth_service))
 app.include_router(product_router)

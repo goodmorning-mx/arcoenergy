@@ -793,3 +793,12 @@ El endpoint de integraciones ya no confunde configuración parcial con una conex
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.
+
+## Iteración 39 — archivo privado de cotizaciones en Drive (2026-11-07)
+
+La API puede guardar el PDF foliado de una cotización aprobada en una carpeta privada de Drive usando credenciales de cuenta de servicio configuradas fuera del repositorio. Conserva el ID para reemplazar el documento si se vuelve a generar. El endpoint de integraciones valida acceso real a la carpeta y no confunde un ID configurado con conexión. El CRM descarga el PDF e informa si quedó almacenado, si falta configuración o si falló la carga. WhatsApp sigue siendo click-to-chat y el vendedor adjunta manualmente el PDF.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-3 | Parcial funcional | PDF foliado descargable y archivado en Drive cuando la integración tiene acceso; estado visible en CRM. Falta envío directo del adjunto por WhatsApp y captura/validación de credenciales reales en DEV. |
+| US-13 | Parcial funcional | Almacenamiento privado implementado para PDFs de cotización. Faltan documentos contractuales, identificaciones, recibos y sincronización del resto de datos; definir retención, restauración y auditoría. |

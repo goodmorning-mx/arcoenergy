@@ -334,7 +334,10 @@ function App() {
         if (!quoteResponse.ok) throw new Error((await quoteResponse.json()).detail || 'No se pudo crear la cotización.');
         const savedQuote = await quoteResponse.json(); setFolio(savedQuote.folio);
         const pdfResponse = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/v1/quotes/${savedQuote.id}/pdf`, { headers: { Authorization: `Bearer ${accessToken}` } });
-        if (pdfResponse.ok) { const link = document.createElement('a'); link.href = URL.createObjectURL(await pdfResponse.blob()); link.download = `${savedQuote.folio}.pdf`; link.click(); URL.revokeObjectURL(link.href); }
+        if (!pdfResponse.ok) throw new Error('La cotización se guardó, pero no se pudo generar su PDF.');
+        const link = document.createElement('a'); link.href = URL.createObjectURL(await pdfResponse.blob()); link.download = `${savedQuote.folio}.pdf`; link.click(); URL.revokeObjectURL(link.href);
+        const driveStatus = pdfResponse.headers.get('X-Drive-Status');
+        setQuoteNotice(driveStatus === 'saved' ? 'PDF descargado y archivado en Drive.' : driveStatus === 'upload-failed' ? 'PDF descargado. No se pudo archivar en Drive; avisa a administración.' : 'PDF descargado. Drive aún no está configurado; el archivo no quedó archivado.');
       } catch (error) { setQuoteNotice(error instanceof Error ? error.message : 'No se pudo guardar.'); return; }
     } else { return; }
     setSaved(true);
