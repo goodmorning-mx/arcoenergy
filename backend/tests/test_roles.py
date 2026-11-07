@@ -57,7 +57,9 @@ def test_client_portal_only_returns_records_for_authenticated_email() -> None:
         db.add_all([
             Quote(folio="AE-1", customer_id=own.id, panel_count=8, panel_brand="Jinko", panel_watts=610, inverter="Growatt 5 kW", payment_method="Contado", panel_subtotal=106000, structure_cost=14900, inverter_cost=22900, total=143800),
             Quote(folio="AE-2", customer_id=other.id, panel_count=12, panel_brand="Jinko", panel_watts=610, inverter="Huawei 6 kW", payment_method="Contado", panel_subtotal=159000, structure_cost=14900, inverter_cost=31900, total=205800),
-            Installation(customer_id=own.id, status="assigned", checklist=[]),
+            Installation(customer_id=own.id, folio="AE-OT-OWN", status="assigned", lead_installer="installer@arcoenergy.mx",
+                notes="Nota privada de coordinación", material_request_drive_file_id="private-drive-id",
+                checklist=[{"task": "Revisar techo", "done": True}, {"task": "Conectar inversor", "done": False}]),
             Installation(customer_id=other.id, status="assigned", checklist=[]),
             Receivable(customer_id=own.id, due_date=date(2026, 12, 1), amount=1000, paid_amount=250),
             Receivable(customer_id=other.id, due_date=date(2026, 12, 1), amount=9000, paid_amount=0),
@@ -66,6 +68,14 @@ def test_client_portal_only_returns_records_for_authenticated_email() -> None:
 
     assert [row["name"] for row in payload["customers"]] == ["Rosa"]
     assert [row["folio"] for row in payload["quotes"]] == ["AE-1"]
+    assert set(payload["quotes"][0]) == {"id", "folio", "panel_count", "panel_brand", "panel_watts", "inverter", "total", "status", "created_at"}
     assert len(payload["installations"]) == 1
+    assert payload["installations"][0] == {
+        "folio": "AE-OT-OWN", "scheduled_at": None, "status": "assigned",
+        "checklist": [{"task": "Revisar techo", "done": True}, {"task": "Conectar inversor", "done": False}],
+    }
     assert payload["payments"][0]["balance"] == 750
     assert payload["payments"][0]["amount"] == 1000
+    assert "private-drive-id" not in repr(payload)
+    assert "installer@arcoenergy.mx" not in repr(payload)
+    assert "Nota privada de coordinación" not in repr(payload)
