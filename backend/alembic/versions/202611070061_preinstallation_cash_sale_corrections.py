@@ -19,8 +19,12 @@ ITERATION = "Iteración 50 · corrección de venta de contado antes de instalaci
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    metadata = sa.MetaData()
+    sa.Table("ae_sales", metadata, autoload_with=bind)
+    sa.Table("ae_cash_movements", metadata, autoload_with=bind)
     correction_table = sa.Table(
-        "ae_sale_corrections", sa.MetaData(),
+        "ae_sale_corrections", metadata,
         sa.Column("id", sa.String(36), primary_key=True),
         sa.Column("sale_id", sa.String(36), sa.ForeignKey("ae_sales.id"), nullable=False),
         sa.Column("cash_movement_id", sa.String(36), sa.ForeignKey("ae_cash_movements.id"), nullable=False),
@@ -31,9 +35,9 @@ def upgrade() -> None:
         sa.UniqueConstraint("sale_id", name="uq_ae_sale_correction_sale"),
         sa.UniqueConstraint("cash_movement_id", name="uq_ae_sale_correction_cash_movement"),
     )
-    op.execute(sa.schema.CreateTable(correction_table))
+    if not sa.inspect(bind).has_table("ae_sale_corrections"):
+        op.execute(sa.schema.CreateTable(correction_table))
 
-    bind = op.get_bind()
     history = sa.Table("ae_history_cards", sa.MetaData(), autoload_with=bind)
     revisions = {
         "US-15": (
