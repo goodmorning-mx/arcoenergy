@@ -329,9 +329,14 @@ export default function App() {
       if (!response.ok) throw new Error('No se pudo preparar el PDF para compartir.');
       const file = new File([await response.blob()], `${quote.folio}.pdf`, { type: 'application/pdf' });
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: `Cotización ${quote.folio}`, text: message });
-        announce('PDF compartido. Elige WhatsApp y la conversación abierta con el cliente.', 'success');
-        return;
+        try {
+          await navigator.share({ files: [file], title: `Cotización ${quote.folio}`, text: message });
+          announce('PDF compartido. Elige WhatsApp y la conversación abierta con el cliente.', 'success');
+          return;
+        } catch (error) {
+          if (error instanceof DOMException && error.name === 'AbortError') return;
+          // Lost user activation or platform share failure; continue with download + WhatsApp.
+        }
       }
       const url = URL.createObjectURL(file); const anchor = document.createElement('a'); anchor.href = url; anchor.download = file.name; anchor.click(); URL.revokeObjectURL(url);
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');

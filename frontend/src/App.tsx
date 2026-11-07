@@ -351,9 +351,14 @@ function App() {
     const message = `Hola ${customerName}, te comparto la propuesta ${folio} de Arco Energy. Estoy al pendiente de tus dudas.`;
     try {
       if (navigator.share && navigator.canShare?.({ files: [quotePdf] })) {
-        await navigator.share({ files: [quotePdf], title: `Cotización ${folio}`, text: message });
-        setQuoteNotice('PDF compartido. Elige WhatsApp y la conversación del cliente.');
-        return;
+        try {
+          await navigator.share({ files: [quotePdf], title: `Cotización ${folio}`, text: message });
+          setQuoteNotice('PDF compartido. Elige WhatsApp y la conversación del cliente.');
+          return;
+        } catch (error) {
+          if (error instanceof DOMException && error.name === 'AbortError') return;
+          // Lost user activation or platform share failure; continue with download + WhatsApp.
+        }
       }
       window.open(`https://wa.me/${customerPhone.replace(/\D/g,'')}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
       setQuoteNotice('WhatsApp abierto. Adjunta el PDF que acabas de descargar.');
