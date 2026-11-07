@@ -465,6 +465,14 @@ class CashMovementInput(BaseModel):
     occurred_on: date = Field(default_factory=date.today)
 
 
+class CashTransferInput(BaseModel):
+    source_account_id: str
+    destination_account_id: str
+    amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
+    description: str = Field(min_length=2, max_length=2000)
+    occurred_on: date = Field(default_factory=date.today)
+
+
 class SupplierInput(BaseModel):
     name: str = Field(min_length=2, max_length=180)
     rfc: str = Field(default="", max_length=20)
@@ -1765,6 +1773,41 @@ def create_cash_movement(data: CashMovementInput, identity: AuthIdentity = Depen
     return _serialize(row)
 
 
+@router.post("/cash-transfers", status_code=201, dependencies=[Depends(require_permissions(auth_service, "accounts:write"))])
+def create_cash_transfer(data: CashTransferInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    if data.source_account_id == data.destination_account_id:
+        raise HTTPException(422, "Selecciona dos cuentas distintas para la transferencia.")
+    accounts = db.scalars(select(FinancialAccount).where(
+        FinancialAccount.id.in_([data.source_account_id, data.destination_account_id]),
+    ).order_by(FinancialAccount.id).with_for_update()).all()
+    by_id = {account.id: account for account in accounts}
+    source = by_id.get(data.source_account_id)
+    destination = by_id.get(data.destination_account_id)
+    if source is None or destination is None or not source.active or not destination.active:
+        raise HTTPException(404, "Selecciona dos cuentas activas.")
+    if data.occurred_on < max(source.opening_balance_date, destination.opening_balance_date):
+        raise HTTPException(422, "La fecha no puede ser anterior al saldo inicial de ambas cuentas.")
+    transfer_id = str(uuid4())
+    rows = [
+        CashMovement(
+            account_id=source.id, direction="out", amount=data.amount,
+            category=f"Transferencia a {destination.name}", description=data.description,
+            occurred_on=data.occurred_on, source_type="transfer", source_id=transfer_id,
+            created_by=identity.email or "",
+        ),
+        CashMovement(
+            account_id=destination.id, direction="in", amount=data.amount,
+            category=f"Transferencia desde {source.name}", description=data.description,
+            occurred_on=data.occurred_on, source_type="transfer", source_id=transfer_id,
+            created_by=identity.email or "",
+        ),
+    ]
+    db.add_all(rows); db.commit()
+    for row in rows:
+        db.refresh(row)
+    return {"transfer_id": transfer_id, "movements": [_serialize(row) for row in rows]}
+
+
 @router.post("/cash-movements/{movement_id}/reverse", status_code=201, dependencies=[Depends(require_permissions(auth_service, "accounts:write"))])
 def reverse_cash_movement(movement_id: str, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
     original = db.scalar(select(CashMovement).where(CashMovement.id == movement_id).with_for_update())
@@ -1774,6 +1817,27 @@ def reverse_cash_movement(movement_id: str, identity: AuthIdentity = Depends(ide
         raise HTTPException(409, "Corrige este pago desde su compra o cuenta por cobrar para actualizar también el saldo relacionado.")
     if original.reversal_of_id is not None:
         raise HTTPException(409, "Una reversa no puede revertirse; registra un nuevo movimiento de corrección.")
+    if original.source_type == "transfer":
+        pair = db.scalars(select(CashMovement).where(
+            CashMovement.source_type == "transfer", CashMovement.source_id == original.source_id,
+        ).with_for_update()).all()
+        if len(pair) != 2:
+            raise HTTPException(409, "La transferencia no conserva sus dos movimientos relacionados.")
+        if any(db.scalar(select(CashMovement.id).where(CashMovement.reversal_of_id == row.id)) for row in pair):
+            raise HTTPException(409, "Esta transferencia ya tiene una reversa registrada.")
+        reversals = [CashMovement(
+            account_id=row.account_id,
+            direction="out" if row.direction == "in" else "in",
+            amount=row.amount,
+            category="Reversa de transferencia",
+            description=f"Reversa de transferencia {original.source_id}: {row.description}",
+            occurred_on=date.today(), source_type="transfer_reversal", source_id=original.source_id,
+            reversal_of_id=row.id, created_by=identity.email or "",
+        ) for row in pair]
+        db.add_all(reversals); db.commit()
+        for row in reversals:
+            db.refresh(row)
+        return {"transfer_id": original.source_id, "movements": [_serialize(row) for row in reversals]}
     if db.scalar(select(CashMovement.id).where(CashMovement.reversal_of_id == movement_id)):
         raise HTTPException(409, "Este movimiento ya tiene una reversa registrada.")
     reversal = CashMovement(
@@ -2616,6 +2680,8 @@ def operations_report(
         total_opening_entries = Decimal("0")
         total_inflows = Decimal("0")
         total_outflows = Decimal("0")
+        total_transfers_in = Decimal("0")
+        total_transfers_out = Decimal("0")
         total_closing = Decimal("0")
         for account in accounts:
             seed = Decimal(account.opening_balance or 0)
@@ -2640,25 +2706,33 @@ def operations_report(
                 period_start = seed_date
             in_period = [row for row in account_movements
                          if row.occurred_on >= period_start and (to_date is None or row.occurred_on <= to_date)]
-            inflows = sum((Decimal(row.amount) for row in in_period if row.direction == "in"), Decimal("0"))
-            outflows = sum((Decimal(row.amount) for row in in_period if row.direction == "out"), Decimal("0"))
-            closing = opening + opening_entry + inflows - outflows
+            transfer_movements = [row for row in in_period if row.source_type in {"transfer", "transfer_reversal"}]
+            transfers_in = sum((Decimal(row.amount) for row in transfer_movements if row.direction == "in"), Decimal("0"))
+            transfers_out = sum((Decimal(row.amount) for row in transfer_movements if row.direction == "out"), Decimal("0"))
+            inflows = sum((Decimal(row.amount) for row in in_period if row.direction == "in" and row.source_type not in {"transfer", "transfer_reversal"}), Decimal("0"))
+            outflows = sum((Decimal(row.amount) for row in in_period if row.direction == "out" and row.source_type not in {"transfer", "transfer_reversal"}), Decimal("0"))
+            closing = opening + opening_entry + inflows - outflows + transfers_in - transfers_out
             account_rows.append({
                 "id": account.id, "name": account.name, "account_type": account.account_type,
                 "opening_balance": opening, "opening_entries": opening_entry,
-                "inflows": inflows, "outflows": outflows, "closing_balance": closing,
+                "inflows": inflows, "outflows": outflows, "transfers_in": transfers_in,
+                "transfers_out": transfers_out, "closing_balance": closing,
             })
             total_opening += opening
             total_opening_entries += opening_entry
             total_inflows += inflows
             total_outflows += outflows
+            total_transfers_in += transfers_in
+            total_transfers_out += transfers_out
             total_closing += closing
         cash_flow = {
             "from_date": from_date, "to_date": to_date,
             "opening_balance": total_opening, "opening_entries": total_opening_entries,
-            "inflows": total_inflows, "outflows": total_outflows, "closing_balance": total_closing,
+            "inflows": total_inflows, "outflows": total_outflows,
+            "transfers_in": total_transfers_in, "transfers_out": total_transfers_out,
+            "closing_balance": total_closing,
             "accounts": account_rows,
-            "basis": "Cuentas activas; suma saldos de apertura y movimientos de caja/banco por fecha capturada. No incluye proyecciones ni conciliación bancaria.",
+            "basis": "Cuentas activas; entradas y salidas excluyen transferencias internas, mostradas aparte. El saldo incluye ambos lados de cada transferencia por fecha capturada. No incluye proyecciones ni conciliación bancaria.",
         }
 
     return {
