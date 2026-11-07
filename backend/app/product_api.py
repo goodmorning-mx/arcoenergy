@@ -1751,11 +1751,71 @@ def list_expenses(db: Session = Depends(get_db)):
         item = _serialize(row)
         account = db.get(FinancialAccount, row.account_id) if row.account_id else None
         item["account_name"] = account.name if account else None
+        item["can_reverse"] = row.reversal_of_id is None and db.scalar(
+            select(ProjectExpense.id).where(ProjectExpense.reversal_of_id == row.id)
+        ) is None
         installation = db.get(Installation, row.installation_id) if row.installation_id else None
         customer = db.get(Customer, installation.customer_id) if installation else None
         item["project_customer"] = customer.name if customer else "Gasto operativo"
         item["project_city"] = customer.city if customer else ""
         result.append(item)
+    return result
+
+
+@router.post("/expenses/{expense_id}/reverse", status_code=201, dependencies=[Depends(require_permissions(auth_service, "expenses:write"))])
+def reverse_expense(expense_id: str, data: PaymentCorrectionInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    if "instalador" in identity.roles:
+        raise HTTPException(403, "Solo administración o contabilidad puede corregir gastos registrados.")
+    original = db.scalar(select(ProjectExpense).where(ProjectExpense.id == expense_id).with_for_update())
+    if original is None:
+        raise HTTPException(404, "Gasto no encontrado.")
+    if original.reversal_of_id is not None:
+        raise HTTPException(409, "Una corrección no puede revertirse; registra un nuevo gasto si corresponde.")
+    if db.scalar(select(ProjectExpense.id).where(ProjectExpense.reversal_of_id == original.id)):
+        raise HTTPException(409, "Este gasto ya tiene una corrección registrada.")
+
+    original_cash = db.scalars(select(CashMovement).where(
+        CashMovement.source_type == "expense", CashMovement.source_id == original.id,
+    ).with_for_update()).all()
+    if original.account_id and len(original_cash) != 1:
+        raise HTTPException(409, "No se puede corregir: el gasto no tiene exactamente un movimiento de caja/banco relacionado.")
+    if not original.account_id and original_cash:
+        raise HTTPException(409, "El gasto de campo tiene un movimiento de caja inesperado; revisa el origen antes de corregirlo.")
+    if original_cash and db.scalar(select(CashMovement.id).where(CashMovement.reversal_of_id == original_cash[0].id)):
+        raise HTTPException(409, "El movimiento de cuenta ya tiene una reversa registrada; revisa el historial.")
+
+    correction = ProjectExpense(
+        installation_id=original.installation_id,
+        category=original.category,
+        description=f"Corrección del gasto {original.id}: {data.reason}",
+        amount=-Decimal(original.amount),
+        occurred_on=date.today(),
+        receipt_url="",
+        account_id=original.account_id,
+        created_by=identity.email or "",
+        reversal_of_id=original.id,
+    )
+    db.add(correction)
+    db.flush()
+    if original_cash:
+        movement = original_cash[0]
+        db.add(CashMovement(
+            account_id=movement.account_id,
+            direction="in",
+            amount=movement.amount,
+            category="Corrección de gasto",
+            description=f"Corrección del gasto {original.id}: {data.reason}",
+            occurred_on=date.today(),
+            source_type="expense_reversal",
+            source_id=original.id,
+            reversal_of_id=movement.id,
+            created_by=identity.email or "",
+        ))
+    db.commit()
+    db.refresh(correction)
+    account = db.get(FinancialAccount, correction.account_id) if correction.account_id else None
+    result = _serialize(correction)
+    result["account_name"] = account.name if account else None
     return result
 
 
