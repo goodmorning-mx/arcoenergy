@@ -844,3 +844,12 @@ La captura de compra permite adjuntar el CFDI XML ya validado, o una foto/PDF co
 | US-13 | Parcial funcional | El archivo privado de Drive cubre cotizaciones, solicitudes de materiales y fuente de facturas de compra cuando la integración está activa. Faltan conexión real, documentos legales/INE, sincronización general, retención y respaldo. |
 | US-21 | Parcial funcional | Compra multirrenglón conserva la factura asociada en Drive cuando está conectado; el CRM ofrece descarga protegida. Impuestos, fletes y descuentos globales siguen sin distribuirse automáticamente. |
 | US-22 | Parcial funcional | El CFDI XML valida y precarga información para revisión; PDF/foto quedan ligados a la compra y requieren captura manual. Pendientes OCR, Drive conectado en DEV y validación de formatos usados por contabilidad. |
+
+## Iteración 44 — acceso a seguimientos por responsable (2026-11-07)
+
+El API ahora devuelve a cada integrante únicamente los seguimientos pendientes asignados a su propia cuenta. Administración conserva la vista global; los vendedores no pueden reasignar seguimientos a otras personas ni completar los que pertenecen a otro responsable. La visibilidad y edición se aplican del lado del servidor además de los controles de interfaz. Las notificaciones push y recordatorios fuera de CRM aún requieren acordar y configurar el canal.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-4 | Parcial funcional | El API filtra seguimientos por responsable, registra su historial y permite a administración la gestión global. Pendientes avisos automáticos y validación con vendedores reales. |
+| US-14 | Parcial funcional | El API impide consultar o completar seguimientos de otra persona y limita la reasignación a administración. Falta revisión completa de permisos por entidad/campo con stakeholders y cuentas reales. |
