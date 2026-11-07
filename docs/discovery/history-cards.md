@@ -885,3 +885,13 @@ La iteración quedó integrada mediante el PR [#71](https://github.com/goodmorni
 | --- | --- | --- |
 | US-14 | Parcial funcional | El portal limita los campos a la vista del cliente además de filtrar registros por correo. Faltan pruebas con cuentas reales de cada rol y validación integral de permisos por entidad/campo. |
 | US-40 | Parcial funcional | La PWA cliente recibe solo datos para propuestas, órdenes y pagos. Falta validar la experiencia con cuentas reales de cliente. |
+
+## Iteración 48 — correcciones de caja con motivo y origen protegido (2026-11-07)
+
+Las reversas de movimientos manuales ahora requieren un motivo que se conserva en la descripción de la reversa y el enlace al movimiento original. Las transferencias conservan la reversa pareada en ambas cuentas y comparten el motivo. La reversa genérica rechaza movimientos ligados a ventas, gastos, pagos u operaciones derivadas; esos registros deben corregirse desde su operación de origen para no dejar caja y el registro relacionado con saldos distintos. No se permite borrar ni revertir una reversa.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-36 | Parcial funcional | Reversa manual con motivo, enlace al original y corrección pareada de transferencias; pagos de proveedores/clientes ya usan origen. Pendientes reversas integrales de ventas, gastos e inventario. |
+| US-18 | Funcional básico | Las correcciones directas de caja se limitan a movimientos manuales y transferencias; operaciones comerciales se corrigen desde su origen. Pendientes conciliación y comisiones. |
+| US-35 | Parcial funcional | Se evita desincronizar caja de gastos, ventas y pagos por una reversa genérica. Falta el ciclo de corrección de origen para todas las operaciones relacionadas. |

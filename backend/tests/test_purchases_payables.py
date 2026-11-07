@@ -108,7 +108,7 @@ def test_reversing_supplier_payment_keeps_history_and_restores_payable_and_accou
         with pytest.raises(HTTPException) as duplicate:
             reverse_supplier_payment(purchase.id, original_payment.id, PaymentCorrectionInput(reason="Duplicado"), identity, db)
         with pytest.raises(HTTPException) as isolated_cash_reverse:
-            reverse_cash_movement(movements[0].id, identity, db)
+            reverse_cash_movement(movements[0].id, PaymentCorrectionInput(reason="Debe corregirse como pago"), identity, db)
 
     assert corrected["paid_amount"] == Decimal("0.00")
     assert corrected["balance"] == Decimal("2000.00")
