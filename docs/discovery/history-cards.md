@@ -763,6 +763,15 @@ Las nuevas versiones de tarjeta pueden registrar uno o más artefactos fuente co
 | --- | --- | --- |
 | US-42 | Parcial funcional | La base de datos y el CRM guardan procedencia estructurada y distinguen literal/transcripción/paráfrasis/inferencia/reconstrucción. Los artefactos sensibles aún requieren almacenamiento privado con retención y permisos definidos; las fuentes históricas necesitan cotejo de stakeholders. |
 
+## Iteración 36 — flujo de caja por periodo y cuenta (2026-11-07)
+
+En Reportes, contador y administración pueden filtrar el flujo de las cuentas activas por fecha. Para el periodo seleccionado se muestran los saldos al inicio y al cierre, saldos de apertura de cuentas iniciadas dentro del periodo y entradas/salidas capturadas. Cada cuenta queda desglosada; las fechas usan `occurred_on`. El reporte explica que resume movimientos guardados y no representa pronóstico ni conciliación bancaria. Las cuentas inactivas quedan fuera; el tratamiento de transferencias internas debe validarse con contabilidad.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-19 | Parcial funcional | Reportes incorpora flujo por periodo y cuenta activa a partir de movimientos y saldos iniciales. Pendientes transferencias entre cuentas, conciliación bancaria y validación de métricas con el contador. |
+| US-18 | Parcial funcional | El reporte añade saldo de apertura, entradas, salidas y saldo calculado al cierre por cuenta activa. Pendiente conciliar con estados bancarios y decidir visibilidad de cuentas inactivas. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.

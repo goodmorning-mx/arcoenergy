@@ -2358,6 +2358,61 @@ def operations_report(
     for expense in expenses:
         expense_totals[expense.category] = expense_totals.get(expense.category, Decimal("0")) + Decimal(expense.amount)
 
+    cash_flow = None
+    if "accounts:read" in identity.permissions:
+        accounts = db.scalars(select(FinancialAccount).where(FinancialAccount.active.is_(True)).order_by(FinancialAccount.name)).all()
+        account_ids = [account.id for account in accounts]
+        movements = db.scalars(select(CashMovement).where(CashMovement.account_id.in_(account_ids))).all() if account_ids else []
+        account_rows = []
+        total_opening = Decimal("0")
+        total_opening_entries = Decimal("0")
+        total_inflows = Decimal("0")
+        total_outflows = Decimal("0")
+        total_closing = Decimal("0")
+        for account in accounts:
+            seed = Decimal(account.opening_balance or 0)
+            seed_date = account.opening_balance_date
+            account_movements = [row for row in movements if row.account_id == account.id and row.occurred_on >= seed_date]
+            if from_date:
+                if seed_date < from_date:
+                    opening = seed + sum((Decimal(row.amount) if row.direction == "in" else -Decimal(row.amount)
+                                          for row in account_movements if row.occurred_on < from_date), Decimal("0"))
+                    opening_entry = Decimal("0")
+                else:
+                    opening = Decimal("0")
+                    opening_entry = seed if seed_date <= (to_date or date.max) else Decimal("0")
+                period_start = max(from_date, seed_date)
+            elif to_date and seed_date > to_date:
+                opening = Decimal("0")
+                opening_entry = Decimal("0")
+                period_start = seed_date
+            else:
+                opening = seed
+                opening_entry = Decimal("0")
+                period_start = seed_date
+            in_period = [row for row in account_movements
+                         if row.occurred_on >= period_start and (to_date is None or row.occurred_on <= to_date)]
+            inflows = sum((Decimal(row.amount) for row in in_period if row.direction == "in"), Decimal("0"))
+            outflows = sum((Decimal(row.amount) for row in in_period if row.direction == "out"), Decimal("0"))
+            closing = opening + opening_entry + inflows - outflows
+            account_rows.append({
+                "id": account.id, "name": account.name, "account_type": account.account_type,
+                "opening_balance": opening, "opening_entries": opening_entry,
+                "inflows": inflows, "outflows": outflows, "closing_balance": closing,
+            })
+            total_opening += opening
+            total_opening_entries += opening_entry
+            total_inflows += inflows
+            total_outflows += outflows
+            total_closing += closing
+        cash_flow = {
+            "from_date": from_date, "to_date": to_date,
+            "opening_balance": total_opening, "opening_entries": total_opening_entries,
+            "inflows": total_inflows, "outflows": total_outflows, "closing_balance": total_closing,
+            "accounts": account_rows,
+            "basis": "Cuentas activas; suma saldos de apertura y movimientos de caja/banco por fecha capturada. No incluye proyecciones ni conciliación bancaria.",
+        }
+
     return {
         "period": {"from_date": from_date, "to_date": to_date},
         "basis": "Existencia y reservas actuales; movimientos de almacén por fecha de registro; gastos por fecha capturada. Los totales no son una póliza contable.",
@@ -2374,6 +2429,7 @@ def operations_report(
         "suppliers": {"total": len(suppliers), "active": sum(1 for supplier in suppliers if supplier.active), "inactive": sum(1 for supplier in suppliers if not supplier.active)},
         "installations_by_status": status_counts(installations),
         "expenses": {"total": sum(expense_totals.values(), Decimal("0")), "by_category": [{"category": key, "amount": amount} for key, amount in sorted(expense_totals.items())], "count": len(expenses)},
+        "cash_flow": cash_flow,
     }
 
 
