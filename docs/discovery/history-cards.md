@@ -629,6 +629,18 @@ La Iteración 20 está integrada en `dev` en `bdfc6cd7aecbcc0047d956ecc8bbe331d3
 
 El código vigente no incorpora credenciales, clientes ni inventario de muestra. Las referencias históricas a las semillas demo documentan su retirada y sus resguardos, no un modo de prueba disponible para el usuario.
 
+## Iteración 21 — comparación del sistema actual con el Word del contador (2026-11-07)
+
+Se cotejaron el Word “COMENTARIOS Y MEJORAS PARA EL SISTEMA DE ARCO ENERGY” y el PDF “MEJORAS AL SISTEMA ARCO ENERGY” con las pantallas y endpoints actuales de CRM/PWA. Los documentos coinciden en diez apartados. La comparación detallada queda en `docs/discovery/us-37-system-comparison.md` y se conserva como una nueva versión de US-37 en la base de history cards, sin modificar su relato literal.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-37 | Funcional para la revisión | Matriz fuente-a-sistema de las diez secciones; identifica lo que existe, brechas y preguntas abiertas. No representa aprobación del contador ni declara terminadas las funciones parciales. |
+| US-15 | Funcional básico | La comparación confirma venta contado/crédito y orden ligada; Plan 24, impuestos, subtotal fiscal, pagos mixtos y fecha de proyecto quedan pendientes de definición. |
+| US-25 | Pendiente | La orden externa todavía no se carga ni escanea en CRM/PWA; se solicita el formato vigente para definir la extracción y revisión manual. |
+| US-32 | Parcial | Ventas y órdenes tienen folios relacionados; no existe una entidad de proyecto independiente ni formato de código aprobado. |
+| US-33 | Parcial | La comparación confirma enlaces entre ventas/caja/cartera/inventario y compras/proveedor/caja o CxP; las reglas contables, impuestos y tratamiento de Plan 24 esperan validación del contador. |
+
 ### Corrección necesaria para desplegar Iteración 16
 
 El despliegue automático de DEV del commit `4d68416` se revirtió porque PostgreSQL rechaza el nombre de una llave foránea de más de 63 caracteres en la migración de reservas de materiales. Se acorta y se alinea el nombre en el modelo y en la migración. Hasta que se integre y despliegue esta corrección, DEV sigue sirviendo el commit API anterior `7d201b9`; no se considera desplegada la Iteración 16.
