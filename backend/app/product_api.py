@@ -2086,8 +2086,22 @@ def reverse_customer_payment(
 
 @router.get("/integrations", dependencies=[Depends(require_permissions(auth_service, "team:manage"))])
 def integration_status():
-    drive = bool(settings.google_drive_folder_id)
-    return {"google_drive": {"connected": drive, "status": "connected" if drive else "pending_configuration", "supports": ["quotes", "contracts", "receipts"]}, "whatsapp": {"connected": bool(settings.whatsapp_phone), "mode": "click_to_chat", "status": "configured" if settings.whatsapp_phone else "available_as_link"}, "contract_signing": {"connected": False, "status": "provider_and_legal_review_required"}, "electric_bill_analysis": {"connected": False, "status": "future_phase"}}
+    return {
+        "google_drive": {
+            "connected": False,
+            "status": "integration_not_implemented",
+            "folder_configured": bool(settings.google_drive_folder_id),
+            "planned_file_types": ["quotes", "contracts", "receipts"],
+        },
+        "whatsapp": {
+            "connected": False,
+            "mode": "click_to_chat",
+            "status": "click_to_chat_only",
+            "business_phone_configured": bool(settings.whatsapp_phone),
+        },
+        "contract_signing": {"connected": False, "status": "provider_and_legal_review_required"},
+        "electric_bill_analysis": {"connected": False, "status": "future_phase"},
+    }
 
 
 @router.get("/team", dependencies=[Depends(require_permissions(auth_service, "team:manage"))])
