@@ -105,6 +105,7 @@ def test_purchase_correction_migration_adds_schema_and_appends_source_linked_ver
     with engine.begin() as connection:
         connection.execute(HistoryCard.__table__.insert(), records)
         connection.execute(text("ALTER TABLE ae_purchase_lines DROP COLUMN previous_unit_cost"))
+        connection.execute(text("DROP TABLE ae_purchase_corrections"))
         source = connection.scalar(select(HistoryCard.source_literal).where(HistoryCard.story_id == "US-36", HistoryCard.version == 1))
         with Operations.context(MigrationContext.configure(connection)):
             migration.upgrade()
@@ -116,6 +117,7 @@ def test_purchase_correction_migration_adds_schema_and_appends_source_linked_ver
 
     assert "previous_unit_cost" in columns
     assert {column["name"] for column in corrections} >= {"purchase_id", "reason", "amount"}
+    assert "uq_ae_purchase_correction_purchase" in {constraint["name"] for constraint in inspect(engine).get_unique_constraints("ae_purchase_corrections")}
     assert version is not None and version.version == 2
     assert version.iteration == "Iteración 53 · corrección de compras antes de movimiento de almacén · 2026-11-08"
     assert version.source_literal == source
