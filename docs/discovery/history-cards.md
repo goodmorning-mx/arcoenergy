@@ -946,6 +946,8 @@ Implementación integrada mediante PR [#77](https://github.com/goodmorning-mx/ar
 
 La PWA permite al usuario autorizar avisos del dispositivo desde Inventario. Con permiso concedido, la aplicación revisa el stock disponible contra el mínimo configurado por artículo y agrupa los artículos nuevos bajo mínimo en un solo aviso. La lista de artículos ya avisados se conserva por sesión para evitar repetir notificaciones; se vuelve a avisar si el artículo recupera stock y luego vuelve a caer. Mientras la PWA está abierta y conectada, consulta el inventario cada minuto. El aviso local no es una notificación push: para detectar cambios con la aplicación cerrada hace falta definir un servicio push y los destinatarios centrales.
 
+Implementación integrada mediante PR [#79](https://github.com/goodmorning-mx/arcoenergy/pull/79), merge SHA `252eff7fbe9b54f972bdde68070759a7924c1414`. Factory desplegó DEV en el run [#42438040513](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42438040513); la ejecución verificó revisión de esquema y respaldo. `/api/health`, `/api/version`, las rutas de login y las páginas CRM/PWA respondieron HTTP 200; API, CRM y PWA reportan el mismo SHA. Backend: 145 pruebas aprobadas; CI de Frontend, CRM, Next.js y Docker/Chrome aprobado. El reporte externo `report` falló por el notificador de eventos ajeno al producto.
+
 | Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
 | --- | --- | --- |
 | US-26 | Parcial funcional | Aviso local agrupado según el mínimo por artículo con permiso explícito; falta push en segundo plano y acordar destinatarios. |
