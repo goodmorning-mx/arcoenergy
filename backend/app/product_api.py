@@ -3014,15 +3014,28 @@ def operations_report(
             counts[row.status or "sin_estatus"] = counts.get(row.status or "sin_estatus", 0) + 1
         return [{"status": status, "count": count} for status, count in sorted(counts.items())]
 
-    customers = db.scalars(select(Customer)).all()
-    suppliers = db.scalars(select(Supplier)).all()
-    installations = db.scalars(select(Installation)).all()
-    expense_query = select(ProjectExpense)
+    customers = db.scalars(select(Customer).order_by(Customer.created_at.desc(), Customer.id)).all()
+    suppliers = db.scalars(select(Supplier).order_by(Supplier.name, Supplier.id)).all()
+    installation_rows = db.execute(
+        select(Installation, Customer.name, Customer.city)
+        .outerjoin(Customer, Customer.id == Installation.customer_id)
+        .order_by(Installation.scheduled_at.desc(), Installation.folio, Installation.id)
+    ).all()
+    installations = [row[0] for row in installation_rows]
+    expense_filters = []
     if from_date:
-        expense_query = expense_query.where(ProjectExpense.occurred_on >= from_date)
+        expense_filters.append(ProjectExpense.occurred_on >= from_date)
     if to_date:
-        expense_query = expense_query.where(ProjectExpense.occurred_on <= to_date)
-    expenses = db.scalars(expense_query.order_by(ProjectExpense.occurred_on.desc(), ProjectExpense.created_at.desc())).all()
+        expense_filters.append(ProjectExpense.occurred_on <= to_date)
+    expense_rows = db.execute(
+        select(ProjectExpense, Installation.folio, Customer.name, Customer.city, FinancialAccount.name)
+        .outerjoin(Installation, Installation.id == ProjectExpense.installation_id)
+        .outerjoin(Customer, Customer.id == Installation.customer_id)
+        .outerjoin(FinancialAccount, FinancialAccount.id == ProjectExpense.account_id)
+        .where(*expense_filters)
+        .order_by(ProjectExpense.occurred_on.desc(), ProjectExpense.created_at.desc(), ProjectExpense.id)
+    ).all()
+    expenses = [row[0] for row in expense_rows]
     expense_totals: dict[str, Decimal] = {}
     for expense in expenses:
         expense_totals[expense.category] = expense_totals.get(expense.category, Decimal("0")) + Decimal(expense.amount)
@@ -3109,6 +3122,28 @@ def operations_report(
         "suppliers": {"total": len(suppliers), "active": sum(1 for supplier in suppliers if supplier.active), "inactive": sum(1 for supplier in suppliers if not supplier.active)},
         "installations_by_status": status_counts(installations),
         "expenses": {"total": sum(expense_totals.values(), Decimal("0")), "by_category": [{"category": key, "amount": amount} for key, amount in sorted(expense_totals.items())], "count": len(expenses)},
+        "details": {
+            "customers": [{
+                "id": customer.id, "name": customer.name, "city": customer.city,
+                "status": customer.status, "created_at": customer.created_at,
+            } for customer in customers],
+            "suppliers": [{
+                "id": supplier.id, "name": supplier.name, "payment_terms": supplier.payment_terms,
+                "credit_days": supplier.credit_days, "active": supplier.active, "created_at": supplier.created_at,
+            } for supplier in suppliers],
+            "installations": [{
+                "id": installation.id, "folio": installation.folio, "customer": customer_name or "Cliente sin ficha",
+                "city": customer_city or "", "scheduled_at": installation.scheduled_at,
+                "status": installation.status,
+            } for installation, customer_name, customer_city in installation_rows],
+            "expenses": [{
+                "id": expense.id, "occurred_on": expense.occurred_on, "category": expense.category,
+                "description": expense.description, "amount": expense.amount,
+                "project_folio": folio, "project_customer": customer_name or "Gasto operativo",
+                "project_city": customer_city or "", "account": account_name or "Sin cuenta vinculada",
+                "created_by": expense.created_by, "is_correction": expense.reversal_of_id is not None,
+            } for expense, folio, customer_name, customer_city, account_name in expense_rows],
+        },
         "cash_flow": cash_flow,
     }
 

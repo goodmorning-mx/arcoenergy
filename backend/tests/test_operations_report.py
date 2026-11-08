@@ -16,8 +16,8 @@ def test_operations_report_summarizes_stock_activity_statuses_and_expenses() -> 
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
     with Session(engine) as db:
-        customer = Customer(name="Cliente operativo", status="active")
-        supplier = Supplier(name="Proveedor solar", active=True)
+        customer = Customer(name="Cliente operativo", phone="5550101", address="Privado 123", status="active", city="Tampico")
+        supplier = Supplier(name="Proveedor solar", phone="5550202", email="privado@example.test", rfc="RFC123", payment_terms="credit", credit_days=30, active=True)
         inactive_supplier = Supplier(name="Proveedor anterior", active=False)
         db.add_all([customer, supplier, inactive_supplier]); db.flush()
         installation = Installation(customer_id=customer.id, folio="AE-OT-REPORT", status="scheduled")
@@ -46,6 +46,17 @@ def test_operations_report_summarizes_stock_activity_statuses_and_expenses() -> 
     assert report["installations_by_status"] == [{"status": "scheduled", "count": 1}]
     assert report["expenses"]["total"] == Decimal("850.00")
     assert report["expenses"]["by_category"] == [{"category": "Viáticos", "amount": Decimal("850.00")}]
+    assert report["details"]["customers"][0]["name"] == "Cliente operativo"
+    assert report["details"]["customers"][0]["city"] == "Tampico"
+    assert "phone" not in report["details"]["customers"][0] and "address" not in report["details"]["customers"][0]
+    supplier_detail = next(row for row in report["details"]["suppliers"] if row["name"] == "Proveedor solar")
+    assert supplier_detail["payment_terms"] == "credit"
+    assert "rfc" not in supplier_detail and "email" not in supplier_detail
+    assert report["details"]["installations"][0]["folio"] == "AE-OT-REPORT"
+    assert report["details"]["installations"][0]["customer"] == "Cliente operativo"
+    assert len(report["details"]["expenses"]) == 1
+    assert report["details"]["expenses"][0]["description"] == "Combustible"
+    assert report["details"]["expenses"][0]["project_folio"] == "AE-OT-REPORT"
 
 
 def test_operations_report_hides_inventory_costs_without_cost_permission_and_checks_date_range() -> None:

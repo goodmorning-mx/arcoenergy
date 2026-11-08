@@ -1005,3 +1005,13 @@ El reporte operativo ahora pagina el kardex por bloques de hasta 500 movimientos
 La API responde `total`, `offset`, `limit` y `has_more` para el kardex, conservando `truncated` por compatibilidad. La migración `202611080067` agrega versiones de US-27 y US-29 sin alterar los relatos fuente ni las revisiones previas.
 
 La implementación se integró mediante el PR [#88](https://github.com/goodmorning-mx/arcoenergy/pull/88), merge commit `26ce89aa59c0155a5086e674e98b395253ae3eda`. Factory terminó DEV en el run [#42444210651](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42444210651); PostgreSQL informa la revisión 067 y las versiones nuevas de US-27/US-29 están registradas. API, CRM y PWA reportan el mismo SHA; `/api/health`, `/api/health/ready`, `/crm/login` y `/app/login` respondieron HTTP 200. CI en PR y push aprobó Backend, CRM, Frontend, Next.js y Docker/Chrome; Backend: 152 pruebas aprobadas. El job externo `report` volvió a fallar sin afectar el despliegue.
+
+## Iteración 57 — detalle de reportes operativos (2026-11-08)
+
+El reporte operativo agrega listados de clientes, proveedores y órdenes, y un detalle de gastos con categoría, proyecto, cuenta, fecha y responsable. Clientes, proveedores y órdenes se presentan como fotografía actual; el gasto conserva el intervalo de fechas elegido. Se excluyen teléfono, domicilio, RFC, correo y enlaces de comprobantes de estos listados. Las correcciones de gasto permanecen identificadas y sus importes compensatorios no se ocultan.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-29 | Parcial funcional | Incluye detalles operativos para clientes, proveedores, órdenes y gastos. Falta que contabilidad valide los campos requeridos, defina fórmulas/estados financieros y confirme los criterios de fecha para sus reportes finales. |
+
+La migración `202611080068` agrega una nueva versión de US-29 sin editar la fuente literal ni las revisiones existentes. El reporte no se presenta como cierre contable y las fórmulas financieras permanecen sujetas a validación del contador.
