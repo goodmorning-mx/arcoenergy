@@ -65,6 +65,37 @@ def test_operations_report_hides_inventory_costs_without_cost_permission_and_che
     assert report["cash_flow"] is None
 
 
+def test_operations_report_paginates_all_inventory_movements_and_validates_page_size() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        item = InventoryItem(name="Cable solar", unit="metro", quantity=1000)
+        db.add(item); db.flush()
+        db.add_all([
+            InventoryMovement(
+                item_id=item.id, quantity=1, movement_type="in", unit_cost=10,
+                reason=f"Entrada {number}", created_at=datetime(2026, 11, 1, tzinfo=timezone.utc),
+            )
+            for number in range(503)
+        ])
+        db.commit()
+        accountant = AuthIdentity("accountant", "arcoenergy", frozenset({"contador"}), ROLE_PERMISSIONS["contador"], "contador@example.test", "Contador")
+
+        first = operations_report(limit=500, offset=0, identity=accountant, db=db)
+        second = operations_report(limit=500, offset=500, identity=accountant, db=db)
+        with pytest.raises(HTTPException) as invalid:
+            operations_report(limit=501, identity=accountant, db=db)
+
+    first_page = first["movements"]
+    second_page = second["movements"]
+    assert first_page["total"] == second_page["total"] == 503
+    assert first_page["offset"] == 0 and second_page["offset"] == 500
+    assert len(first_page["items"]) == 500 and first_page["has_more"] is True
+    assert len(second_page["items"]) == 3 and second_page["has_more"] is False
+    assert not ({row["id"] for row in first_page["items"]} & {row["id"] for row in second_page["items"]})
+    assert invalid.value.status_code == 422
+
+
 def test_operations_report_calculates_period_cash_flow_from_active_account_movements():
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
