@@ -992,3 +992,14 @@ Se agregan versiones nuevas de US-39, US-40 y US-41 para que cada interpretació
 La migración `202611080066` (revision 066) no actualiza ni elimina filas previas. La prueba de migración comprueba que el literal se conserva en las versiones anterior y nueva y que se añaden vínculos de fuente específicos.
 
 La implementación quedó integrada en el PR [#86](https://github.com/goodmorning-mx/arcoenergy/pull/86), commit de merge `0659cc199bf5976cbbb1cc4334a6a7dfb55f47ff`. Factory terminó la reconciliación DEV en el run [#42442879877](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42442879877); la base informa revisión 066 y el respaldo externo quedó verificado. La consulta de solo lectura confirmó versiones nuevas y ubicaciones específicas para US-39 a US-42. API, CRM y PWA reportan el mismo commit; `/`, `/login`, `/crm/login`, `/app/login`, `/api/health` y `/api/health/ready` respondieron HTTP 200. CI del PR aprobó Backend, CRM, Frontend, Next.js y Docker/Chrome; backend: 150 pruebas aprobadas. El job externo `report` falló, sin afectar la integración ni el despliegue.
+
+## Iteración 56 — paginación y exportación completa del kardex (2026-11-08)
+
+El reporte operativo ahora pagina el kardex por bloques de hasta 500 movimientos para el intervalo solicitado. CRM muestra el total, permite cargar páginas adicionales y descarga el intervalo completo a CSV, solicitando las páginas restantes antes de generar el archivo. El API mantiene visibles los costos solo para los roles con permiso. El filtro se conserva en todas las páginas y las consultas rechazan límites inválidos o desplazamientos negativos.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-27 | Parcial funcional | Filtro por fechas y artículo, paginación y exportación CSV completa del intervalo; falta validar rendimiento con el histórico real del almacén. |
+| US-29 | Parcial funcional | El kardex de reportes supera el límite de 500 mediante paginación y CSV completo. Falta acordar y validar los reportes financieros y sus fórmulas con contabilidad. |
+
+La API responde `total`, `offset`, `limit` y `has_more` para el kardex, conservando `truncated` por compatibilidad. La migración `202611080067` agrega versiones de US-27 y US-29 sin alterar los relatos fuente ni las revisiones previas.

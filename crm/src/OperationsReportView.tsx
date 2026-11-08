@@ -3,7 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 type OperationsReport = {
   basis: string;
   stock: { items:Array<{id:string;name:string;category:string;unit:string;quantity:number;reserved_quantity:number;available_quantity:number;minimum_quantity:number;low_stock:boolean;unit_cost?:number}>; item_count:number; low_stock_count:number; estimated_value:number|null };
-  movements: { items:Array<{id:string;created_at:string;item_name:string;unit:string;movement_type:string;quantity:number;installation_folio:string|null;reason:string;created_by:string;unit_cost?:number|null}>; truncated:boolean; totals_by_type:Array<{movement_type:string;quantity:number}> };
+  movements: { items:Array<{id:string;created_at:string;item_name:string;unit:string;movement_type:string;quantity:number;installation_folio:string|null;reason:string;created_by:string;unit_cost?:number|null}>; total:number; offset:number; limit:number; has_more:boolean; truncated:boolean; totals_by_type:Array<{movement_type:string;quantity:number}> };
   customers_by_status:Array<{status:string;count:number}>;
   suppliers:{total:number;active:number;inactive:number};
   installations_by_status:Array<{status:string;count:number}>;
@@ -25,11 +25,13 @@ export function OperationsReportView({token}:{token:string}) {
   const [report,setReport] = useState<OperationsReport|null>(null);
   const [error,setError] = useState('');
   const [loading,setLoading] = useState(false);
+  const [loadingMore,setLoadingMore] = useState(false);
+  const [exporting,setExporting] = useState(false);
 
   useEffect(()=>{
     let active=true;
     setLoading(true); setError('');
-    const params=new URLSearchParams({from_date:range.from,to_date:range.to});
+    const params=new URLSearchParams({from_date:range.from,to_date:range.to,limit:'500',offset:'0'});
     void fetch(`/api/v1/reports/operations?${params}`,{headers:{Authorization:`Bearer ${token}`}})
       .then(async response=>{if(!response.ok){const body=await response.json().catch(()=>({}));throw new Error(body.detail||'No se pudo cargar el reporte operativo.');}return response.json();})
       .then((data:OperationsReport)=>{if(active)setReport(data);})
@@ -39,14 +41,39 @@ export function OperationsReportView({token}:{token:string}) {
   },[token,range]);
 
   function applyFilters(event:FormEvent<HTMLFormElement>){event.preventDefault();setRange({from:fromDate,to:toDate});}
-  function exportMovements(){
-    if(!report?.movements.items.length)return;
-    const includeCost=report.movements.items.some(row=>row.unit_cost!==undefined);
+  async function getMovementPage(offset:number){
+    const params=new URLSearchParams({from_date:range.from,to_date:range.to,limit:'500',offset:String(offset)});
+    const response=await fetch(`/api/v1/reports/operations?${params}`,{headers:{Authorization:`Bearer ${token}`}});
+    if(!response.ok){const body=await response.json().catch(()=>({}));throw new Error(body.detail||'No se pudo cargar el kardex.');}
+    return await response.json() as OperationsReport;
+  }
+  async function loadMoreMovements(){
+    if(!report||loadingMore||!report.movements.has_more)return;
+    setLoadingMore(true);setError('');
+    try{
+      const next=await getMovementPage(report.movements.items.length);
+      setReport(current=>current?{...current,movements:{...next.movements,items:[...current.movements.items,...next.movements.items]}}:next);
+    }catch(reason){setError(reason instanceof Error?reason.message:'No se pudo cargar el kardex.');}
+    finally{setLoadingMore(false);}
+  }
+  async function exportMovements(){
+    if(!report?.movements.items.length||exporting)return;
+    setExporting(true);setError('');
+    try{
+    const allMovements=[...report.movements.items];
+    while(allMovements.length<report.movements.total){
+      const next=await getMovementPage(allMovements.length);
+      if(!next.movements.items.length)throw new Error('El kardex cambió mientras se preparaba la descarga. Vuelve a consultar el periodo e inténtalo de nuevo.');
+      allMovements.push(...next.movements.items);
+    }
+    const includeCost=allMovements.some(row=>row.unit_cost!==undefined);
     const headers=['Fecha','Artículo','Movimiento','Cantidad','Unidad','Orden','Referencia','Responsable',...(includeCost?['Costo unitario']:[])];
     const escape=(value:unknown)=>{let cell=String(value??'');if(/^[=+\-@\t\r]/.test(cell))cell=`'${cell}`;return `"${cell.replace(/"/g,'""')}"`;};
-    const rows=report.movements.items.map(row=>[new Date(row.created_at).toLocaleString('es-MX'),row.item_name,row.movement_type,row.quantity,row.unit,row.installation_folio||'',row.reason,row.created_by,...(includeCost?[row.unit_cost??'']:[])]);
+    const rows=allMovements.map(row=>[new Date(row.created_at).toLocaleString('es-MX'),row.item_name,row.movement_type,row.quantity,row.unit,row.installation_folio||'',row.reason,row.created_by,...(includeCost?[row.unit_cost??'']:[])]);
     const file=URL.createObjectURL(new Blob([`\uFEFF${[headers,...rows].map(row=>row.map(escape).join(';')).join('\r\n')}`],{type:'text/csv;charset=utf-8'}));
-    const link=document.createElement('a');link.href=file;link.download=`arcoenergy-operacion-${range.from}-${range.to}.csv`;link.click();URL.revokeObjectURL(file);
+    const link=document.createElement('a');link.href=file;link.download=`arcoenergy-operacion-${range.from}-${range.to}.csv`;link.click();window.setTimeout(()=>URL.revokeObjectURL(file),1000);
+    }catch(reason){setError(reason instanceof Error?reason.message:'No se pudo preparar el CSV.');}
+    finally{setExporting(false);}
   }
 
   const maxExpense=Math.max(1,...(report?.expenses.by_category.map(item=>Number(item.amount))||[]));
@@ -71,7 +98,7 @@ export function OperationsReportView({token}:{token:string}) {
     <p className="operations-report-basis">{report?.basis||'El reporte distingue existencias actuales de actividad registrada en el periodo seleccionado.'}</p>
     {error&&<p role="alert" className="error-message">{error}</p>}
     {report&&<>
-      <section className="metric-grid"><OperationsMetric label="ARTÍCULOS" value={String(report.stock.item_count)} icon="▦"/><OperationsMetric label="STOCK BAJO" value={String(report.stock.low_stock_count)} icon="!"/><OperationsMetric label="MOVIMIENTOS" value={String(report.movements.items.length)} icon="↕"/><OperationsMetric label="GASTOS CAPTURADOS" value={money(report.expenses.total)} icon="$"/></section>
+      <section className="metric-grid"><OperationsMetric label="ARTÍCULOS" value={String(report.stock.item_count)} icon="▦"/><OperationsMetric label="STOCK BAJO" value={String(report.stock.low_stock_count)} icon="!"/><OperationsMetric label="MOVIMIENTOS" value={String(report.movements.total)} icon="↕"/><OperationsMetric label="GASTOS CAPTURADOS" value={money(report.expenses.total)} icon="$"/></section>
       {report.cash_flow&&<section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">FLUJO DE CAJA · CUENTAS ACTIVAS</span><h2>Dinero registrado en el periodo</h2></div><span className="status-chip status-approved">{range.from} — {range.to}</span></div><div className="cash-flow-metrics"><OperationsMetric label="SALDO AL INICIO" value={money(report.cash_flow.opening_balance)} icon="$"/><OperationsMetric label="APERTURAS EN EL PERIODO" value={money(report.cash_flow.opening_entries)} icon="＋"/><OperationsMetric label="ENTRADAS REGISTRADAS" value={money(report.cash_flow.inflows)} icon="↗"/><OperationsMetric label="SALIDAS REGISTRADAS" value={money(report.cash_flow.outflows)} icon="↘"/><OperationsMetric label="TRANSFERENCIAS RECIBIDAS" value={money(report.cash_flow.transfers_in)} icon="⇢"/><OperationsMetric label="TRANSFERENCIAS ENVIADAS" value={money(report.cash_flow.transfers_out)} icon="⇠"/><OperationsMetric label="SALDO AL CIERRE" value={money(report.cash_flow.closing_balance)} icon="＝"/></div><p className="operations-report-basis">{report.cash_flow.basis}</p><div className="data-table-wrap"><table className="data-table"><thead><tr><th>CUENTA</th><th>TIPO</th><th>SALDO INICIAL</th><th>APERTURA EN PERIODO</th><th>ENTRADAS</th><th>SALIDAS</th><th>TRANSFERENCIAS RECIBIDAS</th><th>TRANSFERENCIAS ENVIADAS</th><th>SALDO AL CIERRE</th></tr></thead><tbody>{report.cash_flow.accounts.map(account=><tr key={account.id}><td><b>{account.name}</b></td><td>{account.account_type==='cash'?'Efectivo':'Banco'}</td><td>{money(account.opening_balance)}</td><td>{money(account.opening_entries)}</td><td>{money(account.inflows)}</td><td>{money(account.outflows)}</td><td>{money(account.transfers_in)}</td><td>{money(account.transfers_out)}</td><td><b>{money(account.closing_balance)}</b></td></tr>)}</tbody></table>{!report.cash_flow.accounts.length&&<p className="muted-copy">No hay cuentas activas configuradas.</p>}</div></section>}
       <section className="dashboard-grid operations-report-grid">
         <article className="surface-card"><div className="section-title"><div><span className="eyebrow">EXISTENCIA ACTUAL</span><h2>Artículos por disponibilidad</h2></div>{report.stock.estimated_value!==null&&<strong>{money(report.stock.estimated_value)}</strong>}</div>{report.stock.items.length?<div className="stock-pie-layout"><div className="stock-pie" role="img" aria-label={`${stockStatusCounts.available} artículos disponibles, ${stockStatusCounts.low} con stock bajo y ${stockStatusCounts.depleted} agotados`} style={{background:`conic-gradient(${stockChartStops})`}}><div><b>{report.stock.item_count}</b><span>artículos</span></div></div><div className="stock-pie-legend">{stockStatusRows.map(row=><div key={row.label}><i style={{background:row.color}}/><span>{row.label}</span><b>{row.count}</b></div>)}</div></div>:<p className="muted-copy">No hay artículos registrados.</p>}</article>
@@ -79,7 +106,7 @@ export function OperationsReportView({token}:{token:string}) {
       </section>
       <section className="dashboard-grid operations-report-grid operations-status-grid"><article className="surface-card"><div className="section-title"><div><span className="eyebrow">CLIENTES</span><h2>Por estado</h2></div></div>{statusRows(report.customers_by_status)}</article><article className="surface-card"><div className="section-title"><div><span className="eyebrow">ÓRDENES / PROYECTOS</span><h2>Por estado</h2></div></div>{statusRows(report.installations_by_status)}</article><article className="surface-card"><div className="section-title"><div><span className="eyebrow">PROVEEDORES</span><h2>Estado actual · {report.suppliers.total} en total</h2></div></div>{statusRows([{status:'Activos',count:report.suppliers.active},{status:'Inactivos',count:report.suppliers.inactive}])}</article></section>
       <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">STOCK DISPONIBLE</span><h2>Existencias detalladas por artículo</h2></div><span className="status-legend">{report.stock.item_count} artículos · cantidades actuales</span></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>ARTÍCULO</th><th>CATEGORÍA</th><th>EXISTENCIA FÍSICA</th><th>RESERVADO</th><th>DISPONIBLE</th><th>MÍNIMO</th><th>ESTADO</th></tr></thead><tbody>{report.stock.items.map(item=>{const available=Number(item.available_quantity);const low=available>0&&Number(item.minimum_quantity)>0&&available<=Number(item.minimum_quantity);const depleted=available<=0;return <tr key={item.id}><td><b>{item.name}</b></td><td>{item.category||'Sin categoría'}</td><td>{item.quantity} {item.unit}</td><td>{item.reserved_quantity} {item.unit}</td><td><b>{item.available_quantity} {item.unit}</b></td><td>{item.minimum_quantity} {item.unit}</td><td><span className={`stock-state ${depleted?'depleted':low?'low':'available'}`}>{depleted?'Agotado':low?'Stock bajo':'Disponible'}</span></td></tr>})}</tbody></table>{!report.stock.items.length&&<p className="muted-copy">No hay artículos registrados.</p>}</div></section>
-      <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">KARDEX DEL PERIODO</span><h2>Entradas, salidas y actividad</h2>{report.movements.truncated&&<small className="status-legend">Se muestran los 500 movimientos más recientes; reduce el periodo para consultar menos.</small>}</div><button className="button button-outline" disabled={!report.movements.items.length} onClick={exportMovements}>Descargar CSV</button></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>FECHA</th><th>ARTÍCULO</th><th>MOVIMIENTO</th><th>CANTIDAD</th><th>ORDEN / REFERENCIA</th>{report.movements.items.some(row=>row.unit_cost!==undefined)&&<th>COSTO UNITARIO</th>}</tr></thead><tbody>{report.movements.items.map(row=><tr key={row.id}><td>{new Date(row.created_at).toLocaleString('es-MX')}</td><td>{row.item_name}<small className="sub-cell">{row.created_by}</small></td><td>{movementNames[row.movement_type]||row.movement_type}</td><td>{row.quantity} {row.unit}</td><td>{row.installation_folio||'—'}<small className="sub-cell">{row.reason||'—'}</small></td>{report.movements.items.some(item=>item.unit_cost!==undefined)&&<td>{row.unit_cost==null?'Sin dato':money(row.unit_cost)}</td>}</tr>)}</tbody></table>{!report.movements.items.length&&<p className="muted-copy">No hay movimientos en el periodo.</p>}</div></section>
+      <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">KARDEX DEL PERIODO</span><h2>Entradas, salidas y actividad</h2><small className="status-legend">Mostrando {report.movements.items.length} de {report.movements.total} movimientos.</small></div><div className="top-actions"><button className="button button-outline" disabled={!report.movements.items.length||exporting} onClick={()=>void exportMovements()}>{exporting?'Preparando CSV…':'Descargar CSV completo'}</button></div></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>FECHA</th><th>ARTÍCULO</th><th>MOVIMIENTO</th><th>CANTIDAD</th><th>ORDEN / REFERENCIA</th>{report.movements.items.some(row=>row.unit_cost!==undefined)&&<th>COSTO UNITARIO</th>}</tr></thead><tbody>{report.movements.items.map(row=><tr key={row.id}><td>{new Date(row.created_at).toLocaleString('es-MX')}</td><td>{row.item_name}<small className="sub-cell">{row.created_by}</small></td><td>{movementNames[row.movement_type]||row.movement_type}</td><td>{row.quantity} {row.unit}</td><td>{row.installation_folio||'—'}<small className="sub-cell">{row.reason||'—'}</small></td>{report.movements.items.some(item=>item.unit_cost!==undefined)&&<td>{row.unit_cost==null?'Sin dato':money(row.unit_cost)}</td>}</tr>)}</tbody></table>{!report.movements.items.length&&<p className="muted-copy">No hay movimientos en el periodo.</p>}</div>{report.movements.has_more&&<div className="table-pagination"><span>El reporte tiene más movimientos dentro de este intervalo.</span><button className="button button-outline" onClick={()=>void loadMoreMovements()} disabled={loadingMore}>{loadingMore?'Cargando…':'Cargar siguientes 500'}</button></div>}</section>
     </>}
   </div>;
 }

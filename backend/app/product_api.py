@@ -2943,12 +2943,16 @@ def profitability_report(
 def operations_report(
     from_date: date | None = None,
     to_date: date | None = None,
+    limit: int = 500,
+    offset: int = 0,
     identity: AuthIdentity = Depends(require_permissions(auth_service, "reports:read")),
     db: Session = Depends(get_db),
 ):
     """Summarize current stock and recorded operational activity without inferred accounting rules."""
     if from_date and to_date and from_date > to_date:
         raise HTTPException(422, "La fecha inicial debe ser anterior a la fecha final.")
+    if limit < 1 or limit > 500 or offset < 0:
+        raise HTTPException(422, "La página debe tener entre 1 y 500 movimientos y un desplazamiento no negativo.")
     start_at = datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc) if from_date else None
     end_at = datetime.combine(to_date + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc) if to_date else None
 
@@ -2973,18 +2977,27 @@ def operations_report(
         if can_read_costs:
             stock_value += Decimal(item.quantity) * Decimal(item.unit_cost or 0)
 
+    movement_filters = []
+    if start_at:
+        movement_filters.append(InventoryMovement.created_at >= start_at)
+    if end_at:
+        movement_filters.append(InventoryMovement.created_at < end_at)
+    movement_total = db.scalar(
+        select(func.count(InventoryMovement.id)).where(*movement_filters)
+    ) or 0
     movement_query = select(InventoryMovement, InventoryItem.name, InventoryItem.unit, Installation.folio).join(
         InventoryItem, InventoryItem.id == InventoryMovement.item_id
     ).outerjoin(Installation, Installation.id == InventoryMovement.installation_id)
-    if start_at:
-        movement_query = movement_query.where(InventoryMovement.created_at >= start_at)
-    if end_at:
-        movement_query = movement_query.where(InventoryMovement.created_at < end_at)
-    movement_rows = db.execute(movement_query.order_by(InventoryMovement.created_at.desc(), InventoryMovement.id).limit(501)).all()
-    truncated = len(movement_rows) > 500
-    movements = []
+    if movement_filters:
+        movement_query = movement_query.where(*movement_filters)
+    movement_rows = db.execute(
+        movement_query.order_by(InventoryMovement.created_at.desc(), InventoryMovement.id.desc())
+        .limit(limit).offset(offset)
+    ).all()
+    has_more = offset + len(movement_rows) < movement_total
+    inventory_movement_items = []
     movement_totals: dict[str, Decimal] = {}
-    for movement, item_name, unit, folio in movement_rows[:500]:
+    for movement, item_name, unit, folio in movement_rows:
         movement_totals[movement.movement_type] = movement_totals.get(movement.movement_type, Decimal("0")) + Decimal(movement.quantity)
         row = {
             "id": movement.id, "created_at": movement.created_at, "item_name": item_name,
@@ -2993,7 +3006,7 @@ def operations_report(
         }
         if can_read_costs:
             row["unit_cost"] = movement.unit_cost
-        movements.append(row)
+        inventory_movement_items.append(row)
 
     def status_counts(rows):
         counts: dict[str, int] = {}
@@ -3018,7 +3031,7 @@ def operations_report(
     if "accounts:read" in identity.permissions:
         accounts = db.scalars(select(FinancialAccount).where(FinancialAccount.active.is_(True)).order_by(FinancialAccount.name)).all()
         account_ids = [account.id for account in accounts]
-        movements = db.scalars(select(CashMovement).where(CashMovement.account_id.in_(account_ids))).all() if account_ids else []
+        cash_movements = db.scalars(select(CashMovement).where(CashMovement.account_id.in_(account_ids))).all() if account_ids else []
         account_rows = []
         total_opening = Decimal("0")
         total_opening_entries = Decimal("0")
@@ -3030,7 +3043,7 @@ def operations_report(
         for account in accounts:
             seed = Decimal(account.opening_balance or 0)
             seed_date = account.opening_balance_date
-            account_movements = [row for row in movements if row.account_id == account.id and row.occurred_on >= seed_date]
+            account_movements = [row for row in cash_movements if row.account_id == account.id and row.occurred_on >= seed_date]
             if from_date:
                 if seed_date < from_date:
                     opening = seed + sum((Decimal(row.amount) if row.direction == "in" else -Decimal(row.amount)
@@ -3088,7 +3101,8 @@ def operations_report(
             "estimated_value": stock_value if can_read_costs else None,
         },
         "movements": {
-            "items": movements, "truncated": truncated,
+            "items": inventory_movement_items, "total": movement_total, "offset": offset,
+            "limit": limit, "has_more": has_more, "truncated": has_more,
             "totals_by_type": [{"movement_type": key, "quantity": quantity} for key, quantity in sorted(movement_totals.items())],
         },
         "customers_by_status": status_counts(customers),
