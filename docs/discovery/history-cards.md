@@ -916,6 +916,8 @@ La implementación se integró mediante el PR [#73](https://github.com/goodmorni
 
 La venta de contado puede corregirse con un motivo obligatorio solo si la orden sigue asignada, ningún instalador la ha confirmado y todavía no hay actividad física de materiales, checklist de instalación ni cobros derivados. La operación append-only conserva venta y folio, crea la reversa enlazada al ingreso, registra una tarjeta de corrección única, cancela la orden y libera la reserva de inventario dentro de la misma transacción. La cancelación también se conserva en la bitácora del cliente. La PWA impide después confirmar la orden, emitir/consumir material o registrar gastos en ella. Las ventas a crédito y las órdenes que ya comenzaron quedan protegidas y requieren sus propios ciclos de corrección antes de habilitarlas.
 
+La implementación se integró mediante el PR [#75](https://github.com/goodmorning-mx/arcoenergy/pull/75), merge commit `3310c4f978cf498505616b7acad4982cd8f9d853`. Factory completó el despliegue DEV en el run [#42405193148](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42405193148), verificó el esquema y el respaldo. `/api/health` y `/login`, `/crm/login`, `/app/login` respondieron HTTP 200; API, CRM y PWA reportan el mismo SHA. Backend: 143 pruebas aprobadas; builds de CRM/Next, Docker/Chrome y PWA pasaron en CI. El chequeo externo de reporte de evento volvió a fallar por la dependencia ajena a la funcionalidad.
+
 | Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
 | --- | --- | --- |
 | US-15 | Parcial funcional | Se puede corregir una venta de contado preinstalación; Iteración 51 añade ventas a crédito sin cobranza neta. Ventas con pagos activos o avance/material emitido requieren flujos adicionales. |
