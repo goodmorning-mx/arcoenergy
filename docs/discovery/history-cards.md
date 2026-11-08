@@ -949,3 +949,15 @@ La PWA permite al usuario autorizar avisos del dispositivo desde Inventario. Con
 | Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
 | --- | --- | --- |
 | US-26 | Parcial funcional | Aviso local agrupado según el mínimo por artículo con permiso explícito; falta push en segundo plano y acordar destinatarios. |
+
+## Iteración 53 — corregir compras desde su origen (2026-11-08)
+
+Administración o contabilidad puede corregir una compra solo cuando no tiene pagos activos y ninguno de sus materiales presenta movimientos de almacén posteriores. Primero se revierten los pagos desde su historial; sus movimientos compensatorios se conservan. La corrección agrega una fila enlazada y movimientos de salida de almacén relacionados con las entradas originales, repone al proveedor su saldo previo a la compra, conserva factura y renglones, y restaura el costo unitario previo que quedó guardado al registrar la compra. Compras antiguas sin el costo previo registrado requieren conciliación manual; movimientos de inventario posteriores requieren un flujo aparte de devolución. No se borran registros.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-21 | Parcial funcional | La compra conserva sus renglones/factura y ahora se puede compensar antes de uso posterior; impuestos, fletes y descuentos siguen sin regla contable aprobada. |
+| US-31 | Parcial funcional | Reversa de compra y pagos enlazados actualiza saldo proveedor, caja y almacén; conciliación sigue pendiente. |
+| US-35 | Parcial funcional | Compras previas a movimientos posteriores pueden corregirse con enlaces entre cuenta por pagar e inventario; falta cierre contable de doble partida. |
+| US-36 | Parcial funcional | Gastos, ventas elegibles y compras elegibles tienen corrección append-only desde origen. Faltan devoluciones/mermas comerciales con actividad de campo y ajustes complejos de inventario. |
+| US-38 | Parcial funcional | El inventario disponible y su costo unitario se restauran en la corrección; estados de resultados formales y validación contable siguen pendientes. |

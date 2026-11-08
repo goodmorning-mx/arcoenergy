@@ -7,6 +7,7 @@ from uuid import uuid4
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import create_engine, func, select
+from sqlalchemy import inspect, text
 
 from app.models import Base, HistoryCard
 
@@ -91,3 +92,31 @@ def test_stock_notification_migration_appends_us26_history_revision() -> None:
     assert versions[1].iteration == "Iteración 52 · avisos de stock bajo en PWA · 2026-11-08"
     assert any("permiso de notificaciones" in item for item in versions[1].acceptance_criteria)
     assert any("aplicación cerrada" in item for item in versions[1].unresolved_questions)
+
+
+def test_purchase_correction_migration_adds_schema_and_appends_source_linked_versions() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    records = json.loads((ROOT / "app" / "history_card_initial.json").read_text(encoding="utf-8"))
+    now = datetime.now(timezone.utc)
+    for row in records:
+        row.update(id=str(uuid4()), recorded_by="source-import", created_at=now)
+    migration = load_migration("202611080064_purchase_correction_history.py")
+    with engine.begin() as connection:
+        connection.execute(HistoryCard.__table__.insert(), records)
+        connection.execute(text("ALTER TABLE ae_purchase_lines DROP COLUMN previous_unit_cost"))
+        source = connection.scalar(select(HistoryCard.source_literal).where(HistoryCard.story_id == "US-36", HistoryCard.version == 1))
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+        columns = {column["name"] for column in inspect(connection).get_columns("ae_purchase_lines")}
+        corrections = inspect(connection).get_columns("ae_purchase_corrections")
+        version = connection.execute(select(HistoryCard.version, HistoryCard.iteration, HistoryCard.source_literal,
+            HistoryCard.acceptance_criteria, HistoryCard.unresolved_questions)
+            .where(HistoryCard.story_id == "US-36").order_by(HistoryCard.version.desc())).first()
+
+    assert "previous_unit_cost" in columns
+    assert {column["name"] for column in corrections} >= {"purchase_id", "reason", "amount"}
+    assert version is not None and version.version == 2
+    assert version.iteration == "Iteración 53 · corrección de compras antes de movimiento de almacén · 2026-11-08"
+    assert version.source_literal == source
+    assert any("pagos activos" in item for item in version.unresolved_questions)
