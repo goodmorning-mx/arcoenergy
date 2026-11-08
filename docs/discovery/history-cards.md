@@ -351,7 +351,7 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 - **Relato literal:** “la web es una web donde vamos a cotizar por IA agentica; donde hablamos con una IA para que nos cotice paneles solares. a su vez este proyecto va a usar el MCP server y otros modulos de goodmorning-factry por lo que tambien ve a leerlos en nuestro github.”
 - **Necesidad derivada:** como visitante, quiero conversar con una IA desde el sitio público para entender opciones y solicitar una cotización solar.
 - **Criterios iniciales:** integrar los módulos `gm-agent` y `gm-mcp`; cotizar solo con un paquete aprobado; limitar las herramientas a información pública; no inventar precios ni crear registros; capturar contacto con consentimiento.
-- **Estado:** asistente consulta tamaños y devuelve total/inversor únicamente desde paquetes aprobados; la consulta directa del catálogo del CRM exige permiso. Formulario de prospecto con consentimiento. Requiere configurar la clave administrada de OpenAI en DEV; Drive, WhatsApp Business y carga de recibos no se declaran integrados.
+- **Estado:** asistente consulta tamaños y devuelve total/inversor únicamente desde paquetes aprobados; la consulta directa del catálogo del CRM exige permiso. La clave administrada de OpenAI funciona en DEV y el chat responde en español. Una solicitud de 8 paneles no devolvió precio porque el catálogo no ofreció un paquete activo aprobado; el asistente comunicó esa limitación sin inventar datos. El formulario de prospecto pide consentimiento. Falta cargar/validar el catálogo comercial real y verificar la captura con consentimiento; Drive, WhatsApp Business y carga de recibos no se declaran integrados.
 
 ### US-42 — Conservar cada tarjeta como dato versionado por iteración
 
@@ -965,3 +965,13 @@ Administración o contabilidad puede corregir una compra solo cuando no tiene pa
 | US-38 | Parcial funcional | El inventario disponible y su costo unitario se restauran en la corrección; estados de resultados formales y validación contable siguen pendientes. |
 
 La primera aplicación de Iteración 53 en DEV falló al detectar que la tabla nueva no existía en una base ya inicializada y Coolify revirtió el contenedor. El PR correctivo [#82](https://github.com/goodmorning-mx/arcoenergy/pull/82) agregó la creación explícita e idempotente de esa tabla; el despliegue final terminó correctamente en Factory run [#42439887917](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42439887917), con la revisión de esquema 064 y el respaldo verificados. API, CRM y PWA reportan el mismo commit `292446d530187f4ec08770a16dd74c238ea48dfd`. `/`, `/api/health`, `/api/version`, `/login`, `/crm/login` y `/app/login` respondieron HTTP 200; Chrome headless renderizó el texto «Iniciar sesión» en las tres rutas de acceso. Backend: 148 pruebas aprobadas; CI de Backend, CRM, Frontend, Next.js y Docker/Chrome aprobado. El chequeo externo `report` continúa fallando por el notificador de eventos del repositorio, separado del despliegue del producto.
+
+## Iteración 54 — verificación del agente público y catálogo comercial (2026-11-08)
+
+Se verificó en DEV el asistente público con dos consultas reales, sin crear prospectos ni cotizaciones. La consulta sobre tamaños devolvió HTTP 200 en español. Al pedir una propuesta de 8 paneles, el agente explicó que el catálogo no ofrece un paquete activo y aprobado para esa cantidad, y no inventó un precio. La clave administrada del modelo está configurada y operativa; la falta de cotización se debe al catálogo comercial pendiente, no a un error del asistente. El resultado quedó agregado como versión nueva, sin cambiar el relato literal de US-41.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-41 | Parcial funcional | El agente web está operativo y se niega a inventar un precio ante un paquete no aprobado. Administración debe cargar/aprobar los paquetes reales; falta probar el formulario con consentimiento y cotejar el catálogo con ventas. |
+
+El asistente se verificó mediante `POST /api/v1/public/agent/chat` (HTTP 200) con consultas de tamaños y cotización de 8 paneles. La primera respuesta fue “Manejamos sistemas que van desde un mínimo de 4 paneles hasta un máximo de 20 paneles”; la segunda indicó que no había paquete activo aprobado para 8 paneles. No se enviaron datos personales. La migración 065 conserva la fuente original y agrega la verificación como una nueva versión de US-41.

@@ -122,3 +122,27 @@ def test_purchase_correction_migration_adds_schema_and_appends_source_linked_ver
     assert version.iteration == "Iteración 53 · corrección de compras antes de movimiento de almacén · 2026-11-08"
     assert version.source_literal == source
     assert any("pagos activos" in item for item in version.unresolved_questions)
+
+
+def test_public_agent_live_verification_appends_card_without_changing_source() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    records = json.loads((ROOT / "app" / "history_card_initial.json").read_text(encoding="utf-8"))
+    now = datetime.now(timezone.utc)
+    for row in records:
+        row.update(id=str(uuid4()), recorded_by="source-import", created_at=now)
+    migration = load_migration("202611080065_public_agent_live_verification.py")
+    with engine.begin() as connection:
+        connection.execute(HistoryCard.__table__.insert(), records)
+        source = connection.scalar(select(HistoryCard.source_literal).where(HistoryCard.story_id == "US-41", HistoryCard.version == 1))
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+        versions = connection.execute(select(HistoryCard.version, HistoryCard.iteration, HistoryCard.source_literal,
+            HistoryCard.acceptance_criteria, HistoryCard.unresolved_questions)
+            .where(HistoryCard.story_id == "US-41").order_by(HistoryCard.version)).all()
+
+    assert len(versions) == 2
+    assert all(version.source_literal == source for version in versions)
+    assert versions[1].iteration == "Iteración 54 · verificación del agente público y catálogo comercial · 2026-11-08"
+    assert any("no inventó un precio" in item for item in versions[1].acceptance_criteria)
+    assert any("aprobado de 8 paneles" in item for item in versions[1].unresolved_questions)
