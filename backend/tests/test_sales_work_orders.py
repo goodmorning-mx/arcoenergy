@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from gm_auth.models import AuthIdentity, memberships, users
 
 from app.models import Activity, Base, CashMovement, Customer, FinancialAccount, Installation, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, Quote, Receivable, Sale, SaleCorrection, WorkOrderMaterial
-from app.product_api import ExpenseInput, InventoryReturnInput, PaymentCorrectionInput, SaleInput, SaleMaterialInput, StockInput, _installment_due_date, add_expense, consume_inventory, create_sale, list_financial_accounts, list_inventory, profitability_report, return_inventory, reverse_cash_sale
+from app.product_api import ExpenseInput, InventoryReturnInput, PaymentCorrectionInput, PaymentInput, SaleInput, SaleMaterialInput, StockInput, _installment_due_date, add_expense, consume_inventory, create_sale, list_financial_accounts, list_inventory, list_receivables, profitability_report, record_payment, return_inventory, reverse_cash_sale
 from app.roles import ROLE_PERMISSIONS
 from app import product_api
 
@@ -200,8 +200,7 @@ def test_credit_sale_creates_installment_schedule_without_changing_cash(monkeypa
         created = create_sale(SaleInput(quote_id=quote.id, sale_type="credit", due_date=date(2026, 1, 31),
             installment_count=3, installment_frequency="monthly",
             lead_installer="field@example.test", materials=[SaleMaterialInput(item_id=item.id, quantity=1)]), identity, db)
-        with pytest.raises(HTTPException) as correction_error:
-            reverse_cash_sale(created["id"], PaymentCorrectionInput(reason="No procede"), identity, db)
+        corrected = reverse_cash_sale(created["id"], PaymentCorrectionInput(reason="Financiamiento cancelado"), identity, db)
         receivables = db.scalars(select(Receivable).where(Receivable.quote_id == quote.id).order_by(Receivable.installment_number)).all()
         cash_balance = list_financial_accounts(db)[0]["current_balance"]
 
@@ -213,7 +212,8 @@ def test_credit_sale_creates_installment_schedule_without_changing_cash(monkeypa
     assert sum((row.amount for row in receivables), Decimal("0.00")) == Decimal("71000.00")
     assert all(row.paid_amount == Decimal("0.00") for row in receivables)
     assert cash_balance == Decimal("1000.00")
-    assert correction_error.value.status_code == 409
+    assert corrected["correction"]["cash_movement_id"] is None
+    assert corrected["can_reverse"] is False
 
 
 def test_preinstallation_cash_sale_correction_restores_cash_and_releases_stock(monkeypatch) -> None:
@@ -256,6 +256,35 @@ def test_preinstallation_cash_sale_correction_restores_cash_and_releases_stock(m
     assert report["totals"]["sales"] == Decimal("0.00")
     assert len(activities) == 1
     assert duplicate.value.status_code == 409
+
+
+def test_unpaid_credit_sale_correction_hides_receivables_and_blocks_new_payments(monkeypatch) -> None:
+    monkeypatch.setattr(product_api.auth_service, "engine", installer_directory())
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    admin = AuthIdentity("admin-1", "arcoenergy", frozenset({"administrador"}), ROLE_PERMISSIONS["administrador"], "admin@example.test", "Admin")
+    with Session(engine) as db:
+        customer = Customer(name="Cliente Crédito", email="cliente@example.test")
+        account = FinancialAccount(name="Banco", account_type="bank", opening_balance=0, opening_balance_date=date.today())
+        item = InventoryItem(name="Panel 600 W", quantity=10, unit_cost=900)
+        quote = Quote(folio="AE-Q-CREDIT-REVERSE", customer_id="", panel_count=8, panel_brand="Solar", panel_watts=600,
+            structure_name="Fija", inverter="Inversor 5 kW", payment_method="Financiamiento", panel_subtotal=80000,
+            structure_cost=10000, inverter_cost=15000, total=105000, status="accepted", pricing_approved=True)
+        db.add_all([customer, account, item]); db.flush(); quote.customer_id = customer.id; db.add(quote); db.commit()
+        sale = create_sale(SaleInput(quote_id=quote.id, sale_type="credit", due_date=date.today(), installment_count=3,
+            lead_installer="field@example.test", materials=[SaleMaterialInput(item_id=item.id, quantity=4)]), admin, db)
+        installments = db.scalars(select(Receivable).where(Receivable.quote_id == quote.id)).all()
+        assert len(list_receivables(db)) == 3
+
+        corrected = reverse_cash_sale(sale["id"], PaymentCorrectionInput(reason="Financiamiento cancelado"), admin, db)
+        hidden = list_receivables(db)
+        with pytest.raises(HTTPException) as blocked:
+            record_payment(installments[0].id, PaymentInput(amount=Decimal("100.00"), account_id=account.id), admin, db)
+
+    assert corrected["correction"]["cash_movement_id"] is None
+    assert corrected["can_reverse"] is False
+    assert hidden == []
+    assert blocked.value.status_code == 409
 
 
 def test_cash_sale_correction_is_blocked_after_installer_confirmation(monkeypatch) -> None:

@@ -920,9 +920,22 @@ La implementación se integró mediante el PR [#75](https://github.com/goodmorni
 
 | Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
 | --- | --- | --- |
-| US-15 | Funcional básico | Se puede corregir una venta de contado preinstalación, enlazando reversa de caja y liberación de reserva. Ventas a crédito y ventas con avance/material emitido requieren flujos adicionales. |
+| US-15 | Parcial funcional | Se puede corregir una venta de contado preinstalación; Iteración 51 añade ventas a crédito sin cobranza neta. Ventas con pagos activos o avance/material emitido requieren flujos adicionales. |
 | US-18 | Funcional básico | La reversa enlazada de venta restaura la misma cuenta de caja/banco. Conciliación sigue pendiente. |
 | US-32 | Parcial funcional | Folio y orden originales se conservan y se marcan cancelados; sigue pendiente la entidad de proyecto independiente. |
-| US-35 | Parcial funcional | Caja, orden y reserva se actualizan en conjunto al corregir una venta elegible. Inventario ya emitido, crédito, reglas fiscales y doble partida siguen pendientes. |
-| US-36 | Parcial funcional | Reversa integral disponible para gastos y ventas elegibles, además de correcciones de caja/transferencias/pagos existentes. Faltan ventas de crédito, compras y movimientos físicos de inventario. |
+| US-35 | Parcial funcional | Caja, orden y reserva se actualizan en conjunto al corregir una venta elegible. Crédito sin cobros netos se añade en Iteración 51; inventario emitido, reglas fiscales y doble partida siguen pendientes. |
+| US-36 | Parcial funcional | Reversa integral disponible para gastos y ventas elegibles, además de correcciones de caja/transferencias/pagos existentes. Falta venta a crédito con pagos activos, compras y movimientos físicos de inventario. |
 | US-38 | Parcial funcional | El reporte incorpora la corrección de venta en el periodo de registro. El resultado todavía es operativo y preliminar. |
+
+## Iteración 51 — corrección de venta financiada sin cobranza neta (2026-11-08)
+
+La corrección de una venta financiada requiere que la orden siga sin actividad de campo y que no haya saldo pagado neto ni cobros sin reversa. Si hubo cobros, primero se corrigen desde el historial de cada cuota. La operación conserva venta, cuotas, orden y folio originales; agrega una corrección enlazada sin movimiento de caja, cancela la orden y libera la reserva. Las cuotas corregidas dejan de aparecer en cartera, panel, y portal de cliente, y se rechazan intentos de cobro tardíos. El reporte de rentabilidad ya resta la corrección en su fecha. Los datos originales permanecen disponibles para auditoría.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-11 | Parcial funcional | Se ofrece corrección de financiamiento sin cobranza neta y desaparecen cuotas anuladas de cartera; fórmulas/intereses y avisos automáticos siguen pendientes. |
+| US-15 | Parcial funcional | Ventas de contado y crédito pueden corregirse antes de actividad de campo; ventas con pagos netos activos requieren reversas previas y órdenes iniciadas siguen bloqueadas. |
+| US-16 | Parcial funcional | Cuotas corregidas dejan de presentarse y no admiten nuevos cobros; pagos distribuidos, reglas definitivas del financiamiento y notificaciones siguen pendientes. |
+| US-35 | Parcial funcional | La corrección enlaza venta, cartera, orden y reserva de inventario antes de campo; siguen pendientes otras operaciones relacionadas, doble partida y reglas fiscales. |
+| US-36 | Parcial funcional | Se agrega reversa de crédito sin cobro neto; falta cerrar corrección de ventas con actividad, compras y movimientos físicos de inventario. |
+| US-38 | Parcial funcional | Rentabilidad compensa la venta en la fecha de corrección; estados financieros formales, impuestos, intereses y validación del contador siguen pendientes. |

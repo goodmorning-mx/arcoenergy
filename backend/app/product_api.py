@@ -988,10 +988,18 @@ def _sale_result(db: Session, sale: Sale):
     materials = db.scalars(select(WorkOrderMaterial).where(WorkOrderMaterial.installation_id == sale.installation_id)).all()
     assignments = db.scalars(select(InstallationAssignment).where(InstallationAssignment.installation_id == sale.installation_id)).all()
     correction = db.scalar(select(SaleCorrection).where(SaleCorrection.sale_id == sale.id))
+    has_unreversed_collection = False
+    if sale.sale_type == "credit" and receivables:
+        credit_payments = db.scalars(select(CustomerPayment).join(Receivable, Receivable.id == CustomerPayment.receivable_id)
+                                     .where(Receivable.quote_id == sale.quote_id)).all()
+        reversed_payment_ids = {payment.reversal_of_id for payment in credit_payments if payment.reversal_of_id}
+        has_unreversed_collection = any(payment.reversal_of_id is None and payment.id not in reversed_payment_ids for payment in credit_payments)
+    credit_balance_clear = bool(receivables) and all(Decimal(row.paid_amount) == 0 for row in receivables) and not has_unreversed_collection
     progressed_tasks = any(task.get("done") and task.get("task") not in {"Confirmar materiales", "Asignar cuadrilla"} for task in (installation.checklist or [])) if installation else True
     has_stock_activity = db.scalar(select(InventoryMovement.id).where(InventoryMovement.installation_id == sale.installation_id).limit(1)) is not None
     can_reverse = bool(
-        correction is None and sale.sale_type == "cash" and installation and installation.status == "assigned"
+        correction is None and sale.sale_type in {"cash", "credit"} and installation and installation.status == "assigned"
+        and (sale.sale_type == "cash" or credit_balance_clear)
         and not progressed_tasks and not has_stock_activity
         and not any(row.confirmed_at for row in assignments)
         and all(Decimal(line.preissued_quantity) == 0 and Decimal(line.consumed_quantity) == 0 for line in materials)
@@ -1030,14 +1038,14 @@ def list_sales(db: Session = Depends(get_db)):
 
 
 @router.post("/sales/{sale_id}/reverse", status_code=201, dependencies=[Depends(require_permissions(auth_service, "sales:write"))])
-def reverse_cash_sale(sale_id: str, data: PaymentCorrectionInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+def reverse_sale(sale_id: str, data: PaymentCorrectionInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
     if not ({"administrador", "admin", "contador"} & set(identity.roles)):
         raise HTTPException(403, "Solo administración o contabilidad puede corregir una venta.")
     sale = db.scalar(select(Sale).where(Sale.id == sale_id).with_for_update())
     if sale is None:
         raise HTTPException(404, "Venta no encontrada.")
-    if sale.sale_type != "cash":
-        raise HTTPException(409, "La corrección de ventas a crédito debe considerar cuotas y cobranza; usa el flujo de cuentas por cobrar.")
+    if sale.sale_type not in {"cash", "credit"}:
+        raise HTTPException(409, "El tipo de venta no permite este flujo de corrección.")
     if db.scalar(select(SaleCorrection.id).where(SaleCorrection.sale_id == sale.id)):
         raise HTTPException(409, "Esta venta ya tiene una corrección registrada.")
     installation = db.scalar(select(Installation).where(Installation.id == sale.installation_id).with_for_update())
@@ -1052,24 +1060,37 @@ def reverse_cash_sale(sale_id: str, data: PaymentCorrectionInput, identity: Auth
     ):
         raise HTTPException(409, "No se puede revertir: la orden ya inició o tiene materiales emitidos, consumidos o confirmados.")
 
+    receivables = db.scalars(select(Receivable).where(Receivable.quote_id == sale.quote_id).with_for_update()).all()
+    credit_payments = db.scalars(select(CustomerPayment).join(Receivable, Receivable.id == CustomerPayment.receivable_id)
+                                 .where(Receivable.quote_id == sale.quote_id).with_for_update()).all()
+    reversed_payment_ids = {payment.reversal_of_id for payment in credit_payments if payment.reversal_of_id}
+    has_unreversed_collection = any(payment.reversal_of_id is None and payment.id not in reversed_payment_ids for payment in credit_payments)
+    if sale.sale_type == "credit" and not receivables:
+        raise HTTPException(409, "La venta a crédito no conserva sus cuotas enlazadas; revisa la cartera antes de corregirla.")
+    if sale.sale_type == "credit" and (any(Decimal(row.paid_amount) != 0 for row in receivables) or has_unreversed_collection):
+        raise HTTPException(409, "Revierte primero los cobros netos de la venta desde la bitácora de cada cuota.")
+
     cash_rows = db.scalars(select(CashMovement).where(
         CashMovement.source_type == "sale", CashMovement.source_id == sale.id,
     ).with_for_update()).all()
-    if len(cash_rows) != 1:
-        raise HTTPException(409, "La venta no conserva exactamente un ingreso de caja/banco enlazado; revisa el historial.")
-    cash = cash_rows[0]
-    if cash.reversal_of_id is not None or db.scalar(select(CashMovement.id).where(CashMovement.reversal_of_id == cash.id)):
-        raise HTTPException(409, "El ingreso de esta venta ya tiene una corrección registrada.")
-
-    reversal = CashMovement(
-        account_id=cash.account_id, direction="out", amount=cash.amount,
-        category="Corrección de venta", description=f"Corrección de venta {sale.folio}: {data.reason}",
-        occurred_on=date.today(), source_type="sale_reversal", source_id=sale.id,
-        reversal_of_id=cash.id, created_by=identity.email or "",
-    )
-    db.add(reversal); db.flush()
+    reversal = None
+    if sale.sale_type == "cash":
+        if len(cash_rows) != 1:
+            raise HTTPException(409, "La venta no conserva exactamente un ingreso de caja/banco enlazado; revisa el historial.")
+        cash = cash_rows[0]
+        if cash.reversal_of_id is not None or db.scalar(select(CashMovement.id).where(CashMovement.reversal_of_id == cash.id)):
+            raise HTTPException(409, "El ingreso de esta venta ya tiene una corrección registrada.")
+        reversal = CashMovement(
+            account_id=cash.account_id, direction="out", amount=cash.amount,
+            category="Corrección de venta", description=f"Corrección de venta {sale.folio}: {data.reason}",
+            occurred_on=date.today(), source_type="sale_reversal", source_id=sale.id,
+            reversal_of_id=cash.id, created_by=identity.email or "",
+        )
+        db.add(reversal); db.flush()
+    elif cash_rows:
+        raise HTTPException(409, "La venta a crédito tiene un movimiento de contado inesperado; revisa la cuenta antes de corregirla.")
     db.add(SaleCorrection(
-        sale_id=sale.id, cash_movement_id=reversal.id, amount=sale.total,
+        sale_id=sale.id, cash_movement_id=reversal.id if reversal else None, amount=sale.total,
         reason=data.reason, created_by=identity.email or "",
     ))
     installation.status = "cancelled"
@@ -1188,6 +1209,11 @@ def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_depen
             ))
     db.commit(); db.refresh(sale)
     return _sale_result(db, sale)
+
+
+# Keep the previous callable name for internal integrations while the route
+# remains the single source-linked correction endpoint for both sale types.
+reverse_cash_sale = reverse_sale
 
 
 @router.get("/installations")
@@ -2472,8 +2498,14 @@ def add_receivable(data: ReceivableInput, db: Session = Depends(get_db)):
 
 @router.get("/receivables", dependencies=[Depends(require_permissions(auth_service, "receivables:read"))])
 def list_receivables(db: Session = Depends(get_db)):
-    rows = db.scalars(select(Receivable).order_by(Receivable.due_date)).all()
+    rows = db.scalars(select(Receivable).where(_uncorrected_receivable_filter()).order_by(Receivable.due_date)).all()
     return [_receivable_result(db, row) for row in rows]
+
+
+def _uncorrected_receivable_filter():
+    corrected_ids = (select(Receivable.id).join(Sale, Sale.quote_id == Receivable.quote_id)
+        .join(SaleCorrection, SaleCorrection.sale_id == Sale.id))
+    return Receivable.id.not_in(corrected_ids)
 
 
 def _receivable_result(db: Session, row: Receivable):
@@ -2493,6 +2525,9 @@ def _receivable_result(db: Session, row: Receivable):
 def record_payment(receivable_id: str, data: PaymentInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
     row = db.scalar(select(Receivable).where(Receivable.id == receivable_id).with_for_update())
     if not row: raise HTTPException(404, "Cuenta por cobrar no encontrada.")
+    if db.scalar(select(SaleCorrection.id).join(Sale, Sale.id == SaleCorrection.sale_id)
+                 .where(Sale.quote_id == row.quote_id).limit(1)):
+        raise HTTPException(409, "Esta venta fue corregida; no se pueden registrar cobros sobre sus cuotas canceladas.")
     balance = Decimal(row.amount) - Decimal(row.paid_amount)
     if data.amount > balance: raise HTTPException(409, "El pago excede el saldo pendiente.")
     account = db.scalar(select(FinancialAccount).where(FinancialAccount.id == data.account_id, FinancialAccount.active.is_(True)).with_for_update())
@@ -2650,7 +2685,7 @@ def client_portal_data(identity: AuthIdentity, db: Session):
             "checklist": [{"task": item.get("task", ""), "done": bool(item.get("done"))}
                           for item in (row.checklist or []) if isinstance(item, dict)],
         } for row in installations],
-        "payments": [{"installment_number": row.installment_number, "due_date": row.due_date, "amount": row.amount, "paid_amount": row.paid_amount, "balance": float(row.amount) - float(row.paid_amount), "status": row.status, "payment_method": row.payment_method} for row in db.scalars(select(Receivable).where(Receivable.customer_id.in_(customer_ids)).order_by(Receivable.due_date)).all()],
+        "payments": [{"installment_number": row.installment_number, "due_date": row.due_date, "amount": row.amount, "paid_amount": row.paid_amount, "balance": float(row.amount) - float(row.paid_amount), "status": row.status, "payment_method": row.payment_method} for row in db.scalars(select(Receivable).where(Receivable.customer_id.in_(customer_ids), _uncorrected_receivable_filter()).order_by(Receivable.due_date)).all()],
     }
 
 
@@ -2972,9 +3007,9 @@ def dashboard(identity: AuthIdentity = Depends(require_permissions(auth_service,
         "account_balances": [],
     }
     if "receivables:read" in identity.permissions:
-        result["receivables_open"] = float(db.scalar(select(func.coalesce(func.sum(Receivable.amount-Receivable.paid_amount), 0)).where(Receivable.status != "paid")) or 0)
+        result["receivables_open"] = float(db.scalar(select(func.coalesce(func.sum(Receivable.amount-Receivable.paid_amount), 0)).where(Receivable.status != "paid", _uncorrected_receivable_filter())) or 0)
         due_rows = db.execute(select(Receivable, Customer.name).join(Customer, Customer.id == Receivable.customer_id)
-            .where(Receivable.status != "paid", Receivable.due_date <= date.today() + timedelta(days=7))
+            .where(Receivable.status != "paid", Receivable.due_date <= date.today() + timedelta(days=7), _uncorrected_receivable_filter())
             .order_by(Receivable.due_date).limit(10)).all()
         result["due_receivables"] = [{"id": row.id, "customer": name, "due_date": row.due_date, "balance": max(Decimal(row.amount) - Decimal(row.paid_amount), Decimal("0")), "status": "overdue" if row.due_date < date.today() else "due"} for row, name in due_rows]
     if "inventory:read" in identity.permissions:
