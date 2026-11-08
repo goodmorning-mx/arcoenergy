@@ -40,19 +40,22 @@ REVISIONS = {
 
 
 def upgrade() -> None:
-    op.create_table(
-        "ae_push_subscriptions",
-        sa.Column("id", sa.String(length=36), primary_key=True),
-        sa.Column("installer_email", sa.String(length=180), nullable=False),
-        sa.Column("endpoint", sa.Text(), nullable=False),
-        sa.Column("p256dh", sa.String(length=200), nullable=False),
-        sa.Column("auth", sa.String(length=100), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.UniqueConstraint("endpoint", name="uq_ae_push_subscriptions_endpoint"),
-    )
-    op.create_index("ix_ae_push_subscriptions_installer_email", "ae_push_subscriptions", ["installer_email"])
-
     bind = op.get_bind()
+    if not sa.inspect(bind).has_table("ae_push_subscriptions"):
+        op.create_table(
+            "ae_push_subscriptions",
+            sa.Column("id", sa.String(length=36), primary_key=True),
+            sa.Column("installer_email", sa.String(length=180), nullable=False),
+            sa.Column("endpoint", sa.Text(), nullable=False),
+            sa.Column("p256dh", sa.String(length=200), nullable=False),
+            sa.Column("auth", sa.String(length=100), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+            sa.UniqueConstraint("endpoint", name="uq_ae_push_subscriptions_endpoint"),
+        )
+    indexes = {index["name"] for index in sa.inspect(bind).get_indexes("ae_push_subscriptions")}
+    if "ix_ae_push_subscriptions_installer_email" not in indexes:
+        op.create_index("ix_ae_push_subscriptions_installer_email", "ae_push_subscriptions", ["installer_email"])
+
     history = sa.Table("ae_history_cards", sa.MetaData(), autoload_with=bind)
     for story_id, (criteria, questions) in REVISIONS.items():
         original = bind.execute(
