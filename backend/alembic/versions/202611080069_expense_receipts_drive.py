@@ -14,14 +14,20 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("ae_expenses", sa.Column("receipt_drive_file_id", sa.String(length=200), nullable=False, server_default=""))
-    op.add_column("ae_expenses", sa.Column("receipt_filename", sa.String(length=255), nullable=False, server_default=""))
-    op.add_column("ae_expenses", sa.Column("receipt_content_type", sa.String(length=100), nullable=False, server_default=""))
-    op.add_column("ae_expenses", sa.Column("receipt_updated_at", sa.DateTime(timezone=True), nullable=True))
+    # The initial domain migration creates tables from the current ORM model.
+    # On a fresh database these columns already exist before this revision runs.
+    existing = {column["name"] for column in sa.inspect(op.get_bind()).get_columns("ae_expenses")}
+    for column in (
+        sa.Column("receipt_drive_file_id", sa.String(length=200), nullable=False, server_default=""),
+        sa.Column("receipt_filename", sa.String(length=255), nullable=False, server_default=""),
+        sa.Column("receipt_content_type", sa.String(length=100), nullable=False, server_default=""),
+        sa.Column("receipt_updated_at", sa.DateTime(timezone=True), nullable=True),
+    ):
+        if column.name not in existing:
+            op.add_column("ae_expenses", column)
 
 
 def downgrade() -> None:
-    op.drop_column("ae_expenses", "receipt_updated_at")
-    op.drop_column("ae_expenses", "receipt_content_type")
-    op.drop_column("ae_expenses", "receipt_filename")
-    op.drop_column("ae_expenses", "receipt_drive_file_id")
+    # The base domain revision creates current ORM columns; dropping them would
+    # break schema consistency on a fresh installation.
+    pass
