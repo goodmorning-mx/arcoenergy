@@ -27,6 +27,7 @@ export type FieldActionQueueItem = {
   kind: 'consume' | 'return' | 'expense';
   path: string;
   payload: Record<string, string | number>;
+  receipt?: { name: string; type: string; blob: Blob };
   summary: string;
   queued_at: string;
 };
