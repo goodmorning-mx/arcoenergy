@@ -25,7 +25,23 @@ def upgrade() -> None:
     }:
         op.add_column("ae_purchase_lines", sa.Column("previous_unit_cost", sa.Numeric(12, 2), nullable=True))
     if not sa.inspect(bind).has_table("ae_purchase_corrections"):
-        raise RuntimeError("The purchase correction table must be created from SQLAlchemy metadata before migrations run.")
+        op.create_table(
+            "ae_purchase_corrections",
+            sa.Column("id", sa.String(length=36), nullable=False),
+            sa.Column("purchase_id", sa.String(length=36), nullable=False),
+            sa.Column("amount", sa.Numeric(14, 2), nullable=False),
+            sa.Column("reason", sa.String(length=120), nullable=False),
+            sa.Column("created_by", sa.String(length=180), nullable=False),
+            sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+            sa.ForeignKeyConstraint(["purchase_id"], ["ae_purchases.id"]),
+            sa.PrimaryKeyConstraint("id"),
+            sa.UniqueConstraint("purchase_id", name="uq_ae_purchase_correction_purchase"),
+        )
+        op.create_index(
+            "ix_ae_purchase_corrections_purchase_id",
+            "ae_purchase_corrections",
+            ["purchase_id"],
+        )
 
     history = sa.Table("ae_history_cards", sa.MetaData(), autoload_with=bind)
     revisions = {

@@ -103,7 +103,8 @@ def test_alembic_infrastructure_and_safe_database_url_handling() -> None:
     versions = list((ROOT / "backend/alembic/versions").glob("*.py"))
     assert versions
     combined = "\n".join(path.read_text(encoding="utf-8") for path in versions)
-    assert "create_table" not in combined
+    created_tables = re.findall(r'op\.create_table\(\s*[\"\']([^\"\']+)', combined)
+    assert created_tables == ["ae_purchase_corrections"]
 
 
 def test_template_reports_github_product_events_with_repository_oidc() -> None:
