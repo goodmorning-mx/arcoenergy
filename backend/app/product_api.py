@@ -1234,12 +1234,17 @@ def list_installations(identity: AuthIdentity = Depends(require_permissions(auth
     rows = db.scalars(query).all()
     result = []
     for row in rows:
+        customer = db.get(Customer, row.customer_id)
         materials = db.scalars(select(WorkOrderMaterial).where(WorkOrderMaterial.installation_id == row.id)).all()
         assignments = db.scalars(select(InstallationAssignment).where(InstallationAssignment.installation_id == row.id)).all()
         result.append({**_serialize(row),
             "assigned_installers": [assignment.installer_email for assignment in assignments] or ([row.lead_installer] if row.lead_installer else []),
             "confirmed_installers": [assignment.installer_email for assignment in assignments if assignment.confirmed_at],
-            "customer": _serialize(db.get(Customer, row.customer_id)), "materials": [
+            # Installation readers need field contact details, not the full CRM
+            # customer record (status/source and other private metadata).
+            "customer": ({"id": customer.id, "name": customer.name, "city": customer.city,
+                          "address": customer.address, "phone": customer.phone, "email": customer.email}
+                         if customer else None), "materials": [
             {**_serialize(material), "item_name": (db.get(InventoryItem, material.item_id).name if db.get(InventoryItem, material.item_id) else "Artículo"),
              "remaining_quantity": max(Decimal(material.requested_quantity) - Decimal(material.consumed_quantity), Decimal("0")),
              "remaining_to_issue": max(Decimal(material.requested_quantity) - Decimal(material.preissued_quantity), Decimal("0"))}

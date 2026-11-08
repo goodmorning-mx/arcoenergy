@@ -7,7 +7,7 @@ export type Installation = {
   confirmed_installers?: string[];
   status: string;
   notes: string;
-  customer?: { name: string; city: string };
+  customer?: { id?: string; name: string; city: string; address?: string; phone?: string; email?: string };
   checklist?: Array<{ task: string; done: boolean }>;
   materials?: Array<{ item_id: string; item_name: string; requested_quantity: number; consumed_quantity: number; remaining_quantity: number }>;
 };

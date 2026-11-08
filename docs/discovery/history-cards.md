@@ -1045,3 +1045,14 @@ La PWA de campo ahora permite adjuntar al gasto un comprobante opcional PDF/JPG/
 La migración `202611080071` registra nuevas versiones append-only para US-10, US-13 y US-17; conserva intactos los relatos originales.
 
 La implementación se integró mediante el PR [#93](https://github.com/goodmorning-mx/arcoenergy/pull/93), merge commit `6c8712c3d8b943b856232b1013e014b56675e912`. Factory completó el despliegue DEV y la verificación de esquema/respaldo en el run [#42447576484](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42447576484). API, CRM y PWA reportan el mismo SHA; PostgreSQL informa `202611080071` y las versiones activas de US-10, US-13 y US-17 corresponden a Iteración 59. Chrome headless renderizó el acceso en `/login`, `/crm/login` y `/app/login`; la PWA desplegada incluye el control de comprobante. `/`, las rutas de acceso y `/api/health/ready` respondieron HTTP 200. Pasaron CI Backend, CRM, Frontend, Next.js y Docker; 161 pruebas backend locales. El job auxiliar `report` falló sin afectar la integración ni el despliegue.
+
+## Iteración 60 — datos de contacto en órdenes asignadas (2026-11-08)
+
+La PWA muestra al instalador asignado el domicilio del proyecto y acciones para llamar al cliente o redactar un correo desde el teléfono. La respuesta del endpoint de instalaciones limita el objeto de contacto a nombre, ciudad, domicilio, teléfono y correo; ya no devuelve estado/procedencia del registro CRM. Las órdenes visibles para el rol instalador siguen filtradas a las que están asignadas a su cuenta. El aviso cuando la aplicación está cerrada sigue pendiente de canal push/mensajería configurado, y la experiencia debe probarse con el personal real.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-7 | Parcial funcional | El instalador de una orden asignada puede ver ubicación y medios de contacto del cliente y usar enlaces `tel:`/`mailto:`. Falta un canal de notificación en segundo plano y validación con instaladores reales. |
+| US-14 | Parcial funcional | La lista limita instalaciones del instalador a sus asignaciones y ofrece un resumen mínimo de cliente. Falta validar toda la matriz de acceso por entidad/campo con responsables y cuentas reales. |
+
+La migración `202611080072` registra nuevas versiones append-only de US-7 y US-14 y conserva intactas las fuentes literales.
