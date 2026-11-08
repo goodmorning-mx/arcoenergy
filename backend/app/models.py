@@ -145,7 +145,7 @@ class SaleCorrection(Base):
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     sale_id: Mapped[str] = mapped_column(ForeignKey("ae_sales.id"), nullable=False)
-    cash_movement_id: Mapped[str] = mapped_column(ForeignKey("ae_cash_movements.id"), nullable=False)
+    cash_movement_id: Mapped[str | None] = mapped_column(ForeignKey("ae_cash_movements.id"), nullable=True)
     amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     reason: Mapped[str] = mapped_column(String(120), nullable=False)
     created_by: Mapped[str] = mapped_column(String(180), default="")
