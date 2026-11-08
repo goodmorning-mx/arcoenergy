@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     google_drive_service_account_json: str = Field(default="", alias="GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON")
     whatsapp_phone: str = Field(default="", alias="WHATSAPP_PHONE")
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    web_push_vapid_secret: str = Field(default="", alias="WEB_PUSH_VAPID_SECRET")
+    web_push_subject: str = Field(default="mailto:admin@arcoenergy.mx", alias="WEB_PUSH_SUBJECT")
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

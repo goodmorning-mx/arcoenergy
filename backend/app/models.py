@@ -124,6 +124,16 @@ class InstallationAssignment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
+class PushSubscription(Base):
+    __tablename__ = "ae_push_subscriptions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    installer_email: Mapped[str] = mapped_column(String(180), nullable=False, index=True)
+    endpoint: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    p256dh: Mapped[str] = mapped_column(String(200), nullable=False)
+    auth: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
 class Sale(Base):
     __tablename__ = "ae_sales"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)

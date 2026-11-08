@@ -12,7 +12,7 @@ from urllib.parse import quote as urlquote, unquote
 from uuid import uuid4
 import xml.etree.ElementTree as ET
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, or_, select, text
@@ -29,8 +29,9 @@ from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
 from app.drive_storage import download_private_file, folder_status, save_private_file, save_quote_pdf
-from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, Purchase, PurchaseCorrection, PurchaseLine, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
+from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, Purchase, PurchaseCorrection, PurchaseLine, PushSubscription, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
+from app.web_push import send_push, validate_push_endpoint, vapid_public_key
 
 settings = get_settings()
 engine = create_database_engine()
@@ -334,6 +335,32 @@ class InstallationInput(BaseModel):
     lead_installer: str = ""
     assigned_installers: list[str] = Field(default_factory=list, max_length=10)
     notes: str = ""
+
+
+class PushSubscriptionInput(BaseModel):
+    endpoint: str = Field(min_length=16, max_length=4096)
+    keys: dict[str, str]
+
+    @field_validator("keys")
+    @classmethod
+    def validate_keys(cls, value: dict[str, str]) -> dict[str, str]:
+        if set(value) != {"p256dh", "auth"} or not value.get("p256dh") or len(value["p256dh"]) > 200 or not value.get("auth") or len(value["auth"]) > 100:
+            raise ValueError("La suscripción push no contiene claves válidas.")
+        return value
+
+    @field_validator("endpoint")
+    @classmethod
+    def validate_endpoint(cls, value: str) -> str:
+        return validate_push_endpoint(value)
+
+
+class PushSubscriptionDeleteInput(BaseModel):
+    endpoint: str = Field(min_length=16, max_length=4096)
+
+    @field_validator("endpoint")
+    @classmethod
+    def validate_endpoint(cls, value: str) -> str:
+        return validate_push_endpoint(value)
 
 
 class InstallationChecklistItemInput(BaseModel):
@@ -975,8 +1002,91 @@ def _installer_has_assignment(db: Session, installation: Installation, email: st
     )) is not None
 
 
+def _installer_email(identity: AuthIdentity) -> str:
+    email = (identity.email or "").strip().lower()
+    if "instalador" not in identity.roles or not email:
+        raise HTTPException(403, "Las notificaciones push están disponibles para cuentas de instalador.")
+    return email
+
+
+@router.get("/push/vapid-public-key")
+def get_push_public_key(identity: AuthIdentity = Depends(require_permissions(auth_service, "installations:read"))):
+    _installer_email(identity)
+    secret = get_settings().web_push_vapid_secret
+    if not secret:
+        raise HTTPException(503, "Las notificaciones en segundo plano no están configuradas.")
+    return {"public_key": vapid_public_key(secret)}
+
+
+@router.post("/push/subscriptions", status_code=204)
+def save_push_subscription(
+    data: PushSubscriptionInput,
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "installations:read")),
+    db: Session = Depends(get_db),
+):
+    email = _installer_email(identity)
+    if not get_settings().web_push_vapid_secret:
+        raise HTTPException(503, "Las notificaciones en segundo plano no están configuradas.")
+    row = db.scalar(select(PushSubscription).where(PushSubscription.endpoint == data.endpoint))
+    if row is None:
+        row = PushSubscription(endpoint=data.endpoint, installer_email=email, p256dh=data.keys["p256dh"], auth=data.keys["auth"])
+    else:
+        row.installer_email = email
+        row.p256dh = data.keys["p256dh"]
+        row.auth = data.keys["auth"]
+    db.add(row)
+    db.commit()
+
+
+@router.delete("/push/subscriptions", status_code=204)
+def remove_push_subscription(
+    data: PushSubscriptionDeleteInput,
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "installations:read")),
+    db: Session = Depends(get_db),
+):
+    email = _installer_email(identity)
+    db.query(PushSubscription).filter(
+        PushSubscription.endpoint == data.endpoint,
+        PushSubscription.installer_email == email,
+    ).delete(synchronize_session=False)
+    db.commit()
+
+
+def _deliver_installation_push(subscriptions: list[dict[str, str]], folio: str) -> None:
+    config = get_settings()
+    if not config.web_push_vapid_secret:
+        return
+    payload = {
+        "title": "Nueva instalación asignada",
+        "body": f"Orden {folio}. Abre la app para consultar los detalles.",
+        "url": "/app/",
+        "tag": f"arcoenergy-installation-{folio}",
+    }
+    expired: list[str] = []
+    for subscription in subscriptions:
+        status = send_push(subscription, payload, config.web_push_vapid_secret, config.web_push_subject)
+        if status in (404, 410):
+            expired.append(subscription["endpoint"])
+    if expired:
+        with SessionLocal() as db:
+            db.query(PushSubscription).filter(PushSubscription.endpoint.in_(expired)).delete(synchronize_session=False)
+            db.commit()
+
+
+def _queue_installation_push(db: Session, background_tasks: BackgroundTasks | None, installers: list[str], folio: str) -> None:
+    if background_tasks is None or not installers or not get_settings().web_push_vapid_secret:
+        return
+    rows = db.scalars(select(PushSubscription).where(PushSubscription.installer_email.in_(installers))).all()
+    subscriptions = [
+        {"endpoint": row.endpoint, "p256dh": row.p256dh, "auth": row.auth}
+        for row in rows
+    ]
+    if subscriptions:
+        background_tasks.add_task(_deliver_installation_push, subscriptions, folio)
+
+
 @router.post("/installations", status_code=201, dependencies=[Depends(require_permissions(auth_service, "installations:write"))])
-def create_installation(data: InstallationInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+def create_installation(data: InstallationInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
     if not db.get(Customer, data.customer_id): raise HTTPException(404, "Cliente no encontrado.")
     installers = _validate_installer_emails(data.assigned_installers, data.lead_installer)
     primary = (data.lead_installer.strip().lower() or installers[0])
@@ -984,6 +1094,7 @@ def create_installation(data: InstallationInput, identity: AuthIdentity = Depend
     db.add(row); db.flush()
     _record_installation_assignments(db, row.id, installers, identity.email or "")
     db.commit(); db.refresh(row)
+    _queue_installation_push(db, background_tasks, installers, row.folio or row.id)
     return {**_serialize(row), "assigned_installers": installers, "confirmed_installers": []}
 
 
@@ -1116,7 +1227,7 @@ def reverse_sale(sale_id: str, data: PaymentCorrectionInput, identity: AuthIdent
 
 
 @router.post("/sales", status_code=201, dependencies=[Depends(require_permissions(auth_service, "sales:write"))])
-def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
     quote = db.scalar(select(Quote).where(Quote.id == data.quote_id).with_for_update())
     if quote is None: raise HTTPException(404, "Cotización no encontrada.")
     if quote.status != "accepted": raise HTTPException(422, "Registra primero que el cliente aceptó la cotización.")
@@ -1215,6 +1326,7 @@ def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_depen
                 payment_method=quote.payment_method,
             ))
     db.commit(); db.refresh(sale)
+    _queue_installation_push(db, background_tasks, installer_emails, work_folio)
     return _sale_result(db, sale)
 
 
