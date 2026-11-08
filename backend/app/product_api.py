@@ -1255,6 +1255,12 @@ _MATERIAL_REQUEST_TYPES = {
     "image/webp": (".webp", b"RIFF"),
 }
 _MAX_MATERIAL_REQUEST_BYTES = 12 * 1024 * 1024
+_EXPENSE_RECEIPT_TYPES = {
+    "application/pdf": (".pdf", b"%PDF-"),
+    "image/jpeg": (".jpg", b"\xff\xd8\xff"),
+    "image/png": (".png", b"\x89PNG\r\n\x1a\n"),
+    "image/webp": (".webp", b"RIFF"),
+}
 
 
 @router.put("/installations/{installation_id}/material-request-file")
@@ -1834,6 +1840,10 @@ def add_expense(data: ExpenseInput, identity: AuthIdentity = Depends(require_per
             raise HTTPException(409, "El registro original de esta operación ya no está disponible.")
         account = db.get(FinancialAccount, row.account_id) if row.account_id else None
         result = _serialize(row)
+        result.pop("receipt_drive_file_id", None)
+        result["receipt_available"] = bool(row.receipt_drive_file_id or row.receipt_url)
+        result["receipt_drive_available"] = bool(row.receipt_drive_file_id)
+        result["receipt_filename"] = row.receipt_filename or None
         result["account_name"] = account.name if account else None
         return result
     if "instalador" not in identity.roles and not data.account_id:
@@ -1852,6 +1862,10 @@ def add_expense(data: ExpenseInput, identity: AuthIdentity = Depends(require_per
     _record_offline_operation(data, "expense", row.id, identity, db)
     db.commit(); db.refresh(row)
     result = _serialize(row)
+    result.pop("receipt_drive_file_id", None)
+    result["receipt_available"] = bool(row.receipt_drive_file_id or row.receipt_url)
+    result["receipt_drive_available"] = bool(row.receipt_drive_file_id)
+    result["receipt_filename"] = row.receipt_filename or None
     result["account_name"] = account.name if account else None
     return result
 
@@ -1867,12 +1881,97 @@ def list_expenses(db: Session = Depends(get_db)):
         item["can_reverse"] = row.reversal_of_id is None and db.scalar(
             select(ProjectExpense.id).where(ProjectExpense.reversal_of_id == row.id)
         ) is None
+        item["receipt_available"] = bool(row.receipt_drive_file_id or row.receipt_url)
+        item["receipt_drive_available"] = bool(row.receipt_drive_file_id)
+        item["receipt_filename"] = row.receipt_filename or None
+        item.pop("receipt_drive_file_id", None)
         installation = db.get(Installation, row.installation_id) if row.installation_id else None
         customer = db.get(Customer, installation.customer_id) if installation else None
         item["project_customer"] = customer.name if customer else "Gasto operativo"
         item["project_city"] = customer.city if customer else ""
         result.append(item)
     return result
+
+
+@router.put("/expenses/{expense_id}/receipt-file")
+async def upload_expense_receipt_file(
+    expense_id: str,
+    request: Request,
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "expenses:write")),
+    db: Session = Depends(get_db),
+):
+    expense = db.get(ProjectExpense, expense_id)
+    if expense is None:
+        raise HTTPException(404, "Gasto no encontrado.")
+    if "instalador" in identity.roles:
+        installation = db.get(Installation, expense.installation_id) if expense.installation_id else None
+        if installation is None or not _installer_has_assignment(db, installation, identity.email or ""):
+            raise HTTPException(403, "Solo puedes adjuntar comprobantes a gastos de tus órdenes asignadas.")
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    file_type = _EXPENSE_RECEIPT_TYPES.get(content_type)
+    if file_type is None:
+        raise HTTPException(415, "Adjunta un comprobante PDF, JPG, PNG o WebP.")
+    try:
+        declared_length = int(request.headers.get("content-length", "0"))
+    except ValueError:
+        raise HTTPException(400, "Tamaño de archivo no válido.") from None
+    if declared_length > _MAX_MATERIAL_REQUEST_BYTES:
+        raise HTTPException(413, "El comprobante debe pesar 12 MB o menos.")
+    collected = bytearray()
+    async for chunk in request.stream():
+        if len(collected) + len(chunk) > _MAX_MATERIAL_REQUEST_BYTES:
+            raise HTTPException(413, "El comprobante debe pesar 12 MB o menos.")
+        collected.extend(chunk)
+    content = bytes(collected)
+    if not content:
+        raise HTTPException(400, "El archivo está vacío.")
+    if not content.startswith(file_type[1]) or (content_type == "image/webp" and content[8:12] != b"WEBP"):
+        raise HTTPException(415, "El contenido del comprobante no coincide con su formato.")
+    raw_name = unquote(request.headers.get("x-document-name", "comprobante"))
+    raw_name = raw_name.replace("\\", "/").split("/")[-1]
+    filename = re.sub(r"[^\w.() -]", "_", raw_name, flags=re.UNICODE).strip(" .")[:220] or "comprobante"
+    extension = file_type[0]
+    if not filename.lower().endswith(extension):
+        filename = f"{filename.rsplit('.', 1)[0] if '.' in filename else filename}{extension}"
+    try:
+        drive_id = save_private_file(
+            filename=f"gasto-{expense.id}-{filename}", content=content,
+            content_type=content_type, existing_file_id=expense.receipt_drive_file_id,
+        )
+    except RuntimeError as error:
+        if str(error) == "not_configured":
+            raise HTTPException(503, "drive_not_configured") from None
+        raise HTTPException(502, "No se pudo archivar el comprobante en Drive.") from None
+    except Exception:
+        raise HTTPException(502, "No se pudo archivar el comprobante en Drive.") from None
+    expense.receipt_drive_file_id = drive_id
+    expense.receipt_filename = filename
+    expense.receipt_content_type = content_type
+    expense.receipt_updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"saved": True, "filename": filename, "content_type": content_type, "updated_at": expense.receipt_updated_at.isoformat()}
+
+
+@router.get("/expenses/{expense_id}/receipt-file")
+def get_expense_receipt_file(
+    expense_id: str,
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "expenses:read")),
+    db: Session = Depends(get_db),
+):
+    expense = db.get(ProjectExpense, expense_id)
+    if expense is None:
+        raise HTTPException(404, "Gasto no encontrado.")
+    if not expense.receipt_drive_file_id:
+        raise HTTPException(404, "Este gasto no tiene un comprobante archivado.")
+    try:
+        stored = download_private_file(expense.receipt_drive_file_id)
+    except Exception:
+        raise HTTPException(502, "No se pudo recuperar el comprobante archivado.") from None
+    filename = expense.receipt_filename or "comprobante"
+    return Response(
+        content=stored.content, media_type=expense.receipt_content_type or "application/octet-stream",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{urlquote(filename)}"},
+    )
 
 
 @router.post("/expenses/{expense_id}/reverse", status_code=201, dependencies=[Depends(require_permissions(auth_service, "expenses:write"))])

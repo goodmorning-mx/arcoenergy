@@ -1017,3 +1017,17 @@ El reporte operativo agrega listados de clientes, proveedores y órdenes, y un d
 La migración `202611080068` agrega una nueva versión de US-29 sin editar la fuente literal ni las revisiones existentes. El reporte no se presenta como cierre contable y las fórmulas financieras permanecen sujetas a validación del contador.
 
 La implementación quedó integrada mediante el PR [#90](https://github.com/goodmorning-mx/arcoenergy/pull/90), merge commit `dea2802cd126a90e3c32ce39e673ba82ba51f054`. En DEV, `/api/version` informa ese mismo SHA; `/api/health/ready`, `/`, `/crm/login` y `/app/login` respondieron HTTP 200. El CRM desplegado incluye las tablas de detalle y PostgreSQL informa la revisión `202611080068`; la base registra US-29 versión 5 para esta iteración. Pasaron Backend (153 pruebas), CRM typecheck/build y los checks CI de Backend, CRM, Frontend, Next.js y Docker. El job auxiliar `report` del PR falló, mientras todos los checks de producto terminaron correctamente. El plan de Factory confirmó los cinco recursos de aplicación y PostgreSQL existentes; la evidencia de runtime y revisión de base confirma el despliegue efectivo en DEV.
+
+## Iteración 58 — comprobantes privados de gastos en Drive (2026-11-08)
+
+CRM permite adjuntar un comprobante PDF/JPG/PNG/WebP de hasta 12 MiB a un gasto y descargarlo con autenticación. El archivo se guarda en la carpeta privada de Drive mediante la integración existente; los IDs privados no se devuelven al navegador. La captura de un gasto sigue siendo exitosa aunque Drive no esté configurado, pero la interfaz declara el archivo pendiente y permite reintentar la carga. Se conserva el campo previo de enlace externo.
+
+La carga requiere `expenses:write`, la descarga requiere `expenses:read`; los instaladores solo pueden asociar archivos a gastos de órdenes asignadas. La PWA todavía no adjunta comprobantes y el archivo no se pone en cola offline. No se amplía el alcance a INE/contratos ni a sincronización de todos los datos empresariales.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-10 | Parcial funcional | El registro de gastos de campo y la captura contable se mantienen; CRM admite comprobante privado. La PWA aún no adjunta archivos y la política de revisión de gastos sigue pendiente. |
+| US-13 | Parcial funcional | Drive cubre cotizaciones, solicitudes de materiales, facturas de compra y ahora comprobantes de gastos. Faltan documentos legales/INE, política de carpetas, retención, restauración y sincronización general. |
+| US-17 | Parcial funcional | CRM puede archivar y descargar el comprobante de un gasto en Drive; pendientes la política de comprobación, aprobación y el flujo móvil. |
+
+La migración `202611080069` añade metadatos de archivo a gastos sin reemplazar sus enlaces previos; `202611080070` agrega versiones append-only de las tarjetas relacionadas.
