@@ -67,3 +67,27 @@ def test_accounting_and_sales_iterations_append_versions_without_changing_source
     assert len(report_versions) == 2
     assert report_versions[0].source_literal == report_versions[1].source_literal
     assert report_versions[1].iteration == "Iteración 8 · costeo preliminar por proyecto y mes · 2026-11-06"
+
+
+def test_stock_notification_migration_appends_us26_history_revision() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    records = json.loads((ROOT / "app" / "history_card_initial.json").read_text(encoding="utf-8"))
+    now = datetime.now(timezone.utc)
+    for row in records:
+        row.update(id=str(uuid4()), recorded_by="source-import", created_at=now)
+    migration = load_migration("202611080063_stock_low_notification_card_revision.py")
+    with engine.begin() as connection:
+        connection.execute(HistoryCard.__table__.insert(), records)
+        source = connection.scalar(select(HistoryCard.source_literal).where(HistoryCard.story_id == "US-26", HistoryCard.version == 1))
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+        versions = connection.execute(select(HistoryCard.version, HistoryCard.iteration, HistoryCard.source_literal,
+            HistoryCard.acceptance_criteria, HistoryCard.unresolved_questions)
+            .where(HistoryCard.story_id == "US-26").order_by(HistoryCard.version)).all()
+
+    assert len(versions) == 2
+    assert all(version.source_literal == source for version in versions)
+    assert versions[1].iteration == "Iteración 52 · avisos de stock bajo en PWA · 2026-11-08"
+    assert any("permiso de notificaciones" in item for item in versions[1].acceptance_criteria)
+    assert any("aplicación cerrada" in item for item in versions[1].unresolved_questions)

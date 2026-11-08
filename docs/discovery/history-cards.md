@@ -941,3 +941,11 @@ Implementación integrada mediante PR [#77](https://github.com/goodmorning-mx/ar
 | US-35 | Parcial funcional | La corrección enlaza venta, cartera, orden y reserva de inventario antes de campo; siguen pendientes otras operaciones relacionadas, doble partida y reglas fiscales. |
 | US-36 | Parcial funcional | Se agrega reversa de crédito sin cobro neto; falta cerrar corrección de ventas con actividad, compras y movimientos físicos de inventario. |
 | US-38 | Parcial funcional | Rentabilidad compensa la venta en la fecha de corrección; estados financieros formales, impuestos, intereses y validación del contador siguen pendientes. |
+
+## Iteración 52 — avisos locales de inventario bajo en la PWA (2026-11-08)
+
+La PWA permite al usuario autorizar avisos del dispositivo desde Inventario. Con permiso concedido, la aplicación revisa el stock disponible contra el mínimo configurado por artículo y agrupa los artículos nuevos bajo mínimo en un solo aviso. La lista de artículos ya avisados se conserva por sesión para evitar repetir notificaciones; se vuelve a avisar si el artículo recupera stock y luego vuelve a caer. Mientras la PWA está abierta y conectada, consulta el inventario cada minuto. El aviso local no es una notificación push: para detectar cambios con la aplicación cerrada hace falta definir un servicio push y los destinatarios centrales.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-26 | Parcial funcional | Aviso local agrupado según el mínimo por artículo con permiso explícito; falta push en segundo plano y acordar destinatarios. |
