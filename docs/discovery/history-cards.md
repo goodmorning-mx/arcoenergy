@@ -931,6 +931,8 @@ La implementación se integró mediante el PR [#75](https://github.com/goodmorni
 
 La corrección de una venta financiada requiere que la orden siga sin actividad de campo y que no haya saldo pagado neto ni cobros sin reversa. Si hubo cobros, primero se corrigen desde el historial de cada cuota. La operación conserva venta, cuotas, orden y folio originales; agrega una corrección enlazada sin movimiento de caja, cancela la orden y libera la reserva. Las cuotas corregidas dejan de aparecer en cartera, panel, y portal de cliente, y se rechazan intentos de cobro tardíos. El reporte de rentabilidad ya resta la corrección en su fecha. Los datos originales permanecen disponibles para auditoría.
 
+Implementación integrada mediante PR [#77](https://github.com/goodmorning-mx/arcoenergy/pull/77), merge SHA `783a03ea5de3e09b8952da3064ebcefafb3eb0e6`. Factory desplegó DEV en el run [#42436672678](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42436672678), con revisión de esquema y respaldo confirmados. `/api/health`, `/api/version`, `/login`, `/crm/login`, `/app/login` y `/` respondieron HTTP 200; API, CRM y PWA reportan el mismo SHA. Backend: 144 pruebas; CI de Backend, CRM, Frontend, Next.js y Docker/Chrome aprobadas. El reporte de evento externo de CI falló por su notificador ajeno a la funcionalidad.
+
 | Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
 | --- | --- | --- |
 | US-11 | Parcial funcional | Se ofrece corrección de financiamiento sin cobranza neta y desaparecen cuotas anuladas de cartera; fórmulas/intereses y avisos automáticos siguen pendientes. |
