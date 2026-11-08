@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, sessionmaker
@@ -29,7 +29,7 @@ from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
 from app.drive_storage import download_private_file, folder_status, save_private_file, save_quote_pdf
-from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, Purchase, PurchaseLine, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
+from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, Purchase, PurchaseCorrection, PurchaseLine, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 
 settings = get_settings()
@@ -508,6 +508,13 @@ class PurchaseInput(BaseModel):
     initial_payment: Decimal = Field(default=Decimal("0"), ge=0)
     payment_account_id: str | None = None
     payment_reference: str = Field(default="", max_length=180)
+
+    @model_validator(mode="after")
+    def purchase_items_are_unique(self):
+        item_ids = [line.item_id for line in self.lines]
+        if len(item_ids) != len(set(item_ids)):
+            raise ValueError("Cada artículo debe aparecer una sola vez en la compra.")
+        return self
 
 
 class PurchaseInvoiceXmlInput(BaseModel):
@@ -2061,7 +2068,13 @@ def reverse_cash_movement(movement_id: str, data: PaymentCorrectionInput, identi
 @router.get("/suppliers", dependencies=[Depends(require_permissions(auth_service, "suppliers:read"))])
 def list_suppliers(db: Session = Depends(get_db)):
     rows = db.scalars(select(Supplier).order_by(Supplier.name)).all()
-    return [{**_serialize(row), "current_balance": Decimal(db.scalar(select(func.coalesce(func.sum(Purchase.total - Purchase.paid_amount), 0)).where(Purchase.supplier_id == row.id)) or 0)} for row in rows]
+    results = []
+    for row in rows:
+        gross = Decimal(db.scalar(select(func.coalesce(func.sum(Purchase.total - Purchase.paid_amount), 0)).where(Purchase.supplier_id == row.id)) or 0)
+        corrected = Decimal(db.scalar(select(func.coalesce(func.sum(PurchaseCorrection.amount), 0))
+            .join(Purchase, Purchase.id == PurchaseCorrection.purchase_id).where(Purchase.supplier_id == row.id)) or 0)
+        results.append({**_serialize(row), "current_balance": gross - corrected})
+    return results
 
 
 @router.post("/suppliers", status_code=201, dependencies=[Depends(require_permissions(auth_service, "suppliers:manage"))])
@@ -2084,11 +2097,15 @@ def _purchase_result(db: Session, purchase: Purchase):
         select(InventoryItem).where(InventoryItem.id.in_([line.item_id for line in lines]))
     ).all()} if lines else {}
     payments = db.scalars(select(SupplierPayment).where(SupplierPayment.purchase_id == purchase.id).order_by(SupplierPayment.paid_on, SupplierPayment.created_at)).all()
+    correction = db.scalar(select(PurchaseCorrection).where(PurchaseCorrection.purchase_id == purchase.id))
     reversed_payment_ids = {row[0] for row in db.execute(select(SupplierPayment.reversal_of_id).where(SupplierPayment.reversal_of_id.is_not(None))).all()}
     return {
         **_serialize(purchase),
+        "status": "corrected" if correction else purchase.status,
         "supplier": {"id": supplier.id, "name": supplier.name} if supplier else None,
-        "balance": Decimal(purchase.total) - Decimal(purchase.paid_amount),
+        "balance": Decimal("0") if correction else Decimal(purchase.total) - Decimal(purchase.paid_amount),
+        "correction": _serialize(correction) if correction else None,
+        "can_reverse": correction is None,
         "lines": [
             {**_serialize(line), "item_name": inventory_items.get(line.item_id, "Artículo")}
             for line in lines
@@ -2412,7 +2429,8 @@ def create_purchase(data: PurchaseInput, identity: AuthIdentity = Depends(identi
     )
     db.add(purchase); db.flush()
     for line, item, line_total in locked_lines:
-        purchase_line = PurchaseLine(purchase_id=purchase.id, item_id=item.id, quantity=line.quantity, unit_cost=line.unit_cost, line_total=line_total)
+        purchase_line = PurchaseLine(purchase_id=purchase.id, item_id=item.id, quantity=line.quantity,
+            unit_cost=line.unit_cost, line_total=line_total, previous_unit_cost=item.unit_cost)
         db.add(purchase_line); db.flush()
         item.quantity = Decimal(item.quantity) + line.quantity
         item.unit_cost = line.unit_cost
@@ -2437,6 +2455,8 @@ def add_supplier_payment(purchase_id: str, data: SupplierPaymentInput, identity:
     purchase = db.scalar(select(Purchase).where(Purchase.id == purchase_id).with_for_update())
     if purchase is None:
         raise HTTPException(404, "Compra no encontrada.")
+    if db.scalar(select(PurchaseCorrection.id).where(PurchaseCorrection.purchase_id == purchase.id)):
+        raise HTTPException(409, "La compra ya fue corregida y no admite nuevos pagos.")
     balance = Decimal(purchase.total) - Decimal(purchase.paid_amount)
     if data.amount > balance:
         raise HTTPException(409, "El pago excede el saldo pendiente de esta compra.")
@@ -2486,6 +2506,92 @@ def reverse_supplier_payment(
     purchase.paid_amount = Decimal(purchase.paid_amount) - Decimal(original.amount)
     purchase.status = "paid" if purchase.paid_amount >= purchase.total else "partially_paid" if purchase.paid_amount > 0 else "open"
     db.commit(); db.refresh(purchase)
+    return _purchase_result(db, purchase)
+
+
+@router.post("/purchases/{purchase_id}/reverse", status_code=201, dependencies=[Depends(require_permissions(auth_service, "purchases:write"))])
+def reverse_purchase(
+    purchase_id: str, data: PaymentCorrectionInput,
+    identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db),
+):
+    if not ({"administrador", "admin", "contador"} & set(identity.roles)):
+        raise HTTPException(403, "Solo administración o contabilidad puede corregir una compra.")
+    purchase = db.scalar(select(Purchase).where(Purchase.id == purchase_id).with_for_update())
+    if purchase is None:
+        raise HTTPException(404, "Compra no encontrada.")
+    if db.scalar(select(PurchaseCorrection.id).where(PurchaseCorrection.purchase_id == purchase.id)):
+        raise HTTPException(409, "Esta compra ya tiene una corrección registrada.")
+    payments = db.scalars(select(SupplierPayment).where(SupplierPayment.purchase_id == purchase.id).with_for_update()).all()
+    reversed_payment_ids = {payment.reversal_of_id for payment in payments if payment.reversal_of_id}
+    if Decimal(purchase.paid_amount) != 0 or any(payment.reversal_of_id is None and payment.id not in reversed_payment_ids for payment in payments):
+        raise HTTPException(409, "Revierte primero los pagos activos a proveedor desde el historial de la compra.")
+    lines = db.scalars(select(PurchaseLine).where(PurchaseLine.purchase_id == purchase.id).order_by(PurchaseLine.item_id, PurchaseLine.id)).all()
+    if not lines:
+        raise HTTPException(409, "La compra no tiene renglones de inventario para corregir.")
+    if len({line.item_id for line in lines}) != len(lines):
+        raise HTTPException(409, "La compra tiene artículos repetidos; consolida sus renglones antes de corregirla.")
+
+    receipts_by_line: dict[str, InventoryMovement] = {}
+    items: dict[str, InventoryItem] = {}
+    previous_cost_by_item: dict[str, Decimal] = {}
+    for line in lines:
+        if line.previous_unit_cost is None:
+            raise HTTPException(409, "Esta compra es anterior al registro del costo previo; requiere conciliación manual antes de corregirla.")
+        receipts = db.scalars(select(InventoryMovement).where(
+            InventoryMovement.purchase_line_id == line.id,
+            InventoryMovement.movement_type == "purchase",
+        ).with_for_update()).all()
+        if len(receipts) != 1:
+            raise HTTPException(409, "Un renglón de compra no conserva exactamente una entrada de almacén; requiere conciliación.")
+        receipt = receipts[0]
+        receipts_by_line[line.id] = receipt
+        previous_cost_by_item[line.item_id] = Decimal(line.previous_unit_cost)
+        item = items.get(line.item_id)
+        if item is None:
+            item = db.scalar(select(InventoryItem).where(InventoryItem.id == line.item_id).with_for_update())
+            if item is None:
+                raise HTTPException(409, "Un artículo de la compra ya no existe en el catálogo.")
+            items[line.item_id] = item
+        if Decimal(item.quantity) < Decimal(line.quantity):
+            raise HTTPException(409, f"No se puede revertir: el almacén ya no conserva {line.quantity} {item.unit} de {item.name}.")
+        later_movement = db.scalar(select(InventoryMovement.id).where(
+            InventoryMovement.item_id == item.id,
+            InventoryMovement.id != receipt.id,
+            InventoryMovement.created_at > receipt.created_at,
+            InventoryMovement.reason != "existencia inicial",
+        ).limit(1))
+        later_purchase = db.scalar(select(InventoryMovement.id)
+            .join(PurchaseLine, PurchaseLine.id == InventoryMovement.purchase_line_id)
+            .join(Purchase, Purchase.id == PurchaseLine.purchase_id)
+            .where(InventoryMovement.item_id == item.id, Purchase.id != purchase.id, Purchase.created_at > purchase.created_at)
+            .limit(1))
+        if later_movement or later_purchase:
+            raise HTTPException(409, f"No se puede revertir: {items[line.item_id].name} tuvo movimientos de almacén posteriores a esta compra.")
+
+    for line in lines:
+        receipt = receipts_by_line[line.id]
+        item = items[line.item_id]
+        db.add(InventoryMovement(
+            item_id=item.id, purchase_line_id=line.id, quantity=line.quantity,
+            movement_type="purchase_reversal", unit_cost=line.unit_cost,
+            related_movement_id=receipt.id,
+            reason=f"Corrección de compra {purchase.folio}: {data.reason.strip()}",
+            created_by=identity.email or "",
+        ))
+        item.quantity = Decimal(item.quantity) - Decimal(line.quantity)
+        item.unit_cost = previous_cost_by_item[item.id]
+
+    db.add(PurchaseCorrection(
+        purchase_id=purchase.id, amount=purchase.total, reason=data.reason.strip(),
+        created_by=identity.email or "",
+    ))
+    purchase.status = "corrected"
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Esta compra ya tiene una corrección registrada.")
+    db.refresh(purchase)
     return _purchase_result(db, purchase)
 
 

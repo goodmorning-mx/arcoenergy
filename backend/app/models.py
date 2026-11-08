@@ -291,6 +291,17 @@ class Purchase(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
+class PurchaseCorrection(Base):
+    __tablename__ = "ae_purchase_corrections"
+    __table_args__ = (UniqueConstraint("purchase_id", name="uq_ae_purchase_correction_purchase"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    purchase_id: Mapped[str] = mapped_column(ForeignKey("ae_purchases.id"), nullable=False, index=True)
+    amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    reason: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(180), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
 class PurchaseLine(Base):
     __tablename__ = "ae_purchase_lines"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -299,6 +310,7 @@ class PurchaseLine(Base):
     quantity: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     unit_cost: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     line_total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
+    previous_unit_cost: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
 
 
 class SupplierPayment(Base):
