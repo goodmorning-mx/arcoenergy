@@ -977,3 +977,16 @@ Se verificó en DEV el asistente público con dos consultas reales, sin crear pr
 El asistente se verificó mediante `POST /api/v1/public/agent/chat` (HTTP 200) con consultas de tamaños y cotización de 8 paneles. La primera respuesta fue “Manejamos sistemas que van desde un mínimo de 4 paneles hasta un máximo de 20 paneles”; la segunda indicó que no había paquete activo aprobado para 8 paneles. No se enviaron datos personales. La migración 065 conserva la fuente original y agrega la verificación como una nueva versión de US-41.
 
 Implementación integrada mediante PR [#84](https://github.com/goodmorning-mx/arcoenergy/pull/84). Factory desplegó DEV en el run [#42441554812](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42441554812), con revisión 065 y respaldo confirmados. API, CRM y PWA reportan el mismo commit `c4d240f96773e2f0a6b97482e583e77829e5c0be`; `/`, `/api/health`, `/api/version`, `/login`, `/crm/login` y `/app/login` respondieron HTTP 200. Backend: 149 pruebas; CI de Backend, CRM, Frontend, Next.js y Docker/Chrome aprobado. El notificador externo `report` sigue fallando sin afectar este despliegue.
+
+## Iteración 55 — trazabilidad precisa de history cards (2026-11-08)
+
+Se agregan versiones nuevas de US-39, US-40 y US-41 para que cada interpretación identifique el fragmento literal de la fuente del dueño del producto que la sustenta. El texto completo original de cada tarjeta permanece intacto. US-42 registra el estado implementado del historial append-only en base de datos, API y CRM, y conserva como pendientes el cotejo de historias reconstruidas y la política de almacenamiento privado para artefactos sensibles. Esto mejora la procedencia; no equivale a que los stakeholders hayan validado sus interpretaciones.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-39 | Parcial funcional | Se enlaza el fragmento literal sobre el CRM. La cobertura empresarial completa y las cuentas de equipo reales siguen pendientes de los flujos y datos correspondientes. |
+| US-40 | Parcial funcional | Se enlaza el fragmento literal sobre la PWA móvil operativa. Falta validar tareas, permisos y dispositivos con el personal real. |
+| US-41 | Parcial funcional | Se enlaza el fragmento literal sobre cotización web mediante agente y módulos. El catálogo comercial aprobado y la validación del flujo de venta siguen pendientes. |
+| US-42 | Funcional para registro/versiones | DB, API y CRM ya conservan versiones append-only. El cotejo de tarjetas reconstruidas y la política de conservación privada de fuentes sensibles siguen pendientes. |
+
+La migración `202611080066` (revision 066) no actualiza ni elimina filas previas. La prueba de migración comprueba que el literal se conserva en las versiones anterior y nueva y que se añaden vínculos de fuente específicos.
