@@ -1031,3 +1031,15 @@ La carga requiere `expenses:write`, la descarga requiere `expenses:read`; los in
 | US-17 | Parcial funcional | CRM puede archivar y descargar el comprobante de un gasto en Drive; pendientes la política de comprobación, aprobación y el flujo móvil. |
 
 La migración `202611080069` añade metadatos de archivo a gastos sin reemplazar sus enlaces previos; `202611080070` agrega versiones append-only de las tarjetas relacionadas.
+
+## Iteración 59 — comprobantes de gastos desde la PWA (2026-11-08)
+
+La PWA de campo ahora permite adjuntar al gasto un comprobante opcional PDF/JPG/PNG/WebP de hasta 12 MiB, usando la cámara trasera cuando el navegador móvil lo ofrece. Si no hay conexión, IndexedDB conserva el gasto idempotente y el archivo como `Blob`, vinculados a la identidad autenticada. Al regresar la conexión, primero se confirma el gasto y después se sube el archivo a Drive; la operación local solo se elimina tras ambas confirmaciones. Si Drive no está configurado o falla, el archivo permanece en cola y se puede reintentar sin duplicar el gasto. Descartar explícitamente operaciones pendientes advierte que también eliminará comprobantes locales.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-10 | Parcial funcional | CRM y PWA admiten comprobantes privados; la PWA los mantiene offline y reintenta el archivado sin duplicar gastos. Pendientes política de aprobación/revisión y configuración autorizada de Drive en DEV. |
+| US-13 | Parcial funcional | Los comprobantes de campo ahora llegan a Drive desde móvil incluso tras captura sin conexión. Sigue pendiente sincronización general de datos, documentos legales, permisos/carpetas y retención/restauración. |
+| US-17 | Parcial funcional | El gasto de campo acepta archivo en la PWA y conserva el archivo pendiente hasta confirmación de Drive. La política contable de comprobación y aprobación requiere validación. |
+
+La migración `202611080071` registra nuevas versiones append-only para US-10, US-13 y US-17; conserva intactos los relatos originales.
