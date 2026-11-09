@@ -4,6 +4,17 @@ const APP_SHELL = ['/app/'];
 self.addEventListener('install', (event) => event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting())));
 self.addEventListener('activate', (event) => event.waitUntil(Promise.all([self.clients.claim(), caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith('arcoenergy-shell-') && key !== CACHE_NAME).map((key) => caches.delete(key))))])));
 
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try { payload = event.data ? event.data.json() : {}; } catch { payload = {}; }
+  const destination = typeof payload.url === 'string' && payload.url.startsWith('/app/') ? payload.url : '/app/';
+  event.waitUntil(self.registration.showNotification(payload.title || 'ArcoEnergy', {
+    body: payload.body || 'Tienes una actualización de tu operación.',
+    tag: payload.tag || 'arcoenergy-update',
+    data: { url: destination },
+  }));
+});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {

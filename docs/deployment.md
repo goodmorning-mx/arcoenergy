@@ -101,6 +101,7 @@ Do not copy every variable from `.env.example` into both Coolify applications. U
 
 - Frontend build-time: `VITE_API_URL`, and `VITE_BASE_PATH=/app/` for hybrid.
 - Backend runtime: `APP_NAME`, `APP_ENV`, `CORS_ORIGINS`, `DATABASE_URL`; optional `GOOGLE_DRIVE_FOLDER_ID` and secret `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` for private quote PDF storage. Enable the Google Drive API and share the destination folder with the service account email. Leave both Drive values unset until authorized; the product reports Drive as unconfigured and keeps local PDF download available.
+- Backend runtime: secret `WEB_PUSH_VAPID_SECRET` for installer assignment alerts. Factory generates and preserves this secret; the API derives a stable P-256 VAPID key pair from it. `WEB_PUSH_SUBJECT` is the public `mailto:` identity sent to browser push services. Without the secret, push subscription endpoints report that the feature is not configured.
 - Gateway runtime: `REACT_UPSTREAM`, `NEXT_UPSTREAM`, `API_UPSTREAM` as internal
   service URLs. The local hybrid gateway maps to port `8081`.
 - Local Compose only: `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, plus local placeholder defaults.

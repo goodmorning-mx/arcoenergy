@@ -3,7 +3,7 @@
 ArcoEnergy is delivered as separate public, mobile and desktop surfaces over one private API and PostgreSQL database:
 
 - `/` and `/seo`: public Next.js site with Spanish metadata, local service areas, FAQ structured data, lead capture and a conversational quote assistant.
-- `/app/`: standalone React PWA for mobile operations. It uses pinned `gm-pwa` and `gm-auth`, reads the live quote catalog and installation assignments, and supports installation checklists, material consumption/returns, project expenses and camera barcode lookup where the browser supports `BarcodeDetector`.
+- `/app/`: standalone React PWA for mobile operations. It uses pinned `gm-pwa` and `gm-auth`, reads the live quote catalog and installation assignments, and supports installation checklists, material consumption/returns, project expenses and camera barcode lookup where the browser supports `BarcodeDetector`. Installers can opt in to server Web Push alerts for new assignments; messages contain only the work-order folio.
 - `/crm/`: separate React application for desktop business administration. It uses `gm-auth` for identity and `gm-agent` for a contextual read-only assistant; it manages customers, activity, follow-ups, manual quotes, sales/work orders, inventory/purchases, cash/receivables, operational reports, quote catalog and team access.
 - `/api/`: FastAPI application with `gm-auth`, `gm-agent`, `gm-mcp`, role permissions and product endpoints.
 - PostgreSQL 16: customers, quote packages and folios, activities, follow-ups, installation tasks, inventory movements, project expenses and receivables.

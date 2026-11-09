@@ -1058,3 +1058,14 @@ La PWA muestra al instalador asignado el domicilio del proyecto y acciones para 
 La migración `202611080072` registra nuevas versiones append-only de US-7 y US-14 y conserva intactas las fuentes literales.
 
 La implementación se integró mediante el PR [#95](https://github.com/goodmorning-mx/arcoenergy/pull/95), merge commit `08fc60d0eae19512368dfd9134f437c275a9e1ef`. Factory completó DEV y la verificación de esquema/respaldo en el run [#42448484925](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42448484925). API, CRM y PWA reportan el mismo SHA y PostgreSQL informa `202611080072`; las versiones activas de US-7 y US-14 quedaron en Iteración 60. `/`, `/api/health/ready`, `/login`, `/crm/login`, `/app/login` y las rutas de versión respondieron HTTP 200. Chrome headless renderizó los tres accesos; el bundle PWA desplegado contiene los enlaces de llamada y correo. CI Backend, CRM, Frontend, Next.js y Docker pasó; Backend: 163 pruebas locales. El job auxiliar `report` falló sin afectar la integración ni el despliegue.
+
+## Iteración 61 — avisos push de asignación a instaladores (2026-11-08)
+
+La PWA permite al instalador activar o desactivar Web Push desde la vista de instalaciones. La suscripción queda vinculada al correo autenticado, puede existir en varios dispositivos y el API limita altas/bajas a la cuenta con rol `instalador`. Al crear una orden o aceptar una venta que crea una orden, el API programa un aviso a cada instalador suscrito y asignado; el payload incluye únicamente el folio y una ruta interna, sin datos personales del cliente. El service worker presenta el aviso aun con la PWA cerrada y abre `/app/` al tocarlo. Los endpoints de suscripción aceptan solo servicios push conocidos por HTTPS; la clave VAPID se deriva de un secreto persistente administrado por Factory.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-7 | Parcial funcional | La asignación incluye aviso push opcional con la app cerrada y conserva el detalle de contacto dentro de la PWA. Falta validar recepción/desactivación en los dispositivos reales del equipo. |
+| US-40 | Parcial funcional | La PWA registra suscripciones Web Push y el service worker recibe avisos en segundo plano. Falta validar instalación y entrega en los teléfonos y sistemas operativos usados por campo. |
+
+La migración `202611080073` agrega el almacenamiento de suscripciones y registra versiones nuevas de US-7/US-40 sin modificar los relatos literales. La clave `WEB_PUSH_VAPID_SECRET` se configura como secreto generado y persistido en el manifiesto de DEV de Factory; el API no habilita registro push si falta esa variable.
