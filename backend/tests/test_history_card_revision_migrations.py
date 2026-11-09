@@ -94,6 +94,33 @@ def test_stock_notification_migration_appends_us26_history_revision() -> None:
     assert any("aplicación cerrada" in item for item in versions[1].unresolved_questions)
 
 
+def test_crm_followup_reminder_migration_appends_versions_without_rewriting_source() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    records = json.loads((ROOT / "app" / "history_card_initial.json").read_text(encoding="utf-8"))
+    now = datetime.now(timezone.utc)
+    for row in records:
+        row.update(id=str(uuid4()), recorded_by="source-import", created_at=now)
+    migration = load_migration("202611090075_crm_followup_browser_reminders.py")
+    with engine.begin() as connection:
+        connection.execute(HistoryCard.__table__.insert(), records)
+        original_us4 = connection.scalar(select(HistoryCard.source_literal).where(HistoryCard.story_id == "US-4", HistoryCard.version == 1))
+        original_us39 = connection.scalar(select(HistoryCard.source_literal).where(HistoryCard.story_id == "US-39", HistoryCard.version == 1))
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+        versions = connection.execute(select(HistoryCard.story_id, HistoryCard.version, HistoryCard.iteration,
+            HistoryCard.source_literal, HistoryCard.acceptance_criteria, HistoryCard.unresolved_questions)
+            .where(HistoryCard.story_id.in_(["US-4", "US-39"])).order_by(HistoryCard.story_id, HistoryCard.version)).all()
+
+    assert len(versions) == 4
+    by_story = {story_id: [row for row in versions if row.story_id == story_id] for story_id in ("US-4", "US-39")}
+    assert all(row.source_literal == original_us4 for row in by_story["US-4"])
+    assert all(row.source_literal == original_us39 for row in by_story["US-39"])
+    assert all(rows[1].version == 2 and rows[1].iteration == "Iteración 63 · avisos de seguimiento en CRM · 2026-11-09" for rows in by_story.values())
+    assert any("sin incluir nombre ni comentario" in item for item in by_story["US-4"][1].acceptance_criteria)
+    assert any("CRM está cerrado" in item for item in by_story["US-4"][1].unresolved_questions)
+
+
 def test_purchase_correction_migration_adds_schema_and_appends_source_linked_versions() -> None:
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)

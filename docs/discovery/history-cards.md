@@ -1082,3 +1082,14 @@ Administración puede asignar un instalador activo a la reposición de cada art�
 | US-40 | Parcial funcional | La PWA recibe push de reabasto en segundo plano y evita duplicar el aviso local cuando existe una suscripción. Falta validar instalación y recepción en dispositivos reales. |
 
 La migración `202611090074` agrega responsable y estado de alerta al inventario y versiona US-26/US-40 sin editar su fuente original. `/version` ahora informa también la revisión Alembic para que Factory pueda verificar esquema vivo.
+
+## Iteración 63 — avisos de seguimiento en CRM (2026-11-09)
+
+El CRM permite a cada usuario activar avisos del navegador con permiso explícito. Mientras el CRM está abierto, actualiza la agenda cada minuto y muestra un aviso genérico para seguimientos vencidos o con fecha de hoy, sin exponer el nombre ni la nota del cliente en la pantalla de notificaciones. Cada seguimiento se avisa una vez por cuenta y navegador. La bandeja del CRM sigue mostrando el detalle y permite completar el contacto. El aviso no funciona cuando se cierra el CRM; push, correo o WhatsApp en segundo plano requieren definir y configurar el canal, y probarlo con el equipo real.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-4 | Parcial funcional | Se agregan avisos del navegador autorizados, con actualización periódica y deduplicación local; faltan avisos con CRM cerrado y validación con vendedores reales. |
+| US-39 | Parcial funcional | El CRM presenta notificaciones genéricas de seguimientos dentro de una sesión abierta; faltan canal de fondo y cuentas reales para validar. |
+
+La migración `202611090075` agrega versiones append-only para US-4 y US-39; conserva intactos los relatos originales. La alerta consulta los seguimientos que ya pertenecen al usuario autenticado y no crea ni reasigna tareas.
