@@ -1109,3 +1109,14 @@ La opción anterior de aviso solo mientras el CRM estaba abierto se sustituye po
 La migración `202611090076` renombra la columna de suscripciones a `user_email`, conserva sus propietarios, agrega marcas de reclamo/entrega a seguimientos y crea versiones append-only de US-4/US-39/US-40. Los reclamos abandonados vencen para reintentar; los avisos solo se envían al responsable vigente del seguimiento. El endpoint de suscripción confirma propiedad por cuenta y dispositivo.
 
 El producto quedó integrado en DEV por el PR [#102](https://github.com/goodmorning-mx/arcoenergy/pull/102), merge commit `c2a6d0b1685afce32d6c688665e1f543b87a1c2c`. Factory integró el contrato de esquema por el PR [#420](https://github.com/goodmorning-mx/goodmorning-factory/pull/420) y el run [#42546327554](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42546327554) terminó correctamente: despliegue, revisión viva `202611090076` y reconciliación de respaldos aprobados. La API reportó el commit y esquema esperados y `health/ready` respondió `ready`; `/login`, `/crm/login`, `/app/login`, `/crm/` y `/app/` respondieron HTTP 200. El bundle publicado del CRM incluye la opción de activar avisos push y su service worker permite `/crm/`. Validación local previa: 190 pruebas backend, builds de CRM y PWA, 34 contratos de Factory. Los workflows de CI del PR de producto no ejecutaron pasos por el límite de facturación de GitHub; los resultados locales se registran separadamente y no como CI aprobada.
+
+## Iteración 65 — disponibilidad de material por orden (2026-11-09)
+
+La PWA y el CRM muestran cuánto material solicitado queda disponible para cada orden, cuánto falta para completarla y las cantidades solicitadas/entregadas/consumidas. El cálculo parte de la existencia física y conserva las reservas de las demás órdenes abiertas; elimina la inferencia incorrecta que presentaba el faltante global como si perteneciera a cada proyecto. No crea movimientos de almacén ni cambia las reservas. Para solicitudes nuevas, el flujo de venta sigue validando existencias antes de confirmar.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-8 | Parcial funcional | Disponibilidad y faltante calculados por orden en CRM/PWA considerando reservas de otras órdenes abiertas. Pendiente validar contra movimientos y existencias reales en campo. |
+| US-40 | Parcial funcional | PWA diferencia material cubierto y faltante por proyecto incluso con snapshots almacenados; falta validar el flujo con instaladores y stock real. |
+
+La migración `202611090077` agrega una versión append-only de US-8 que conserva intacta la fuente original. La prueba cubre dos órdenes concurrentes que solicitan el mismo inventario y verifica la disponibilidad individual de cada proyecto.

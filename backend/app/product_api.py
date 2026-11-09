@@ -1456,11 +1456,46 @@ def list_installations(identity: AuthIdentity = Depends(require_permissions(auth
         )
         query = query.where(Installation.status != "cancelled").where(or_(func.lower(Installation.lead_installer) == (identity.email or "").strip().lower(), Installation.id.in_(assigned_ids)))
     rows = db.scalars(query).all()
+    reserved_by_item = {
+        item_id: Decimal(quantity or 0)
+        for item_id, quantity in db.execute(
+            select(WorkOrderMaterial.item_id, func.sum(WorkOrderMaterial.requested_quantity - WorkOrderMaterial.preissued_quantity))
+            .join(Installation, Installation.id == WorkOrderMaterial.installation_id)
+            .where(Installation.status.notin_(("closed", "cancelled")))
+            .group_by(WorkOrderMaterial.item_id)
+        ).all()
+    }
+    visible_materials = db.scalars(select(WorkOrderMaterial).where(
+        WorkOrderMaterial.installation_id.in_([row.id for row in rows]),
+    )).all() if rows else []
+    materials_by_installation: dict[str, list[WorkOrderMaterial]] = {}
+    for material in visible_materials:
+        materials_by_installation.setdefault(material.installation_id, []).append(material)
+    item_ids = {material.item_id for material in visible_materials}
+    inventory_by_id = {item.id: item for item in db.scalars(
+        select(InventoryItem).where(InventoryItem.id.in_(item_ids)),
+    ).all()} if item_ids else {}
     result = []
     for row in rows:
         customer = db.get(Customer, row.customer_id)
-        materials = db.scalars(select(WorkOrderMaterial).where(WorkOrderMaterial.installation_id == row.id)).all()
+        materials = materials_by_installation.get(row.id, [])
         assignments = db.scalars(select(InstallationAssignment).where(InstallationAssignment.installation_id == row.id)).all()
+        serialized_materials = []
+        for material in materials:
+            item = inventory_by_id.get(material.item_id)
+            remaining_to_issue = max(Decimal(material.requested_quantity) - Decimal(material.preissued_quantity), Decimal("0"))
+            active = row.status not in {"closed", "cancelled"}
+            other_reserved = max(reserved_by_item.get(material.item_id, Decimal("0")) - (remaining_to_issue if active else Decimal("0")), Decimal("0"))
+            available_for_order = max(Decimal(str(item.quantity)) - other_reserved, Decimal("0")) if item and active else None
+            shortage = max(remaining_to_issue - available_for_order, Decimal("0")) if available_for_order is not None else Decimal("0")
+            serialized_materials.append({
+                **_serialize(material),
+                "item_name": item.name if item else "Artículo",
+                "remaining_quantity": max(Decimal(material.requested_quantity) - Decimal(material.consumed_quantity), Decimal("0")),
+                "remaining_to_issue": remaining_to_issue,
+                "available_for_order": available_for_order,
+                "shortage_quantity": shortage,
+            })
         result.append({**_serialize(row),
             "assigned_installers": [assignment.installer_email for assignment in assignments] or ([row.lead_installer] if row.lead_installer else []),
             "confirmed_installers": [assignment.installer_email for assignment in assignments if assignment.confirmed_at],
@@ -1468,12 +1503,7 @@ def list_installations(identity: AuthIdentity = Depends(require_permissions(auth
             # customer record (status/source and other private metadata).
             "customer": ({"id": customer.id, "name": customer.name, "city": customer.city,
                           "address": customer.address, "phone": customer.phone, "email": customer.email}
-                         if customer else None), "materials": [
-            {**_serialize(material), "item_name": (db.get(InventoryItem, material.item_id).name if db.get(InventoryItem, material.item_id) else "Artículo"),
-             "remaining_quantity": max(Decimal(material.requested_quantity) - Decimal(material.consumed_quantity), Decimal("0")),
-             "remaining_to_issue": max(Decimal(material.requested_quantity) - Decimal(material.preissued_quantity), Decimal("0"))}
-            for material in materials
-        ]})
+                         if customer else None), "materials": serialized_materials})
     return result
 
 
