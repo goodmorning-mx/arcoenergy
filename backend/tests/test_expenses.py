@@ -86,7 +86,7 @@ def test_expense_correction_appends_offset_and_restores_linked_account() -> None
         account = FinancialAccount(name="Banco operativo", account_type="bank", opening_balance=10000, opening_balance_date=date(2026, 11, 1))
         db.add(account)
         db.commit()
-        expense = add_expense(ExpenseInput(category="Servicios", description="Pago duplicado", amount=750, account_id=account.id), identity, db)
+        expense = add_expense(ExpenseInput(category="Servicios", expense_type="fixed", description="Pago duplicado", amount=750, account_id=account.id), identity, db)
         correction = reverse_expense(expense["id"], PaymentCorrectionInput(reason="Captura duplicada"), identity, db)
         rows = list_expenses(db)
         movements = db.query(CashMovement).order_by(CashMovement.created_at).all()
@@ -96,6 +96,7 @@ def test_expense_correction_appends_offset_and_restores_linked_account() -> None
 
     assert correction["reversal_of_id"] == expense["id"]
     assert correction["amount"] == -750
+    assert correction["expense_type"] == expense["expense_type"] == "fixed"
     assert sum(row["amount"] for row in rows) == 0
     assert len(movements) == 2
     assert movements[1].direction == "in"

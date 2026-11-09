@@ -492,6 +492,7 @@ class ExpenseInput(BaseModel):
     installation_id: str | None = None
     account_id: str | None = None
     category: str = "Viáticos"
+    expense_type: Literal["fixed", "variable", "unclassified"] = "unclassified"
     description: str = Field(min_length=2, max_length=240)
     amount: Decimal = Field(gt=0)
     receipt_url: str = ""
@@ -2256,6 +2257,7 @@ def reverse_expense(expense_id: str, data: PaymentCorrectionInput, identity: Aut
     correction = ProjectExpense(
         installation_id=original.installation_id,
         category=original.category,
+        expense_type=original.expense_type,
         description=f"Corrección del gasto {original.id}: {data.reason}",
         amount=-Decimal(original.amount),
         occurred_on=date.today(),
@@ -3208,6 +3210,7 @@ def profitability_report(
                 "materials_cost": Decimal("0"),
                 "expenses": Decimal("0"),
                 "expenses_by_category": {},
+                "expenses_by_type": {"fixed": Decimal("0"), "variable": Decimal("0"), "unclassified": Decimal("0")},
                 "missing_cost_movements": 0,
                 "material_events": 0,
             }
@@ -3266,6 +3269,8 @@ def profitability_report(
         row["expenses"] += amount
         categories = row["expenses_by_category"]
         categories[expense.category] = categories.get(expense.category, Decimal("0")) + amount
+        expense_type = expense.expense_type if expense.expense_type in {"fixed", "variable"} else "unclassified"
+        row["expenses_by_type"][expense_type] += amount
 
     rows = []
     for row in grouped.values():
@@ -3275,11 +3280,16 @@ def profitability_report(
             "materials_cost": known_material_cost,
             "preliminary_result": row["sales"] - known_material_cost - row["expenses"] if known_material_cost is not None else None,
             "expenses_by_category": row["expenses_by_category"],
+            "expenses_by_type": row["expenses_by_type"],
         })
     rows.sort(key=lambda row: (row["project"].casefold(), row["folio"] or ""))
     missing_costs = sum(row["missing_cost_movements"] for row in rows)
     sales_total = sum((row["sales"] for row in rows), Decimal("0"))
     expenses_total = sum((row["expenses"] for row in rows), Decimal("0"))
+    expenses_by_type = {
+        expense_type: sum((row["expenses_by_type"][expense_type] for row in rows), Decimal("0"))
+        for expense_type in ("fixed", "variable", "unclassified")
+    }
     material_cost_total = sum((row["materials_cost"] or Decimal("0") for row in rows), Decimal("0")) if missing_costs == 0 else None
     return {
         "period": month or (f"Proyecto · {installation_id}" if installation_id else "Todos los periodos"),
@@ -3289,6 +3299,7 @@ def profitability_report(
             "sales": sales_total,
             "materials_cost": material_cost_total,
             "expenses": expenses_total,
+            "expenses_by_type": expenses_by_type,
             "preliminary_result": sales_total - material_cost_total - expenses_total if material_cost_total is not None else None,
             "missing_cost_movements": missing_costs,
         },
@@ -3395,8 +3406,11 @@ def operations_report(
     ).all()
     expenses = [row[0] for row in expense_rows]
     expense_totals: dict[str, Decimal] = {}
+    expense_type_totals = {"fixed": Decimal("0"), "variable": Decimal("0"), "unclassified": Decimal("0")}
     for expense in expenses:
         expense_totals[expense.category] = expense_totals.get(expense.category, Decimal("0")) + Decimal(expense.amount)
+        expense_type = expense.expense_type if expense.expense_type in {"fixed", "variable"} else "unclassified"
+        expense_type_totals[expense_type] += Decimal(expense.amount)
 
     cash_flow = None
     if "accounts:read" in identity.permissions:
@@ -3479,7 +3493,7 @@ def operations_report(
         "customers_by_status": status_counts(customers),
         "suppliers": {"total": len(suppliers), "active": sum(1 for supplier in suppliers if supplier.active), "inactive": sum(1 for supplier in suppliers if not supplier.active)},
         "installations_by_status": status_counts(installations),
-        "expenses": {"total": sum(expense_totals.values(), Decimal("0")), "by_category": [{"category": key, "amount": amount} for key, amount in sorted(expense_totals.items())], "count": len(expenses)},
+        "expenses": {"total": sum(expense_totals.values(), Decimal("0")), "by_category": [{"category": key, "amount": amount} for key, amount in sorted(expense_totals.items())], "by_type": expense_type_totals, "count": len(expenses)},
         "details": {
             "customers": [{
                 "id": customer.id, "name": customer.name, "city": customer.city,
@@ -3496,6 +3510,7 @@ def operations_report(
             } for installation, customer_name, customer_city in installation_rows],
             "expenses": [{
                 "id": expense.id, "occurred_on": expense.occurred_on, "category": expense.category,
+                "expense_type": expense.expense_type,
                 "description": expense.description, "amount": expense.amount,
                 "project_folio": folio, "project_customer": customer_name or "Gasto operativo",
                 "project_city": customer_city or "", "account": account_name or "Sin cuenta vinculada",
