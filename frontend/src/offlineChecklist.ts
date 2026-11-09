@@ -9,7 +9,7 @@ export type Installation = {
   notes: string;
   customer?: { id?: string; name: string; city: string; address?: string; phone?: string; email?: string };
   checklist?: Array<{ task: string; done: boolean }>;
-  materials?: Array<{ item_id: string; item_name: string; requested_quantity: number; consumed_quantity: number; remaining_quantity: number }>;
+  materials?: Array<{ item_id: string; item_name: string; requested_quantity: number; preissued_quantity: number; consumed_quantity: number; remaining_quantity: number; remaining_to_issue: number; available_for_order: number | null; shortage_quantity: number }>;
 };
 
 export type ChecklistQueueItem = {
