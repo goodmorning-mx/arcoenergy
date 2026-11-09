@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import asyncio
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,13 +8,22 @@ from gm_auth import create_auth_router
 from app.config import get_settings
 from app.auth import auth_service, bootstrap_admin
 from app.product_api import router as product_router
+from app.reminders import followup_push_loop
 
 settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     bootstrap_admin()
-    yield
+    worker = asyncio.create_task(followup_push_loop())
+    try:
+        yield
+    finally:
+        worker.cancel()
+        try:
+            await worker
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)

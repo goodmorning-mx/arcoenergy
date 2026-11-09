@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Base, PushSubscription
 from app import product_api
-from app.product_api import PushSubscriptionDeleteInput, PushSubscriptionInput, _queue_installation_push, remove_push_subscription, save_push_subscription
+from app.product_api import PushSubscriptionDeleteInput, PushSubscriptionInput, _queue_installation_push, get_own_push_subscription, remove_push_subscription, save_push_subscription
 from app.web_push import _NoRedirectSession, send_push, validate_push_endpoint, vapid_public_key
 from gm_auth.models import AuthIdentity
 
@@ -61,28 +61,33 @@ def test_send_push_uses_configured_vapid_and_encrypted_subscription():
     assert '"url":"/app/"' in kwargs["data"]
 
 
-def test_only_installer_can_store_and_remove_own_push_subscription(monkeypatch):
+def test_crm_and_installer_users_can_store_and_remove_only_their_own_push_subscription(monkeypatch):
     monkeypatch.setattr(product_api, "get_settings", lambda: SimpleNamespace(web_push_vapid_secret="server-secret"))
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
     installer = AuthIdentity("installer-id", "arcoenergy", frozenset({"instalador"}), frozenset({"installations:read"}), "crew@example.test", "Installer")
-    administrator = AuthIdentity("admin-id", "arcoenergy", frozenset({"administrador"}), frozenset({"installations:read"}), "admin@example.test", "Admin")
+    marketing = AuthIdentity("marketing-id", "arcoenergy", frozenset({"marketing"}), frozenset({"customers:read", "customers:write"}), "seller@example.test", "Seller")
+    accountant = AuthIdentity("accountant-id", "arcoenergy", frozenset({"contador"}), frozenset({"reports:read"}), "accountant@example.test", "Accountant")
     endpoint = "https://fcm.googleapis.com/fcm/send/push-token"
     body = PushSubscriptionInput(endpoint=endpoint, keys={"p256dh": "device-key", "auth": "auth-key"})
     with Session(engine) as db:
         with pytest.raises(HTTPException) as denied:
-            save_push_subscription(body, administrator, db)
+            save_push_subscription(body, accountant, db)
         assert denied.value.status_code == 403
 
-        save_push_subscription(body, installer, db)
+        save_push_subscription(body, marketing, db)
         saved = db.scalars(select(PushSubscription)).one()
-        assert saved.installer_email == "crew@example.test"
+        assert saved.user_email == "seller@example.test"
         assert saved.p256dh == "device-key"
+        assert get_own_push_subscription(endpoint, marketing, db) == {"active": True}
+        assert get_own_push_subscription(endpoint, installer, db) == {"active": False}
 
         with pytest.raises(HTTPException) as denied:
-            remove_push_subscription(PushSubscriptionDeleteInput(endpoint=endpoint), administrator, db)
+            remove_push_subscription(PushSubscriptionDeleteInput(endpoint=endpoint), accountant, db)
         assert denied.value.status_code == 403
         assert db.scalars(select(PushSubscription)).one().endpoint == endpoint
+        save_push_subscription(body, installer, db)
+        assert db.scalars(select(PushSubscription)).one().user_email == "crew@example.test"
         remove_push_subscription(PushSubscriptionDeleteInput(endpoint=endpoint), installer, db)
         assert db.scalars(select(PushSubscription)).all() == []
 
@@ -93,8 +98,8 @@ def test_assignment_schedules_push_only_for_subscribed_installers(monkeypatch):
     Base.metadata.create_all(engine)
     with Session(engine) as db:
         db.add_all([
-            PushSubscription(installer_email="one@example.test", endpoint="https://fcm.googleapis.com/push/1", p256dh="key-1", auth="auth-1"),
-            PushSubscription(installer_email="other@example.test", endpoint="https://fcm.googleapis.com/push/2", p256dh="key-2", auth="auth-2"),
+            PushSubscription(user_email="one@example.test", endpoint="https://fcm.googleapis.com/push/1", p256dh="key-1", auth="auth-1"),
+            PushSubscription(user_email="other@example.test", endpoint="https://fcm.googleapis.com/push/2", p256dh="key-2", auth="auth-2"),
         ])
         db.commit()
         tasks = BackgroundTasks()

@@ -22,7 +22,7 @@ def test_low_stock_push_fires_on_threshold_crossing_once_and_rearms(monkeypatch)
             restock_responsible_email="installer@example.test",
         )
         db.add_all([item, PushSubscription(
-            installer_email="installer@example.test", endpoint="https://fcm.googleapis.com/push/abc",
+            user_email="installer@example.test", endpoint="https://fcm.googleapis.com/push/abc",
             p256dh="p256dh", auth="auth",
         )])
         db.flush()
