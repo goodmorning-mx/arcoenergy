@@ -189,6 +189,8 @@ class InventoryItem(Base):
     unit: Mapped[str] = mapped_column(String(40), default="pieza")
     quantity: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     minimum_quantity: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    restock_responsible_email: Mapped[str] = mapped_column(String(180), default="")
+    low_stock_alert_active: Mapped[bool] = mapped_column(Boolean, default=False)
     unit_cost: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 

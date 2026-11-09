@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from gm_auth.models import AuthIdentity
 
 from app.models import Base, InventoryItem, Supplier
-from app.product_api import InventoryItemInput, InventoryItemUpdateInput, create_inventory_item, update_inventory_item
+from app.product_api import InventoryItemInput, InventoryItemUpdateInput, _serialize_inventory_item, create_inventory_item, update_inventory_item
 from app.roles import ROLE_PERMISSIONS
 
 
@@ -73,3 +73,22 @@ def test_inventory_catalog_edit_rejects_duplicate_code_and_unknown_article() -> 
         with pytest.raises(HTTPException) as missing:
             update_inventory_item("missing", InventoryItemUpdateInput(name="Panel solar"), manager, db)
         assert missing.value.status_code == 404
+
+
+def test_inventory_api_hides_restock_owner_and_internal_alert_flag_from_field_role() -> None:
+    item = InventoryItem(
+        name="Microinversor", unit="pieza", quantity=2, minimum_quantity=3,
+        restock_responsible_email="installer@example.test", low_stock_alert_active=True,
+        unit_cost=Decimal("3500"),
+    )
+    installer = AuthIdentity("installer", "arcoenergy", frozenset({"instalador"}), ROLE_PERMISSIONS["instalador"], "installer@example.test", "Instalador")
+    manager = AuthIdentity("admin", "arcoenergy", frozenset({"administrador"}), ROLE_PERMISSIONS["administrador"], "admin@example.test", "Admin")
+
+    field_view = _serialize_inventory_item(item, installer)
+    manager_view = _serialize_inventory_item(item, manager)
+
+    assert "restock_responsible_email" not in field_view
+    assert "low_stock_alert_active" not in field_view
+    assert "unit_cost" not in field_view
+    assert manager_view["restock_responsible_email"] == "installer@example.test"
+    assert "low_stock_alert_active" not in manager_view
