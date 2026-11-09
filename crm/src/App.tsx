@@ -39,6 +39,21 @@ const cancunDate = () => {
   const part = (type: string) => parts.find(item => item.type === type)?.value || '';
   return `${part('year')}-${part('month')}-${part('day')}`;
 };
+async function activeFieldServiceWorker() {
+  const registration = await navigator.serviceWorker.register('/app/sw.js', { scope: '/app/' });
+  if (registration.active) return registration;
+  const worker = registration.installing || registration.waiting;
+  if (!worker) throw new Error('No se pudo activar el servicio de notificaciones.');
+  await new Promise<void>((resolve, reject) => {
+    const finish = () => {
+      if (worker.state === 'activated') resolve();
+      else if (worker.state === 'redundant') reject(new Error('No se pudo activar el servicio de notificaciones.'));
+    };
+    worker.addEventListener('statechange', finish);
+    finish();
+  });
+  return registration;
+}
 const initials = (name: string) => name.split(/\s+/).slice(0, 2).map(part => part[0]).join('').toUpperCase();
 const roleLabel: Record<string, string> = { admin: 'Administrador', administrador: 'Administrador', contador: 'Contador', marketing: 'Marketing', instalador: 'Instalador', cliente: 'Cliente' };
 const roleOptions = [['administrador', 'Administrador'], ['contador', 'Contador'], ['marketing', 'Marketing'], ['instalador', 'Instalador'], ['cliente', 'Cliente']] as const;
@@ -82,7 +97,7 @@ export default function App() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [followups, setFollowups] = useState<FollowUp[]>([]);
-  const [followupAlertsEnabled, setFollowupAlertsEnabled] = useState(false);
+  const [followupPushActive, setFollowupPushActive] = useState(false);
   const [catalog, setCatalog] = useState<CatalogPayload | null>(null);
   const [search, setSearch] = useState('');
   const [customerOpen, setCustomerOpen] = useState(false);
@@ -115,11 +130,6 @@ export default function App() {
   const [printQuote, setPrintQuote] = useState<Quote | null>(null);
 
   const can = useCallback((permission: string) => Boolean(identity?.permissions.includes(permission)), [identity]);
-
-  useEffect(() => {
-    if (!identity?.email) { setFollowupAlertsEnabled(false); return; }
-    setFollowupAlertsEnabled(window.localStorage.getItem(`ae:followup-alerts:${identity.email.toLowerCase()}`) === 'enabled');
-  }, [identity?.email]);
 
   const clientAccount = identity?.roles.includes('cliente') || false;
   const allowedViews = useMemo(() => clientAccount ? [] : ([
@@ -168,46 +178,65 @@ export default function App() {
   useEffect(() => { if (allowedViews.length && !allowedViews.includes(view)) setView(allowedViews[0]); }, [allowedViews, view]);
 
   useEffect(() => {
-    if (!accessToken || !can('customers:read')) return;
-    const timer = window.setInterval(() => {
-      void request<FollowUp[]>('/followups', accessToken).then(setFollowups).catch(() => undefined);
-    }, 60_000);
-    return () => window.clearInterval(timer);
+    if (!accessToken || !can('customers:read') || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      setFollowupPushActive(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const registration = await navigator.serviceWorker.getRegistration('/app/');
+      const subscription = await registration?.pushManager.getSubscription();
+      if (!subscription) { if (!cancelled) setFollowupPushActive(false); return; }
+      const status = await request<{ active: boolean }>(`/push/subscriptions/self?endpoint=${encodeURIComponent(subscription.endpoint)}`, accessToken);
+      if (!cancelled) setFollowupPushActive(status.active);
+    })().catch(() => { if (!cancelled) setFollowupPushActive(false); });
+    return () => { cancelled = true; };
   }, [accessToken, can]);
 
-  useEffect(() => {
-    if (!followupAlertsEnabled || !identity?.email || !('Notification' in window) || Notification.permission !== 'granted') return;
-    const today = cancunDate();
-    for (const item of followups) {
-      if (item.done || item.due_date > today) continue;
-      const key = `ae:followup-alert:${identity.email.toLowerCase()}:${item.id}`;
-      if (window.localStorage.getItem(key) === 'sent') continue;
-      try {
-        const notification = new Notification('Seguimiento pendiente', {
-          body: 'Tienes un contacto programado para hoy o vencido. Abre ArcoEnergy para revisar tu agenda.',
-          tag: `ae-followup-${item.id}`,
+  async function toggleFollowupPush() {
+    if (!accessToken || !('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      announce('Este navegador no admite avisos push en segundo plano.', 'error');
+      return;
+    }
+    try {
+      const existingRegistration = await navigator.serviceWorker.getRegistration('/app/');
+      const existingSubscription = await existingRegistration?.pushManager.getSubscription();
+      if (followupPushActive && existingSubscription) {
+        const response = await fetch(`${apiBase}/push/subscriptions`, {
+          method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endpoint: existingSubscription.endpoint }),
         });
-        notification.onclick = () => { window.focus(); window.location.assign('/crm/'); };
-        window.localStorage.setItem(key, 'sent');
-      } catch { /* Browser notification delivery is optional; the CRM agenda remains available. */ }
-    }
-  }, [followups, followupAlertsEnabled, identity?.email]);
+        if (!response.ok) throw new Error('No se pudo desactivar este dispositivo.');
+        await existingSubscription.unsubscribe();
+        setFollowupPushActive(false);
+        announce('Avisos de seguimiento desactivados en este dispositivo.');
+        return;
+      }
 
-  async function toggleFollowupAlerts() {
-    if (!identity?.email || !('Notification' in window)) return;
-    if (followupAlertsEnabled) {
-      window.localStorage.removeItem(`ae:followup-alerts:${identity.email.toLowerCase()}`);
-      setFollowupAlertsEnabled(false);
-      return;
+      const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+      if (permission !== 'granted') throw new Error('El navegador no autorizó los avisos.');
+      const registration = await activeFieldServiceWorker();
+      const keyResponse = await fetch(`${apiBase}/push/vapid-public-key`, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!keyResponse.ok) {
+        const body = await keyResponse.json().catch(() => ({}));
+        throw new Error(body.detail || 'No se pudo configurar el aviso push.');
+      }
+      const { public_key: publicKey } = await keyResponse.json();
+      const applicationServerKey = Uint8Array.from(atob(publicKey.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - publicKey.length % 4) % 4)), char => char.charCodeAt(0));
+      const subscription = await registration.pushManager.getSubscription() || await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey });
+      const saveResponse = await fetch(`${apiBase}/push/subscriptions`, {
+        method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(subscription.toJSON()),
+      });
+      if (!saveResponse.ok) {
+        const body = await saveResponse.json().catch(() => ({}));
+        throw new Error(body.detail || 'No se pudo guardar este dispositivo.');
+      }
+      setFollowupPushActive(true);
+      announce('Avisos de seguimiento activados. Llegarán aunque cierres el CRM.');
+    } catch (error) {
+      announce(error instanceof Error ? error.message : 'No se pudieron activar los avisos.', 'error');
     }
-    const permission = Notification.permission === 'default' ? await Notification.requestPermission() : Notification.permission;
-    if (permission !== 'granted') {
-      announce('El navegador no autorizó los avisos. Puedes habilitarlos en los permisos del sitio.', 'error');
-      return;
-    }
-    window.localStorage.setItem(`ae:followup-alerts:${identity.email.toLowerCase()}`, 'enabled');
-    setFollowupAlertsEnabled(true);
-    announce('Avisos de seguimiento activados mientras el CRM esté abierto.');
   }
 
   useEffect(() => {
@@ -541,7 +570,7 @@ export default function App() {
         {view === 'clientes' && <CustomersView customers={visibleCustomers} search={search} onSearch={setSearch} onCreate={() => setCustomerOpen(true)} canCreate={can('customers:write')} onSelect={setSelectedCustomer} />}
         {view === 'cotizaciones' && <QuotesView quotes={quotes} onCreate={() => setQuoteOpen(true)} onDownload={downloadQuote} onShare={shareQuote} onMarkSent={markQuoteSent} onAccept={acceptQuote} canWrite={can('quotes:write')} />}
         {view === 'ventas' && <SalesView items={sales} quotes={quotes} inventory={inventory} installers={installers} accounts={accounts} canWrite={can('sales:write')} token={accessToken || ''} onItems={setSales} onAccounts={setAccounts} onInventory={setInventory} onRefresh={refresh} announce={announce} />}
-        {view === 'seguimientos' && <FollowupsView items={followups} onComplete={completeFollowup} onCustomer={setSelectedCustomer} alertsEnabled={followupAlertsEnabled} onToggleAlerts={()=>void toggleFollowupAlerts()} alertsSupported={'Notification' in window} />}
+        {view === 'seguimientos' && <FollowupsView items={followups} onComplete={completeFollowup} onCustomer={setSelectedCustomer} pushActive={followupPushActive} onTogglePush={()=>void toggleFollowupPush()} pushSupported={'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window} />}
         {view === 'instalaciones' && <InstallationsView items={installations} customers={customers} team={team} canWrite={can('installations:write')} token={accessToken || ''} onRefresh={refresh} announce={announce} />}
         {view === 'inventario' && <InventoryView items={inventory} movements={inventoryMovements} installations={installations} installers={installers} suppliers={suppliers} canManage={can('inventory:manage')} canIssue={can('inventory:issue')} canReadCosts={can('inventory:costs:read') || can('inventory:manage')} token={accessToken || ''} onRefresh={refresh} onMovements={setInventoryMovements} onInstallations={setInstallations} announce={announce} />}
         {view === 'gastos' && <ExpensesView items={expenses} installations={installations} accounts={accounts} canWrite={can('expenses:write')} canCorrect={can('expenses:write') && !identity.roles.includes('instalador')} onSubmit={createExpense} onReverse={reverseExpense} onDownloadReceipt={downloadExpenseReceipt} pendingReceipt={pendingExpenseReceipt} onRetryReceipt={()=>pendingExpenseReceipt&&void attachExpenseReceipt(pendingExpenseReceipt.expense,pendingExpenseReceipt.file)} />}
@@ -602,9 +631,9 @@ function QuotesView({ quotes, onCreate, onDownload, onShare, onMarkSent, onAccep
   return <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">PROPUESTAS SOLARES</span><h2>{quotes.length} cotizaciones</h2></div>{canWrite && <button className="button button-primary" onClick={onCreate}>＋ Nueva cotización</button>}</div>{quotes.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>FOLIO / CLIENTE</th><th>SISTEMA</th><th>INSTALACIÓN</th><th>INVERSIÓN</th><th>ESTADO</th><th>ACCIONES</th></tr></thead><tbody>{quotes.map(item => <tr key={item.id}><td><b>{item.folio}</b><small className="sub-cell">{item.customer?.name || 'Cliente'}</small></td><td>{item.panel_count} paneles · {((item.panel_count * item.panel_watts) / 1000).toFixed(1)} kWp<small className="sub-cell">{item.inverter}</small></td><td>{item.installation_city || item.customer?.city || '—'}<small className="sub-cell">{item.installation_address || item.customer?.address || 'Domicilio pendiente'}</small></td><td><b>{money(item.total)}</b>{!item.pricing_approved && <small className="price-review-note">Paquete pendiente de aprobación</small>}</td><td><span className={`status-chip status-${item.status}`}>{labelStatus(item.status)}</span></td><td><div className="row-actions"><button title="Descargar PDF" onClick={() => onDownload(item)}>PDF</button><button title="Abrir WhatsApp" onClick={() => onShare(item)}>WhatsApp</button>{item.status === 'draft' && canWrite && <button title="Marcar como enviada" onClick={() => onMarkSent(item)}>Marcar enviada</button>}{item.status === 'sent' && canWrite && <button title="Registrar que el cliente aceptó" onClick={() => onAccept(item)}>Registrar aceptación</button>}</div></td></tr>)}</tbody></table></div> : <EmptyState title="Crea tu primera cotización" body="Elige un cliente y un paquete de paneles para generar el PDF foliado." action={canWrite ? 'Nueva cotización' : undefined} onClick={onCreate}/>}</section>;
 }
 
-function FollowupsView({ items, onComplete, onCustomer, alertsEnabled, onToggleAlerts, alertsSupported }: { items: FollowUp[]; onComplete: (f: FollowUp) => void; onCustomer: (c: Customer) => void; alertsEnabled: boolean; onToggleAlerts: () => void; alertsSupported: boolean }) {
+function FollowupsView({ items, onComplete, onCustomer, pushActive, onTogglePush, pushSupported }: { items: FollowUp[]; onComplete: (f: FollowUp) => void; onCustomer: (c: Customer) => void; pushActive: boolean; onTogglePush: () => void; pushSupported: boolean }) {
   const today = cancunDate();
-  return <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">BITÁCORA COMERCIAL</span><h2>{items.length} próximos contactos</h2><small className="sub-cell">Los avisos se muestran mientras este CRM esté abierto.</small></div>{alertsSupported && <button className="button button-outline" onClick={onToggleAlerts}>{alertsEnabled ? 'Desactivar avisos' : 'Activar avisos del navegador'}</button>}</div>{items.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>FECHA</th><th>CLIENTE</th><th>NOTA DE SEGUIMIENTO</th><th>RESPONSABLE</th><th>ESTADO</th><th/></tr></thead><tbody>{items.map(item => <tr key={item.id}><td>{new Date(`${item.due_date}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}</td><td><button className="link-button" onClick={() => item.customer && onCustomer(item.customer)}>{item.customer?.name || 'Cliente'}</button><small className="sub-cell">{item.customer?.city}</small></td><td>{item.note || 'Retomar conversación'}</td><td>{item.assigned_to || 'Responsable pendiente'}</td><td><span className={`status-chip ${item.due_date <= today ? 'status-overdue' : 'status-sent'}`}>{item.due_date < today ? 'Vencido' : item.due_date === today ? 'Hoy' : 'Programado'}</span></td><td><button className="button button-small button-outline" onClick={() => onComplete(item)}>Completar</button></td></tr>)}</tbody></table></div> : <EmptyState title="No tienes seguimientos pendientes" body="Desde una ficha de cliente puedes programar una fecha y agregar una nota de bitácora."/>}</section>;
+  return <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">BITÁCORA COMERCIAL</span><h2>{items.length} próximos contactos</h2><small className="sub-cell">Activa Web Push para recibir recordatorios aunque el CRM esté cerrado.</small></div>{pushSupported && <button className="button button-outline" onClick={onTogglePush}>{pushActive ? 'Desactivar avisos push' : 'Activar avisos push'}</button>}</div>{items.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>FECHA</th><th>CLIENTE</th><th>NOTA DE SEGUIMIENTO</th><th>RESPONSABLE</th><th>ESTADO</th><th/></tr></thead><tbody>{items.map(item => <tr key={item.id}><td>{new Date(`${item.due_date}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}</td><td><button className="link-button" onClick={() => item.customer && onCustomer(item.customer)}>{item.customer?.name || 'Cliente'}</button><small className="sub-cell">{item.customer?.city}</small></td><td>{item.note || 'Retomar conversación'}</td><td>{item.assigned_to || 'Responsable pendiente'}</td><td><span className={`status-chip ${item.due_date <= today ? 'status-overdue' : 'status-sent'}`}>{item.due_date < today ? 'Vencido' : item.due_date === today ? 'Hoy' : 'Programado'}</span></td><td><button className="button button-small button-outline" onClick={() => onComplete(item)}>Completar</button></td></tr>)}</tbody></table></div> : <EmptyState title="No tienes seguimientos pendientes" body="Desde una ficha de cliente puedes programar una fecha y agregar una nota de bitácora."/>}</section>;
 }
 
 const expenseCategories = ['Nómina', 'Combustible', 'Impuestos', 'Intereses', 'Préstamos', 'Mantenimiento', 'Servicios', 'Viáticos', 'Materiales', 'Otro'];

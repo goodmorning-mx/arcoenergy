@@ -12,7 +12,7 @@ from urllib.parse import quote as urlquote, unquote
 from uuid import uuid4
 import xml.etree.ElementTree as ET
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, or_, select, text
@@ -30,6 +30,7 @@ from app.config import get_settings
 from app.database import create_database_engine
 from app.drive_storage import download_private_file, folder_status, save_private_file, save_quote_pdf
 from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, Purchase, PurchaseCorrection, PurchaseLine, PushSubscription, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
+from app.reminders import send_due_followup_pushes
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 from app.web_push import send_push, validate_push_endpoint, vapid_public_key
 
@@ -128,6 +129,13 @@ def _serialize_inventory_item(row: InventoryItem, identity: AuthIdentity) -> dic
         result.pop("restock_responsible_email", None)
     if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
         result.pop("unit_cost", None)
+    return result
+
+
+def _serialize_followup(row: FollowUp) -> dict:
+    result = _serialize(row)
+    result.pop("push_claimed_at", None)
+    result.pop("push_notified_at", None)
     return result
 
 
@@ -947,7 +955,7 @@ def create_followup(data: FollowUpInput, identity: AuthIdentity = Depends(identi
     values = data.model_dump(exclude={"assigned_to"})
     row = FollowUp(**values, assigned_to=assigned_to, created_by=identity.email or ""); db.add(row); db.flush()
     db.add(Activity(customer_id=row.customer_id, kind="seguimiento programado", note=f"{row.due_date}: {row.note}", created_by=identity.email)); db.commit(); db.refresh(row)
-    return _serialize(row)
+    return _serialize_followup(row)
 
 
 @router.get("/followups", dependencies=[Depends(require_permissions(auth_service, "customers:read"))])
@@ -959,7 +967,7 @@ def list_followups(identity: AuthIdentity = Depends(identity_dependency(auth_ser
             return []
         query = query.where(func.lower(FollowUp.assigned_to) == owner)
     rows = db.scalars(query.order_by(FollowUp.due_date)).all()
-    return [{**_serialize(row), "customer": _serialize(db.get(Customer, row.customer_id))} for row in rows]
+    return [{**_serialize_followup(row), "customer": _serialize(db.get(Customer, row.customer_id))} for row in rows]
 
 
 @router.patch("/followups/{followup_id}", dependencies=[Depends(require_permissions(auth_service, "customers:write"))])
@@ -972,7 +980,7 @@ def update_followup(followup_id: str, data: FollowUpDoneInput, identity: AuthIde
     if data.done:
         db.add(Activity(customer_id=row.customer_id, kind="seguimiento completado", note=f"Seguimiento del {row.due_date}: {row.note}", created_by=identity.email))
     db.commit(); db.refresh(row)
-    return _serialize(row)
+    return _serialize_followup(row)
 
 
 def _validate_installer_emails(emails: list[str], primary_email: str = "") -> list[str]:
@@ -1014,10 +1022,11 @@ def _installer_has_assignment(db: Session, installation: Installation, email: st
     )) is not None
 
 
-def _installer_email(identity: AuthIdentity) -> str:
+def _push_user_email(identity: AuthIdentity) -> str:
     email = (identity.email or "").strip().lower()
-    if "instalador" not in identity.roles or not email:
-        raise HTTPException(403, "Las notificaciones push están disponibles para cuentas de instalador.")
+    allowed = "instalador" in identity.roles or "customers:read" in identity.permissions
+    if not allowed or not email:
+        raise HTTPException(403, "Las notificaciones push requieren acceso al CRM o rol instalador.")
     return email
 
 
@@ -1041,29 +1050,47 @@ def _validate_restock_responsible(email: str, db: Session) -> str:
 
 
 @router.get("/push/vapid-public-key")
-def get_push_public_key(identity: AuthIdentity = Depends(require_permissions(auth_service, "installations:read"))):
-    _installer_email(identity)
+def get_push_public_key(identity: AuthIdentity = Depends(require_any_permission(auth_service, "installations:read", "customers:read"))):
+    _push_user_email(identity)
     secret = get_settings().web_push_vapid_secret
     if not secret:
         raise HTTPException(503, "Las notificaciones en segundo plano no están configuradas.")
     return {"public_key": vapid_public_key(secret)}
 
 
+@router.get("/push/subscriptions/self")
+def get_own_push_subscription(
+    endpoint: str = Query(min_length=16, max_length=4096),
+    identity: AuthIdentity = Depends(require_any_permission(auth_service, "installations:read", "customers:read")),
+    db: Session = Depends(get_db),
+):
+    email = _push_user_email(identity)
+    try:
+        endpoint = validate_push_endpoint(endpoint)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    active = db.scalar(select(PushSubscription.id).where(
+        PushSubscription.endpoint == endpoint,
+        PushSubscription.user_email == email,
+    )) is not None
+    return {"active": active}
+
+
 @router.post("/push/subscriptions", status_code=204)
 def save_push_subscription(
     data: PushSubscriptionInput,
-    identity: AuthIdentity = Depends(require_permissions(auth_service, "installations:read")),
+    identity: AuthIdentity = Depends(require_any_permission(auth_service, "installations:read", "customers:read")),
     db: Session = Depends(get_db),
     background_tasks: BackgroundTasks = None,
 ):
-    email = _installer_email(identity)
+    email = _push_user_email(identity)
     if not get_settings().web_push_vapid_secret:
         raise HTTPException(503, "Las notificaciones en segundo plano no están configuradas.")
     row = db.scalar(select(PushSubscription).where(PushSubscription.endpoint == data.endpoint))
     if row is None:
-        row = PushSubscription(endpoint=data.endpoint, installer_email=email, p256dh=data.keys["p256dh"], auth=data.keys["auth"])
+        row = PushSubscription(endpoint=data.endpoint, user_email=email, p256dh=data.keys["p256dh"], auth=data.keys["auth"])
     else:
-        row.installer_email = email
+        row.user_email = email
         row.p256dh = data.keys["p256dh"]
         row.auth = data.keys["auth"]
     db.add(row)
@@ -1077,18 +1104,19 @@ def save_push_subscription(
             _queue_low_stock_alert(db, background_tasks, item, force=True)
         if low_items:
             db.commit()
+        background_tasks.add_task(send_due_followup_pushes, email)
 
 
 @router.delete("/push/subscriptions", status_code=204)
 def remove_push_subscription(
     data: PushSubscriptionDeleteInput,
-    identity: AuthIdentity = Depends(require_permissions(auth_service, "installations:read")),
+    identity: AuthIdentity = Depends(require_any_permission(auth_service, "installations:read", "customers:read")),
     db: Session = Depends(get_db),
 ):
-    email = _installer_email(identity)
+    email = _push_user_email(identity)
     db.query(PushSubscription).filter(
         PushSubscription.endpoint == data.endpoint,
-        PushSubscription.installer_email == email,
+        PushSubscription.user_email == email,
     ).delete(synchronize_session=False)
     db.commit()
 
@@ -1103,25 +1131,28 @@ def _deliver_installation_push(subscriptions: list[dict[str, str]], folio: str) 
     _deliver_push_payload(subscriptions, payload)
 
 
-def _deliver_push_payload(subscriptions: list[dict[str, str]], payload: dict[str, str]) -> None:
+def _deliver_push_payload(subscriptions: list[dict[str, str]], payload: dict[str, str]) -> bool:
     config = get_settings()
     if not config.web_push_vapid_secret:
-        return
+        return False
     expired: list[str] = []
+    delivered = False
     for subscription in subscriptions:
         status = send_push(subscription, payload, config.web_push_vapid_secret, config.web_push_subject)
+        delivered = delivered or status in (201, 202)
         if status in (404, 410):
             expired.append(subscription["endpoint"])
     if expired:
         with SessionLocal() as db:
             db.query(PushSubscription).filter(PushSubscription.endpoint.in_(expired)).delete(synchronize_session=False)
             db.commit()
+    return delivered
 
 
 def _queue_installation_push(db: Session, background_tasks: BackgroundTasks | None, installers: list[str], folio: str) -> None:
     if background_tasks is None or not installers or not get_settings().web_push_vapid_secret:
         return
-    rows = db.scalars(select(PushSubscription).where(PushSubscription.installer_email.in_(installers))).all()
+    rows = db.scalars(select(PushSubscription).where(PushSubscription.user_email.in_(installers))).all()
     subscriptions = [
         {"endpoint": row.endpoint, "p256dh": row.p256dh, "auth": row.auth}
         for row in rows
@@ -1146,7 +1177,7 @@ def _queue_low_stock_alert(db: Session, background_tasks: BackgroundTasks | None
     if not should_notify or not item.restock_responsible_email or background_tasks is None or not get_settings().web_push_vapid_secret:
         return
     rows = db.scalars(select(PushSubscription).where(
-        func.lower(PushSubscription.installer_email) == item.restock_responsible_email.lower(),
+        func.lower(PushSubscription.user_email) == item.restock_responsible_email.lower(),
     )).all()
     subscriptions = [{"endpoint": row.endpoint, "p256dh": row.p256dh, "auth": row.auth} for row in rows]
     if subscriptions:

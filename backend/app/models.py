@@ -83,6 +83,8 @@ class FollowUp(Base):
     created_by: Mapped[str] = mapped_column(String(180), default="")
     assigned_to: Mapped[str] = mapped_column(String(180), default="")
     done: Mapped[bool] = mapped_column(Boolean, default=False)
+    push_claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    push_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
@@ -127,7 +129,7 @@ class InstallationAssignment(Base):
 class PushSubscription(Base):
     __tablename__ = "ae_push_subscriptions"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    installer_email: Mapped[str] = mapped_column(String(180), nullable=False, index=True)
+    user_email: Mapped[str] = mapped_column(String(180), nullable=False, index=True)
     endpoint: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     p256dh: Mapped[str] = mapped_column(String(200), nullable=False)
     auth: Mapped[str] = mapped_column(String(100), nullable=False)

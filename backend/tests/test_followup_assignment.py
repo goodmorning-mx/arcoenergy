@@ -47,6 +47,7 @@ def test_followup_is_assigned_to_active_commercial_member_and_records_owner() ->
             db,
         )
         assert row["assigned_to"] == "seller@example.test"
+        assert "push_claimed_at" not in row and "push_notified_at" not in row
         assert db.scalar(select(FollowUp).where(FollowUp.id == row["id"])).created_by == "admin@example.test"
 
         with pytest.raises(HTTPException) as error:

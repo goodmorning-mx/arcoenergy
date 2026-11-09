@@ -7,7 +7,7 @@ self.addEventListener('activate', (event) => event.waitUntil(Promise.all([self.c
 self.addEventListener('push', (event) => {
   let payload = {};
   try { payload = event.data ? event.data.json() : {}; } catch { payload = {}; }
-  const destination = typeof payload.url === 'string' && payload.url.startsWith('/app/') ? payload.url : '/app/';
+  const destination = typeof payload.url === 'string' && (payload.url.startsWith('/app/') || payload.url.startsWith('/crm/')) ? payload.url : '/app/';
   event.waitUntil(self.registration.showNotification(payload.title || 'ArcoEnergy', {
     body: payload.body || 'Tienes una actualización de tu operación.',
     tag: payload.tag || 'arcoenergy-update',
@@ -18,9 +18,11 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-    const appClient = clients.find((client) => new URL(client.url).pathname.startsWith('/app/'));
-    if (appClient) return appClient.focus();
-    return self.clients.openWindow(event.notification.data?.url || '/app/');
+    const destination = event.notification.data?.url || '/app/';
+    const targetPrefix = destination.startsWith('/crm/') ? '/crm/' : '/app/';
+    const targetClient = clients.find((client) => new URL(client.url).pathname.startsWith(targetPrefix));
+    if (targetClient) return targetClient.focus();
+    return self.clients.openWindow(destination);
   }));
 });
 

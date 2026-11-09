@@ -5,9 +5,9 @@ from uuid import uuid4
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import create_engine, inspect, select
+from sqlalchemy import Column, DateTime, MetaData, String, Table, Text, UniqueConstraint, create_engine, inspect, select
 
-from app.models import HistoryCard, PushSubscription
+from app.models import HistoryCard
 
 
 def test_installer_push_revision_adds_subscription_store_and_preserves_source_cards():
@@ -54,7 +54,7 @@ def test_installer_push_revision_adds_subscription_store_and_preserves_source_ca
     assert any("cuando la interfaz no está abierta" in text for text in revised_cards["US-40"]["acceptance_criteria"])
 
 
-def test_installer_push_revision_reuses_table_created_from_current_metadata():
+def test_installer_push_revision_reuses_existing_legacy_subscription_table():
     path = Path(__file__).parents[1] / "alembic" / "versions" / "202611080073_installer_push_subscriptions.py"
     spec = importlib.util.spec_from_file_location(path.stem, path)
     assert spec and spec.loader
@@ -62,7 +62,18 @@ def test_installer_push_revision_reuses_table_created_from_current_metadata():
     spec.loader.exec_module(migration)
     engine = create_engine("sqlite://")
     HistoryCard.__table__.create(engine)
-    PushSubscription.__table__.create(engine)
+    metadata = MetaData()
+    Table("ae_push_subscriptions", metadata,
+        Column("id", String(36), primary_key=True),
+        Column("installer_email", String(180), nullable=False),
+        Column("endpoint", Text, nullable=False),
+        Column("p256dh", String(200), nullable=False),
+        Column("auth", String(100), nullable=False),
+        Column("created_at", DateTime(timezone=True), nullable=False),
+        UniqueConstraint("endpoint", name="uq_ae_push_subscriptions_endpoint"),
+    ).create(engine)
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE INDEX ix_ae_push_subscriptions_installer_email ON ae_push_subscriptions (installer_email)")
     with engine.begin() as connection:
         connection.execute(HistoryCard.__table__.insert(), {
             "id": str(uuid4()), "story_id": "US-7", "version": 1,
