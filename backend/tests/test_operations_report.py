@@ -28,8 +28,8 @@ def test_operations_report_summarizes_stock_activity_statuses_and_expenses() -> 
                 reason="Material para orden", created_at=datetime(2026, 11, 4, tzinfo=timezone.utc)),
             InventoryMovement(item_id=item.id, quantity=5, movement_type="in", unit_cost=3500,
                 reason="Compra", created_at=datetime(2026, 10, 28, tzinfo=timezone.utc)),
-            ProjectExpense(installation_id=installation.id, category="Viáticos", description="Combustible", amount=Decimal("850"), occurred_on=date(2026, 11, 4)),
-            ProjectExpense(installation_id=None, category="Renta", description="Oficina", amount=Decimal("12000"), occurred_on=date(2026, 10, 1)),
+            ProjectExpense(installation_id=installation.id, category="Viáticos", expense_type="variable", description="Combustible", amount=Decimal("850"), occurred_on=date(2026, 11, 4)),
+            ProjectExpense(installation_id=None, category="Renta", expense_type="fixed", description="Oficina", amount=Decimal("12000"), occurred_on=date(2026, 10, 1)),
         ])
         db.commit()
         accountant = AuthIdentity("accountant", "arcoenergy", frozenset({"contador"}), ROLE_PERMISSIONS["contador"], "contador@example.test", "Contador")
@@ -46,6 +46,7 @@ def test_operations_report_summarizes_stock_activity_statuses_and_expenses() -> 
     assert report["installations_by_status"] == [{"status": "scheduled", "count": 1}]
     assert report["expenses"]["total"] == Decimal("850.00")
     assert report["expenses"]["by_category"] == [{"category": "Viáticos", "amount": Decimal("850.00")}]
+    assert report["expenses"]["by_type"] == {"fixed": Decimal("0"), "variable": Decimal("850.00"), "unclassified": Decimal("0")}
     assert report["details"]["customers"][0]["name"] == "Cliente operativo"
     assert report["details"]["customers"][0]["city"] == "Tampico"
     assert "phone" not in report["details"]["customers"][0] and "address" not in report["details"]["customers"][0]
@@ -56,6 +57,7 @@ def test_operations_report_summarizes_stock_activity_statuses_and_expenses() -> 
     assert report["details"]["installations"][0]["customer"] == "Cliente operativo"
     assert len(report["details"]["expenses"]) == 1
     assert report["details"]["expenses"][0]["description"] == "Combustible"
+    assert report["details"]["expenses"][0]["expense_type"] == "variable"
     assert report["details"]["expenses"][0]["project_folio"] == "AE-OT-REPORT"
 
 

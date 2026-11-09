@@ -1122,3 +1122,14 @@ La PWA y el CRM muestran cuánto material solicitado queda disponible para cada 
 La migración `202611090077` agrega una versión append-only de US-8 que conserva intacta la fuente original. La prueba cubre dos órdenes concurrentes que solicitan el mismo inventario y verifica la disponibilidad individual de cada proyecto.
 
 La implementación se integró en el PR [#104](https://github.com/goodmorning-mx/arcoenergy/pull/104), merge commit `6d43b93c5f9c76453d3101db0a96838363ed36d4`. Factory integró la revisión esperada `202611090077` por el PR [#421](https://github.com/goodmorning-mx/goodmorning-factory/pull/421); el run [#42547694163](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42547694163) terminó correctamente con despliegue, verificación de esquema y reconciliación de respaldos. La API DEV informa ese commit y esquema y está `ready`; `/login`, `/crm/login`, `/app/login`, `/crm/` y `/app/` respondieron HTTP 200. Los bundles publicados de CRM y PWA contienen los estados “Faltan” y “Cubierto” por orden. Validación local: 192 pruebas backend y builds de producción CRM/PWA aprobados. Los jobs del PR de producto no iniciaron pasos por el límite de facturación de GitHub.
+
+## Iteración 66 — clasificación de gastos fijos y variables (2026-11-09)
+
+A partir de la indicación literal del contador —«Control de gastos fijos y variables» y separar en el resultado del periodo «gastos de operación fijos y variables»—, los gastos nuevos de CRM requieren elegir tipo fijo o variable. Los gastos capturados desde la operación de campo se registran como variables. Las correcciones compensatorias conservan el tipo original. Los reportes por proyecto y periodo presentan ambos importes por separado; los registros anteriores quedan como “sin clasificar”, sin adivinar su naturaleza.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-17 | Parcial funcional | Captura CRM/PWA y bitácora identifican gasto fijo o variable; queda por validar con contabilidad la clasificación de casos mixtos y conceptos recurrentes. |
+| US-38 | Parcial funcional | Reporte preliminar mensual y por proyecto separa los gastos fijos, variables y sin clasificar; estados financieros, devoluciones/bonificaciones y validación final del contador siguen pendientes. |
+
+La migración `202611090078` añade `expense_type` con valor `unclassified` para filas existentes y agrega nuevas versiones append-only para US-17/US-38. Las fuentes originales se preservan.

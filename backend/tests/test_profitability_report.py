@@ -29,8 +29,8 @@ def test_monthly_project_report_uses_sales_consumption_events_and_project_expens
                 reason="Consumo instalado", created_at=datetime(2026, 11, 4, tzinfo=timezone.utc)),
             InventoryMovement(item_id="item-a", installation_id=installation.id, quantity=1, movement_type="consumption_return", unit_cost=2000,
                 reason="Sobrante recuperado", created_at=datetime(2026, 11, 5, tzinfo=timezone.utc)),
-            ProjectExpense(installation_id=installation.id, category="Viáticos", description="Combustible", amount=5000, occurred_on=date(2026, 11, 5)),
-            ProjectExpense(installation_id=None, category="Nómina", description="Gasto operativo", amount=12000, occurred_on=date(2026, 11, 5)),
+            ProjectExpense(installation_id=installation.id, category="Viáticos", expense_type="variable", description="Combustible", amount=5000, occurred_on=date(2026, 11, 5)),
+            ProjectExpense(installation_id=None, category="Nómina", expense_type="fixed", description="Gasto operativo", amount=12000, occurred_on=date(2026, 11, 5)),
         ])
         db.commit()
 
@@ -42,6 +42,8 @@ def test_monthly_project_report_uses_sales_consumption_events_and_project_expens
     assert report["totals"]["sales"] == Decimal("100000.00")
     assert report["totals"]["materials_cost"] == Decimal("8000.00")
     assert report["totals"]["expenses"] == Decimal("17000.00")
+    assert report["totals"]["expenses_by_type"] == {"fixed": Decimal("12000.00"), "variable": Decimal("5000.00"), "unclassified": Decimal("0")}
+    assert report["rows"][0]["expenses_by_type"]["variable"] == Decimal("5000.00")
     assert report["totals"]["preliminary_result"] == Decimal("75000.00")
     assert len(report["rows"]) == 2
     assert project_report["totals"]["expenses"] == Decimal("5000.00")

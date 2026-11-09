@@ -232,6 +232,7 @@ class ProjectExpense(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     installation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     category: Mapped[str] = mapped_column(String(80), default="Viáticos")
+    expense_type: Mapped[str] = mapped_column(String(20), default="unclassified", nullable=False)
     description: Mapped[str] = mapped_column(String(240), default="")
     amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     occurred_on: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
