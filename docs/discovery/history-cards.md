@@ -1071,3 +1071,14 @@ La PWA permite al instalador activar o desactivar Web Push desde la vista de ins
 La migración `202611080073` agrega el almacenamiento de suscripciones y registra versiones nuevas de US-7/US-40 sin modificar los relatos literales. La clave `WEB_PUSH_VAPID_SECRET` se configura como secreto generado y persistido en el manifiesto de DEV de Factory; el API no habilita registro push si falta esa variable.
 
 La rama `feature/installer-webpush` se integró en DEV mediante PR [#97](https://github.com/goodmorning-mx/arcoenergy/pull/97), merge commit `dd748fc9c5e2fb6553c3fc5e3233384fc5476c56`. Factory completó el reconciliador resources-v3 en el run [#42541277575](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42541277575): aplicación/despliegue, verificación de revisión de esquema y reconciliación de respaldos terminaron correctamente. El API vivo informa el SHA del merge y estado `ready`; la especificación OpenAPI publicada contiene las rutas de VAPID y suscripción. El sitio, CRM, PWA y `/login`, `/crm/login`, `/app/login` responden HTTP 200. La lectura anónima de la clave VAPID devuelve 401 porque requiere sesión y rol instalador; no hay cuentas/dispositivos reales de instalador disponibles para confirmar recepción push, que permanece pendiente. El CI de la rama del PR aprobó Backend, CRM, Frontend, Next.js y Docker/Chrome.
+
+## Iteración 62 — responsables y avisos de reabasto (2026-11-09)
+
+Administración puede asignar un instalador activo a la reposición de cada artículo junto con su mínimo. El responsable debe activar Web Push en la PWA. El API calcula disponibilidad incluyendo reservas de órdenes y emite un aviso cuando cae al mínimo; evita repetirlo mientras permanece bajo el umbral y rearma la alerta cuando se recupera. Considera las reservas al vender, las salidas/consumos, devoluciones, compras, correcciones de compras/ventas y cambios del umbral. Si el instalador se suscribe cuando el artículo ya está bajo, se le informa al registrar el dispositivo. El payload solo incluye nombre del material, existencia, mínimo y ruta interna.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-26 | Parcial funcional | Administración asigna un instalador activo como responsable; Web Push se envía al cruzar el mínimo y se rearma al reponerse. Falta validar la entrega en teléfonos reales y confirmar si almacén requiere otro rol. |
+| US-40 | Parcial funcional | La PWA recibe push de reabasto en segundo plano y evita duplicar el aviso local cuando existe una suscripción. Falta validar instalación y recepción en dispositivos reales. |
+
+La migración `202611090074` agrega responsable y estado de alerta al inventario y versiona US-26/US-40 sin editar su fuente original. `/version` ahora informa también la revisión Alembic para que Factory pueda verificar esquema vivo.

@@ -121,6 +121,16 @@ def _serialize(row):
     return {column.name: getattr(row, column.name) for column in row.__table__.columns}
 
 
+def _serialize_inventory_item(row: InventoryItem, identity: AuthIdentity) -> dict:
+    result = _serialize(row)
+    result.pop("low_stock_alert_active", None)
+    if "inventory:manage" not in identity.permissions:
+        result.pop("restock_responsible_email", None)
+    if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
+        result.pop("unit_cost", None)
+    return result
+
+
 class CustomerInput(BaseModel):
     name: str = Field(min_length=2, max_length=180)
     phone: str = ""
@@ -443,6 +453,7 @@ class InventoryItemInput(BaseModel):
     barcode: str | None = Field(default=None, max_length=120)
     unit: str = Field(default="pieza", max_length=40)
     minimum_quantity: float = Field(default=0, ge=0)
+    restock_responsible_email: str = Field(default="", max_length=180)
     initial_quantity: float = Field(default=0, ge=0)
     unit_cost: Decimal = Field(default=Decimal("0"), ge=0)
 
@@ -457,6 +468,7 @@ class InventoryItemUpdateInput(BaseModel):
     barcode: str | None = Field(default=None, max_length=120)
     unit: str = Field(default="pieza", max_length=40)
     minimum_quantity: float = Field(default=0, ge=0)
+    restock_responsible_email: str = Field(default="", max_length=180)
     unit_cost: Decimal = Field(default=Decimal("0"), ge=0)
 
     @field_validator("name", "unit")
@@ -1009,6 +1021,25 @@ def _installer_email(identity: AuthIdentity) -> str:
     return email
 
 
+def _validate_restock_responsible(email: str, db: Session) -> str:
+    normalized = email.strip().lower()
+    if not normalized:
+        return ""
+    active = db.execute(
+        select(users.c.email)
+        .join(memberships, memberships.c.user_id == users.c.id)
+        .where(
+            users.c.is_active.is_(True),
+            memberships.c.organization_id == settings.organization_id,
+            memberships.c.roles.contains(["instalador"]),
+            func.lower(users.c.email) == normalized,
+        )
+    ).first()
+    if active is None:
+        raise HTTPException(422, "El responsable de reposición debe ser una cuenta activa de instalador.")
+    return normalized
+
+
 @router.get("/push/vapid-public-key")
 def get_push_public_key(identity: AuthIdentity = Depends(require_permissions(auth_service, "installations:read"))):
     _installer_email(identity)
@@ -1023,6 +1054,7 @@ def save_push_subscription(
     data: PushSubscriptionInput,
     identity: AuthIdentity = Depends(require_permissions(auth_service, "installations:read")),
     db: Session = Depends(get_db),
+    background_tasks: BackgroundTasks = None,
 ):
     email = _installer_email(identity)
     if not get_settings().web_push_vapid_secret:
@@ -1036,6 +1068,15 @@ def save_push_subscription(
         row.auth = data.keys["auth"]
     db.add(row)
     db.commit()
+    if background_tasks is not None:
+        low_items = db.scalars(select(InventoryItem).where(
+            func.lower(InventoryItem.restock_responsible_email) == email,
+            InventoryItem.minimum_quantity > 0,
+        )).all()
+        for item in low_items:
+            _queue_low_stock_alert(db, background_tasks, item, force=True)
+        if low_items:
+            db.commit()
 
 
 @router.delete("/push/subscriptions", status_code=204)
@@ -1053,15 +1094,19 @@ def remove_push_subscription(
 
 
 def _deliver_installation_push(subscriptions: list[dict[str, str]], folio: str) -> None:
-    config = get_settings()
-    if not config.web_push_vapid_secret:
-        return
     payload = {
         "title": "Nueva instalación asignada",
         "body": f"Orden {folio}. Abre la app para consultar los detalles.",
         "url": "/app/",
         "tag": f"arcoenergy-installation-{folio}",
     }
+    _deliver_push_payload(subscriptions, payload)
+
+
+def _deliver_push_payload(subscriptions: list[dict[str, str]], payload: dict[str, str]) -> None:
+    config = get_settings()
+    if not config.web_push_vapid_secret:
+        return
     expired: list[str] = []
     for subscription in subscriptions:
         status = send_push(subscription, payload, config.web_push_vapid_secret, config.web_push_subject)
@@ -1083,6 +1128,35 @@ def _queue_installation_push(db: Session, background_tasks: BackgroundTasks | No
     ]
     if subscriptions:
         background_tasks.add_task(_deliver_installation_push, subscriptions, folio)
+
+
+def _queue_low_stock_alert(db: Session, background_tasks: BackgroundTasks | None, item: InventoryItem, *, force: bool = False) -> None:
+    reserved = db.scalar(
+        select(func.coalesce(func.sum(WorkOrderMaterial.requested_quantity - WorkOrderMaterial.preissued_quantity), 0))
+        .join(Installation, Installation.id == WorkOrderMaterial.installation_id)
+        .where(WorkOrderMaterial.item_id == item.id, Installation.status.notin_(("closed", "cancelled")))
+    ) or 0
+    available = max(Decimal(str(item.quantity)) - Decimal(str(reserved)), Decimal("0"))
+    low = item.minimum_quantity > 0 and available <= Decimal(str(item.minimum_quantity))
+    if not low:
+        item.low_stock_alert_active = False
+        return
+    should_notify = force or not item.low_stock_alert_active
+    item.low_stock_alert_active = True
+    if not should_notify or not item.restock_responsible_email or background_tasks is None or not get_settings().web_push_vapid_secret:
+        return
+    rows = db.scalars(select(PushSubscription).where(
+        func.lower(PushSubscription.installer_email) == item.restock_responsible_email.lower(),
+    )).all()
+    subscriptions = [{"endpoint": row.endpoint, "p256dh": row.p256dh, "auth": row.auth} for row in rows]
+    if subscriptions:
+        payload = {
+            "title": "Existencia baja",
+            "body": f"{item.name}: quedan {available} {item.unit}; mínimo {item.minimum_quantity}.",
+            "url": "/app/",
+            "tag": f"arcoenergy-low-stock-{item.id}",
+        }
+        background_tasks.add_task(_deliver_push_payload, subscriptions, payload)
 
 
 @router.post("/installations", status_code=201, dependencies=[Depends(require_permissions(auth_service, "installations:write"))])
@@ -1156,7 +1230,7 @@ def list_sales(db: Session = Depends(get_db)):
 
 
 @router.post("/sales/{sale_id}/reverse", status_code=201, dependencies=[Depends(require_permissions(auth_service, "sales:write"))])
-def reverse_sale(sale_id: str, data: PaymentCorrectionInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+def reverse_sale(sale_id: str, data: PaymentCorrectionInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
     if not ({"administrador", "admin", "contador"} & set(identity.roles)):
         raise HTTPException(403, "Solo administración o contabilidad puede corregir una venta.")
     sale = db.scalar(select(Sale).where(Sale.id == sale_id).with_for_update())
@@ -1212,6 +1286,10 @@ def reverse_sale(sale_id: str, data: PaymentCorrectionInput, identity: AuthIdent
         reason=data.reason, created_by=identity.email or "",
     ))
     installation.status = "cancelled"
+    for material in materials:
+        item = db.get(InventoryItem, material.item_id)
+        if item is not None:
+            _queue_low_stock_alert(db, background_tasks, item)
     db.add(Activity(
         customer_id=sale.customer_id, kind="corrección de venta",
         note=f"{sale.folio} · orden {installation.folio or installation.id} cancelada: {data.reason}",
@@ -1309,6 +1387,9 @@ def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_depen
             unit_cost=item.unit_cost,
             created_by=identity.email or "",
         ))
+    db.flush()
+    for item, _quantity in locked_items:
+        _queue_low_stock_alert(db, background_tasks, item)
     if data.sale_type == "cash" and account is not None:
         db.add(CashMovement(account_id=account.id, direction="in", amount=quote.total,
             category="Venta de contado", description=f"{customer.name} · {sale_folio}",
@@ -1591,15 +1672,12 @@ def list_inventory(identity: AuthIdentity = Depends(require_permissions(auth_ser
     rows = []
     for row in items:
         held = reserved.get(row.id, Decimal("0"))
-        rows.append({**_serialize(row), "reserved_quantity": held, "available_quantity": max(Decimal(row.quantity) - held, Decimal("0"))})
-    if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
-        for row in rows:
-            row.pop("unit_cost", None)
+        rows.append({**_serialize_inventory_item(row, identity), "reserved_quantity": held, "available_quantity": max(Decimal(row.quantity) - held, Decimal("0"))})
     return rows
 
 
 @router.post("/inventory/issue", status_code=201)
-def issue_work_order_materials(data: StockIssueInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:issue")), db: Session = Depends(get_db)):
+def issue_work_order_materials(data: StockIssueInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:issue")), db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
     installation = db.scalar(select(Installation).where(Installation.id == data.installation_id).with_for_update())
     if installation is None:
         raise HTTPException(404, "Orden de trabajo no encontrada.")
@@ -1657,31 +1735,36 @@ def issue_work_order_materials(data: StockIssueInput, identity: AuthIdentity = D
 
 
 @router.post("/inventory/items", status_code=201, dependencies=[Depends(require_permissions(auth_service, "inventory:manage"))])
-def create_inventory_item(data: InventoryItemInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+def create_inventory_item(data: InventoryItemInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
     if data.supplier_id and not db.get(Supplier, data.supplier_id):
         raise HTTPException(422, "Selecciona un proveedor registrado.")
     barcode = data.barcode.strip() if data.barcode else None
     if barcode and db.scalar(select(InventoryItem.id).where(InventoryItem.barcode == barcode)):
         raise HTTPException(409, "Ese código ya está asignado a otro artículo.")
+    responsible = _validate_restock_responsible(data.restock_responsible_email, db)
     row = InventoryItem(name=data.name.strip(), description=data.description.strip(), category=data.category.strip(),
         brand=data.brand.strip(), model=data.model.strip(), supplier_id=data.supplier_id, barcode=barcode,
-        unit=data.unit.strip(), quantity=data.initial_quantity, minimum_quantity=data.minimum_quantity, unit_cost=data.unit_cost)
+        unit=data.unit.strip(), quantity=data.initial_quantity, minimum_quantity=data.minimum_quantity,
+        restock_responsible_email=responsible, unit_cost=data.unit_cost)
     db.add(row); db.flush()
     if data.initial_quantity:
         db.add(InventoryMovement(item_id=row.id, quantity=data.initial_quantity, movement_type="in", unit_cost=data.unit_cost, reason="existencia inicial", created_by=identity.email))
+    _queue_low_stock_alert(db, background_tasks, row)
     db.commit(); db.refresh(row)
-    return _serialize(row)
+    return _serialize_inventory_item(row, identity)
 
 
 @router.put("/inventory/items/{item_id}")
 def update_inventory_item(item_id: str, data: InventoryItemUpdateInput,
                           identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:manage")),
-                          db: Session = Depends(get_db)):
+                          db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
     row = db.scalar(select(InventoryItem).where(InventoryItem.id == item_id).with_for_update())
     if row is None:
         raise HTTPException(404, "Artículo de inventario no encontrado.")
     if data.supplier_id and not db.get(Supplier, data.supplier_id):
         raise HTTPException(422, "Selecciona un proveedor registrado.")
+    responsible = _validate_restock_responsible(data.restock_responsible_email, db)
+    responsible_changed = responsible != row.restock_responsible_email
     barcode = data.barcode.strip() if data.barcode else None
     if barcode and db.scalar(select(InventoryItem.id).where(
         InventoryItem.barcode == barcode, InventoryItem.id != item_id,
@@ -1697,21 +1780,20 @@ def update_inventory_item(item_id: str, data: InventoryItemUpdateInput,
     row.barcode = barcode
     row.unit = data.unit.strip()
     row.minimum_quantity = data.minimum_quantity
+    row.restock_responsible_email = responsible
     row.unit_cost = data.unit_cost
+    _queue_low_stock_alert(db, background_tasks, row, force=responsible_changed)
     try:
         db.commit()
     except IntegrityError as error:
         db.rollback()
         raise HTTPException(409, "Ese código ya está asignado a otro artículo.") from error
     db.refresh(row)
-    result = _serialize(row)
-    if "inventory:costs:read" not in identity.permissions:
-        result.pop("unit_cost", None)
-    return result
+    return _serialize_inventory_item(row, identity)
 
 
 @router.post("/inventory/consume", status_code=201)
-def consume_inventory(data: StockInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:write")), db: Session = Depends(get_db)):
+def consume_inventory(data: StockInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:write")), db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
     if "instalador" in identity.roles:
         installation = db.get(Installation, data.installation_id) if data.installation_id else None
         if installation is None or not _installer_has_assignment(db, installation, identity.email or ""):
@@ -1723,9 +1805,7 @@ def consume_inventory(data: StockInput, identity: AuthIdentity = Depends(require
         if movement is None or item is None:
             raise HTTPException(409, "El registro original de esta operación ya no está disponible.")
         physical_issue = db.get(InventoryMovement, movement.related_movement_id) if movement.related_movement_id else None
-        serialized_item = _serialize(item)
-        if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
-            serialized_item.pop("unit_cost", None)
+        serialized_item = _serialize_inventory_item(item, identity)
         return {"movement": _serialize(movement), "physical_issue": _serialize(physical_issue) if physical_issue else None, "item": serialized_item}
     if data.installation_id:
         installation = db.scalar(select(Installation).where(Installation.id == data.installation_id).with_for_update())
@@ -1774,26 +1854,25 @@ def consume_inventory(data: StockInput, identity: AuthIdentity = Depends(require
     )
     db.add(movement); db.flush()
     _record_offline_operation(data, "consume", movement.id, identity, db)
+    _queue_low_stock_alert(db, background_tasks, item)
     db.commit(); db.refresh(movement)
-    serialized_item = _serialize(item)
-    if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
-        serialized_item.pop("unit_cost", None)
+    serialized_item = _serialize_inventory_item(item, identity)
     return {"movement": _serialize(movement), "physical_issue": _serialize(physical_issue), "item": serialized_item}
 
 
 @router.post("/inventory/receive", status_code=201)
-def receive_inventory(data: StockReceiptInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:manage")), db: Session = Depends(get_db)):
-    item = db.get(InventoryItem, data.item_id)
+def receive_inventory(data: StockReceiptInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:manage")), db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
+    item = db.scalar(select(InventoryItem).where(InventoryItem.id == data.item_id).with_for_update())
     if not item: raise HTTPException(404, "Artículo no encontrado.")
     item.quantity = float(item.quantity) + data.quantity
     item.unit_cost = data.unit_cost
     movement = InventoryMovement(item_id=data.item_id, quantity=data.quantity, movement_type="in", unit_cost=data.unit_cost, reason=data.reason, created_by=identity.email)
-    db.add(movement); db.commit(); db.refresh(movement)
-    return {"movement": _serialize(movement), "item": _serialize(item)}
+    db.add(movement); _queue_low_stock_alert(db, background_tasks, item); db.commit(); db.refresh(movement)
+    return {"movement": _serialize(movement), "item": _serialize_inventory_item(item, identity)}
 
 
 @router.post("/inventory/returns", status_code=201)
-def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depends(require_any_permission(auth_service, "inventory:write", "inventory:issue")), db: Session = Depends(get_db)):
+def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depends(require_any_permission(auth_service, "inventory:write", "inventory:issue")), db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
     source = db.scalar(select(InventoryMovement).where(InventoryMovement.id == data.out_movement_id).with_for_update())
     if source is None or source.movement_type != "out" or not source.installation_id:
         raise HTTPException(404, "No se encontró una salida de instalación válida para devolver.")
@@ -1807,10 +1886,9 @@ def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depend
         item = db.get(InventoryItem, movement.item_id) if movement else None
         if movement is None or item is None:
             raise HTTPException(409, "El registro original de esta operación ya no está disponible.")
-        serialized_item = _serialize(item)
+        serialized_item = _serialize_inventory_item(item, identity)
         serialized_movement = _serialize(movement)
         if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
-            serialized_item.pop("unit_cost", None)
             serialized_movement.pop("unit_cost", None)
         return {"movement": serialized_movement, "item": serialized_item}
     returned = db.scalar(select(func.coalesce(func.sum(InventoryMovement.quantity), 0)).where(
@@ -1884,8 +1962,9 @@ def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depend
                 ))
     db.add(movement); db.flush()
     _record_offline_operation(data, "return", movement.id, identity, db)
+    _queue_low_stock_alert(db, background_tasks, item)
     db.commit(); db.refresh(movement)
-    serialized_item = _serialize(item)
+    serialized_item = _serialize_inventory_item(item, identity)
     serialized_movement = _serialize(movement)
     if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
         serialized_item.pop("unit_cost", None)
@@ -2587,7 +2666,7 @@ def get_purchase_invoice_file(
 
 
 @router.post("/purchases", status_code=201, dependencies=[Depends(require_permissions(auth_service, "purchases:write"))])
-def create_purchase(data: PurchaseInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+def create_purchase(data: PurchaseInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
     supplier = db.scalar(select(Supplier).where(Supplier.id == data.supplier_id, Supplier.active.is_(True)))
     if supplier is None:
         raise HTTPException(404, "Selecciona un proveedor activo.")
@@ -2660,6 +2739,7 @@ def create_purchase(data: PurchaseInput, identity: AuthIdentity = Depends(identi
             created_by=identity.email or "",
             created_at=datetime.combine(data.purchase_date, datetime.min.time(), tzinfo=timezone.utc),
         ))
+        _queue_low_stock_alert(db, background_tasks, item)
     if data.initial_payment:
         _record_supplier_payment(db, purchase, data.initial_payment, data.payment_account_id or "", data.purchase_date, data.payment_reference, identity.email or "")
     db.commit(); db.refresh(purchase)
@@ -2728,7 +2808,7 @@ def reverse_supplier_payment(
 @router.post("/purchases/{purchase_id}/reverse", status_code=201, dependencies=[Depends(require_permissions(auth_service, "purchases:write"))])
 def reverse_purchase(
     purchase_id: str, data: PaymentCorrectionInput,
-    identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db),
+    identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db), background_tasks: BackgroundTasks = None,
 ):
     if not ({"administrador", "admin", "contador"} & set(identity.roles)):
         raise HTTPException(403, "Solo administración o contabilidad puede corregir una compra.")
@@ -2796,6 +2876,7 @@ def reverse_purchase(
         ))
         item.quantity = Decimal(item.quantity) - Decimal(line.quantity)
         item.unit_cost = previous_cost_by_item[item.id]
+        _queue_low_stock_alert(db, background_tasks, item)
 
     db.add(PurchaseCorrection(
         purchase_id=purchase.id, amount=purchase.total, reason=data.reason.strip(),

@@ -237,10 +237,13 @@ function App() {
     try { sessionStorage.setItem(`arcoenergy-low-stock:${identity.email.toLowerCase()}`, JSON.stringify([...currentIds])); } catch { /* Keep the in-memory snapshot. */ }
     if (!newlyLow.length) return;
     const summary = newlyLow.slice(0, 4).map(item => `${item.name}: ${item.available_quantity ?? item.quantity} ${item.unit}`).join(' · ');
-    void navigator.serviceWorker.ready.then(registration => registration.showNotification(
-      `${newlyLow.length} artículo${newlyLow.length === 1 ? '' : 's'} con stock bajo`,
-      { body: summary + (newlyLow.length > 4 ? ` · y ${newlyLow.length - 4} más` : ''), tag: 'arcoenergy-low-stock', data: { url: '/app/' } },
-    )).catch(() => setNotificationMessage('No se pudo mostrar el aviso de stock bajo en este dispositivo.'));
+    void navigator.serviceWorker.ready.then(async registration => {
+      if (await registration.pushManager.getSubscription()) return;
+      await registration.showNotification(
+        `${newlyLow.length} artículo${newlyLow.length === 1 ? '' : 's'} con stock bajo`,
+        { body: summary + (newlyLow.length > 4 ? ` · y ${newlyLow.length - 4} más` : ''), tag: 'arcoenergy-low-stock', data: { url: '/app/' } },
+      );
+    }).catch(() => setNotificationMessage('No se pudo mostrar el aviso de stock bajo en este dispositivo.'));
   }, [isOnline, liveStock, identity?.email, identity?.permissions.join(','), notificationPermission]);
   useEffect(() => { if (selectedPackage) { setInverter(selectedPackage.default_inverter); setPaymentMethod(selectedPackage.payment_methods[0] || 'Contado'); } }, [panels, quotePackages.length]);
 

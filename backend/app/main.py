@@ -40,10 +40,21 @@ def health() -> dict[str, str]:
 
 @app.get("/version")
 def version() -> dict[str, str]:
+    from sqlalchemy import inspect, text
+
+    schema_revision = "unknown"
+    try:
+        with auth_service.engine.connect() as connection:
+            if inspect(connection).has_table("alembic_version"):
+                revisions = sorted(connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all())
+                schema_revision = ",".join(revisions) if revisions else "unknown"
+    except Exception:
+        schema_revision = "unknown"
     return {
         "service": settings.app_name,
         "environment": settings.app_env,
         "commit_sha": settings.source_commit,
+        "schema_revision": schema_revision,
     }
 
 
