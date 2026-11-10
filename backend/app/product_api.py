@@ -456,6 +456,7 @@ class InventoryItemInput(BaseModel):
     name: str = Field(min_length=2, max_length=180)
     description: str = Field(default="", max_length=1000)
     category: str = Field(default="", max_length=100)
+    subcategory: str = Field(default="", max_length=100)
     brand: str = Field(default="", max_length=100)
     model: str = Field(default="", max_length=120)
     supplier_id: str | None = None
@@ -471,6 +472,7 @@ class InventoryItemUpdateInput(BaseModel):
     name: str = Field(min_length=2, max_length=180)
     description: str = Field(default="", max_length=1000)
     category: str = Field(default="", max_length=100)
+    subcategory: str = Field(default="", max_length=100)
     brand: str = Field(default="", max_length=100)
     model: str = Field(default="", max_length=120)
     supplier_id: str | None = None
@@ -479,6 +481,25 @@ class InventoryItemUpdateInput(BaseModel):
     minimum_quantity: float = Field(default=0, ge=0)
     restock_responsible_email: str = Field(default="", max_length=180)
     unit_cost: Decimal = Field(default=Decimal("0"), ge=0)
+
+    @field_validator("name", "unit")
+    @classmethod
+    def trim_required_catalog_text(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Este campo es obligatorio.")
+        return value
+
+
+class PurchaseCatalogItemInput(BaseModel):
+    name: str = Field(min_length=2, max_length=180)
+    category: str = Field(default="", max_length=100)
+    subcategory: str = Field(default="", max_length=100)
+    brand: str = Field(default="", max_length=100)
+    model: str = Field(default="", max_length=120)
+    supplier_id: str | None = None
+    barcode: str | None = Field(default=None, max_length=120)
+    unit: str = Field(default="pieza", min_length=1, max_length=40)
 
     @field_validator("name", "unit")
     @classmethod
@@ -1912,7 +1933,7 @@ def create_inventory_item(data: InventoryItemInput, identity: AuthIdentity = Dep
         raise HTTPException(409, "Ese código ya está asignado a otro artículo.")
     responsible = _validate_restock_responsible(data.restock_responsible_email, db)
     row = InventoryItem(name=data.name.strip(), description=data.description.strip(), category=data.category.strip(),
-        brand=data.brand.strip(), model=data.model.strip(), supplier_id=data.supplier_id, barcode=barcode,
+        subcategory=data.subcategory.strip(), brand=data.brand.strip(), model=data.model.strip(), supplier_id=data.supplier_id, barcode=barcode,
         unit=data.unit.strip(), quantity=data.initial_quantity, minimum_quantity=data.minimum_quantity,
         restock_responsible_email=responsible, unit_cost=data.unit_cost)
     db.add(row); db.flush()
@@ -1920,6 +1941,29 @@ def create_inventory_item(data: InventoryItemInput, identity: AuthIdentity = Dep
         db.add(InventoryMovement(item_id=row.id, quantity=data.initial_quantity, movement_type="in", unit_cost=data.unit_cost, reason="existencia inicial", created_by=identity.email))
     _queue_low_stock_alert(db, background_tasks, row)
     db.commit(); db.refresh(row)
+    return _serialize_inventory_item(row, identity)
+
+
+@router.post("/purchases/catalog-items", status_code=201, dependencies=[Depends(require_permissions(auth_service, "purchases:write"))])
+def create_purchase_catalog_item(data: PurchaseCatalogItemInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    """Create a zero-stock inventory record from an authorized purchase entry."""
+    if data.supplier_id and db.get(Supplier, data.supplier_id) is None:
+        raise HTTPException(422, "Selecciona un proveedor registrado.")
+    barcode = data.barcode.strip() if data.barcode else None
+    if barcode and db.scalar(select(InventoryItem.id).where(InventoryItem.barcode == barcode)):
+        raise HTTPException(409, "Ese código ya está asignado a otro artículo.")
+    row = InventoryItem(
+        name=data.name.strip(), category=data.category.strip(), subcategory=data.subcategory.strip(),
+        brand=data.brand.strip(), model=data.model.strip(), supplier_id=data.supplier_id,
+        barcode=barcode, unit=data.unit.strip(), quantity=0, minimum_quantity=0, unit_cost=0,
+    )
+    db.add(row)
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(409, "Ese código ya está asignado a otro artículo.") from error
+    db.refresh(row)
     return _serialize_inventory_item(row, identity)
 
 
@@ -1943,6 +1987,7 @@ def update_inventory_item(item_id: str, data: InventoryItemUpdateInput,
     row.name = data.name.strip()
     row.description = data.description.strip()
     row.category = data.category.strip()
+    row.subcategory = data.subcategory.strip()
     row.brand = data.brand.strip()
     row.model = data.model.strip()
     row.supplier_id = data.supplier_id
