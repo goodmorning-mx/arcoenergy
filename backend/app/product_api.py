@@ -29,7 +29,7 @@ from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
 from app.drive_storage import download_private_file, folder_status, save_private_file, save_quote_pdf
-from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, ProfitabilityAdjustment, Purchase, PurchaseCorrection, PurchaseLine, PushSubscription, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
+from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, Project, ProjectExpense, ProfitabilityAdjustment, Purchase, PurchaseCorrection, PurchaseLine, PushSubscription, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
 from app.reminders import send_due_followup_pushes
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 from app.web_push import send_push, validate_push_endpoint, vapid_public_key
@@ -348,6 +348,7 @@ class NoteInput(BaseModel):
 
 class InstallationInput(BaseModel):
     customer_id: str
+    project_id: str | None = None
     quote_id: str | None = None
     scheduled_at: datetime | None = None
     lead_installer: str = ""
@@ -490,6 +491,7 @@ class InventoryItemUpdateInput(BaseModel):
 
 class ExpenseInput(BaseModel):
     installation_id: str | None = None
+    project_id: str | None = None
     account_id: str | None = None
     category: str = "Viáticos"
     expense_type: Literal["fixed", "variable", "unclassified"] = "unclassified"
@@ -498,6 +500,25 @@ class ExpenseInput(BaseModel):
     receipt_url: str = ""
     occurred_on: date = Field(default_factory=date.today)
     operation_id: str | None = Field(default=None, min_length=8, max_length=80)
+
+
+class ProjectInput(BaseModel):
+    customer_id: str
+    name: str = Field(min_length=2, max_length=180)
+    notes: str = Field(default="", max_length=5000)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_project_name(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 2:
+            raise ValueError("Escribe un nombre para el proyecto.")
+        return value
+
+
+class ProjectUpdateInput(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=180)
+    notes: str | None = Field(default=None, max_length=5000)
 
 
 class FinancialAccountInput(BaseModel):
@@ -1207,12 +1228,76 @@ def _queue_low_stock_alert(db: Session, background_tasks: BackgroundTasks | None
         background_tasks.add_task(_deliver_push_payload, subscriptions, payload)
 
 
+def _new_project_code() -> str:
+    return f"AE-P-{datetime.now(timezone.utc).year}-{uuid4().hex[:8].upper()}"
+
+
+def _project_result(project: Project, db: Session) -> dict:
+    customer = db.get(Customer, project.customer_id)
+    orders = db.scalars(select(Installation).where(Installation.project_id == project.id).order_by(Installation.folio)).all()
+    return {
+        **_serialize(project),
+        "customer": {"id": customer.id, "name": customer.name, "city": customer.city} if customer else None,
+        "work_orders": [{"id": order.id, "folio": order.folio, "status": order.status, "scheduled_at": order.scheduled_at} for order in orders],
+        "status": "planning" if not orders else ("completed" if all(order.status in {"closed", "cancelled"} for order in orders) else "active"),
+    }
+
+
+@router.get("/projects")
+def list_projects(identity: AuthIdentity = Depends(require_permissions(auth_service, "installations:read")), db: Session = Depends(get_db)):
+    query = select(Project).order_by(Project.created_at.desc(), Project.code)
+    if "instalador" in identity.roles:
+        assigned_ids = select(InstallationAssignment.installation_id).where(
+            InstallationAssignment.installer_email == (identity.email or "").strip().lower()
+        )
+        lead_ids = select(Installation.id).where(func.lower(Installation.lead_installer) == (identity.email or "").strip().lower())
+        query = query.where(Project.id.in_(select(Installation.project_id).where(
+            Installation.project_id.is_not(None), Installation.status != "cancelled",
+            or_(Installation.id.in_(assigned_ids), Installation.id.in_(lead_ids)),
+        )))
+    return [_project_result(project, db) for project in db.scalars(query).all()]
+
+
+@router.post("/projects", status_code=201, dependencies=[Depends(require_permissions(auth_service, "installations:write"))])
+def create_project(data: ProjectInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    if db.get(Customer, data.customer_id) is None:
+        raise HTTPException(404, "Cliente no encontrado.")
+    project = Project(code=_new_project_code(), customer_id=data.customer_id, name=data.name, notes=data.notes.strip(), created_by=identity.email or "")
+    db.add(project); db.commit(); db.refresh(project)
+    return _project_result(project, db)
+
+
+@router.patch("/projects/{project_id}", dependencies=[Depends(require_permissions(auth_service, "installations:write"))])
+def update_project(project_id: str, data: ProjectUpdateInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    project = db.get(Project, project_id)
+    if project is None:
+        raise HTTPException(404, "Proyecto no encontrado.")
+    updates = data.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(422, "Incluye el nombre o las notas que quieres corregir.")
+    if "name" in updates:
+        project.name = updates["name"].strip()
+        if len(project.name) < 2:
+            raise HTTPException(422, "Escribe un nombre para el proyecto.")
+    if "notes" in updates:
+        project.notes = (updates["notes"] or "").strip()
+    db.commit(); db.refresh(project)
+    return _project_result(project, db)
+
+
 @router.post("/installations", status_code=201, dependencies=[Depends(require_permissions(auth_service, "installations:write"))])
 def create_installation(data: InstallationInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
-    if not db.get(Customer, data.customer_id): raise HTTPException(404, "Cliente no encontrado.")
+    customer = db.get(Customer, data.customer_id)
+    if not customer: raise HTTPException(404, "Cliente no encontrado.")
+    project = db.get(Project, data.project_id) if data.project_id else None
+    if data.project_id and project is None: raise HTTPException(404, "Proyecto no encontrado.")
+    if project and project.customer_id != customer.id: raise HTTPException(422, "El proyecto pertenece a otro cliente.")
+    if project is None:
+        project = Project(code=_new_project_code(), customer_id=customer.id, name=customer.name, created_by=identity.email or "")
+        db.add(project); db.flush()
     installers = _validate_installer_emails(data.assigned_installers, data.lead_installer)
     primary = (data.lead_installer.strip().lower() or installers[0])
-    row = Installation(customer_id=data.customer_id, quote_id=data.quote_id, scheduled_at=data.scheduled_at, lead_installer=primary, notes=data.notes, checklist=[{"task":"Confirmar materiales","done":False},{"task":"Asignar cuadrilla","done":True},{"task":"Visita de instalación","done":False},{"task":"Registrar consumos","done":False},{"task":"Cerrar proyecto","done":False}])
+    row = Installation(customer_id=data.customer_id, project_id=project.id, quote_id=data.quote_id, scheduled_at=data.scheduled_at, lead_installer=primary, notes=data.notes, checklist=[{"task":"Confirmar materiales","done":False},{"task":"Asignar cuadrilla","done":True},{"task":"Visita de instalación","done":False},{"task":"Registrar consumos","done":False},{"task":"Cerrar proyecto","done":False}])
     db.add(row); db.flush()
     _record_installation_assignments(db, row.id, installers, identity.email or "")
     db.commit(); db.refresh(row)
@@ -1249,7 +1334,7 @@ def _sale_result(db: Session, sale: Sale):
         **_serialize(sale),
         "quote": {"id": quote.id, "folio": quote.folio, "payment_method": quote.payment_method} if quote else None,
         "customer": {"id": customer.id, "name": customer.name, "phone": customer.phone, "email": customer.email, "city": customer.city} if customer else None,
-        "installation": {**_serialize(installation), "assigned_installers": [row.installer_email for row in assignments] or ([installation.lead_installer] if installation and installation.lead_installer else []), "confirmed_installers": [row.installer_email for row in assignments if row.confirmed_at]},
+        "installation": {**_serialize(installation), "project": _project_result(db.get(Project, installation.project_id), db) if installation and installation.project_id else None, "assigned_installers": [row.installer_email for row in assignments] or ([installation.lead_installer] if installation and installation.lead_installer else []), "confirmed_installers": [row.installer_email for row in assignments if row.confirmed_at]},
         "receivable": _serialize(receivables[0]) if receivables else None,
         "receivables": [_serialize(row) for row in receivables],
         "installment_count": len(receivables),
@@ -1410,9 +1495,12 @@ def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_depen
     year = datetime.now(timezone.utc).year
     sale_folio = f"AE-V-{year}-{sale_number:05d}"
     work_folio = f"AE-OT-{year}-{work_number:05d}"
+    project = Project(code=_new_project_code(), customer_id=customer.id, name=customer.name, created_by=identity.email or "")
+    db.add(project); db.flush()
     installation = Installation(
         folio=work_folio,
         customer_id=customer.id,
+        project_id=project.id,
         quote_id=quote.id,
         scheduled_at=data.scheduled_at,
         lead_installer=installer_email,
@@ -1513,6 +1601,7 @@ def list_installations(identity: AuthIdentity = Depends(require_permissions(auth
                 "available_for_order": available_for_order,
                 "shortage_quantity": shortage,
             })
+        project = db.get(Project, row.project_id) if row.project_id else None
         result.append({**_serialize(row),
             "assigned_installers": [assignment.installer_email for assignment in assignments] or ([row.lead_installer] if row.lead_installer else []),
             "confirmed_installers": [assignment.installer_email for assignment in assignments if assignment.confirmed_at],
@@ -1520,7 +1609,9 @@ def list_installations(identity: AuthIdentity = Depends(require_permissions(auth
             # customer record (status/source and other private metadata).
             "customer": ({"id": customer.id, "name": customer.name, "city": customer.city,
                           "address": customer.address, "phone": customer.phone, "email": customer.email}
-                         if customer else None), "materials": serialized_materials})
+                         if customer else None),
+            "project": {"id": project.id, "code": project.code, "name": project.name} if project else None,
+            "materials": serialized_materials})
     return result
 
 
@@ -2104,9 +2195,17 @@ def list_inventory_movements(
 def add_expense(data: ExpenseInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "expenses:write")), db: Session = Depends(get_db)):
     installation = db.get(Installation, data.installation_id) if data.installation_id else None
     if data.installation_id and not installation: raise HTTPException(404, "Instalación no encontrada.")
-    if installation and installation.status == "cancelled": raise HTTPException(409, "No se puede registrar un gasto en una orden cancelada.")
     if "instalador" in identity.roles and (installation is None or not _installer_has_assignment(db, installation, identity.email or "")):
         raise HTTPException(403, "Selecciona una orden asignada a tu cuenta para registrar gastos de campo.")
+    project = db.get(Project, data.project_id) if data.project_id else None
+    if data.project_id and project is None: raise HTTPException(404, "Proyecto no encontrado.")
+    if installation and data.project_id and installation.project_id != data.project_id:
+        raise HTTPException(422, "El proyecto seleccionado no corresponde a la orden de trabajo.")
+    if installation:
+        data.project_id = installation.project_id
+    elif project is None and "instalador" in identity.roles:
+        raise HTTPException(422, "Selecciona una orden asignada para vincular el gasto a su proyecto.")
+    if installation and installation.status == "cancelled": raise HTTPException(409, "No se puede registrar un gasto en una orden cancelada.")
     operation = _find_offline_operation(data, "expense", identity, db)
     if operation:
         row = db.get(ProjectExpense, operation.result_id)
@@ -2161,7 +2260,10 @@ def list_expenses(db: Session = Depends(get_db)):
         item.pop("receipt_drive_file_id", None)
         installation = db.get(Installation, row.installation_id) if row.installation_id else None
         customer = db.get(Customer, installation.customer_id) if installation else None
-        item["project_customer"] = customer.name if customer else "Gasto operativo"
+        linked_project_id = row.project_id or (installation.project_id if installation else None)
+        project = db.get(Project, linked_project_id) if linked_project_id else None
+        item["project_customer"] = project.name if project else (customer.name if customer else "Gasto operativo")
+        item["project_code"] = project.code if project else ""
         item["project_city"] = customer.city if customer else ""
         result.append(item)
     return result
@@ -3252,6 +3354,7 @@ def reverse_profitability_adjustment(
 def profitability_report(
     month: str | None = None,
     installation_id: str | None = None,
+    project_id: str | None = None,
     db: Session = Depends(get_db),
 ):
     """Show a preliminary operating result using recorded sales, material-use events, and expenses."""
@@ -3280,17 +3383,24 @@ def profitability_report(
 
     if installation_id and db.get(Installation, installation_id) is None:
         raise HTTPException(404, "Proyecto u orden de trabajo no encontrado.")
+    if project_id and db.get(Project, project_id) is None:
+        raise HTTPException(404, "Proyecto no encontrado.")
 
     grouped: dict[str | None, dict] = {}
 
-    def project_row(project_id: str | None) -> dict:
-        if project_id not in grouped:
-            installation = db.get(Installation, project_id) if project_id else None
-            customer = db.get(Customer, installation.customer_id) if installation else None
-            grouped[project_id] = {
-                "installation_id": project_id,
+    def project_row(key: str | None, installation: Installation | None = None) -> dict:
+        project = db.get(Project, key) if key else None
+        if project is None and installation and installation.project_id:
+            project = db.get(Project, installation.project_id)
+            key = installation.project_id
+        if key not in grouped:
+            customer = db.get(Customer, project.customer_id) if project else (db.get(Customer, installation.customer_id) if installation else None)
+            grouped[key] = {
+                "project_id": key,
+                "installation_id": installation.id if installation else None,
                 "folio": installation.folio if installation else None,
-                "project": customer.name if customer else ("Gastos sin proyecto" if project_id is None else "Proyecto"),
+                "project_code": project.code if project else "",
+                "project": project.name if project else (customer.name if customer else ("Gastos sin proyecto" if key is None else "Proyecto")),
                 "city": customer.city if customer else "",
                 "sales": Decimal("0"),
                 "materials_cost": Decimal("0"),
@@ -3302,16 +3412,22 @@ def profitability_report(
                 "missing_cost_movements": 0,
                 "material_events": 0,
             }
-        return grouped[project_id]
+        row = grouped[key]
+        if installation and row["installation_id"] is None:
+            row["installation_id"] = installation.id
+            row["folio"] = installation.folio
+        return row
 
     sales_query = select(Sale, Installation, Customer).join(Installation, Installation.id == Sale.installation_id).join(Customer, Customer.id == Sale.customer_id)
     if installation_id:
         sales_query = sales_query.where(Sale.installation_id == installation_id)
+    elif project_id:
+        sales_query = sales_query.where(Installation.project_id == project_id)
     if start_at is not None and end_at is not None:
         sales_query = sales_query.where(Sale.created_at >= start_at, Sale.created_at < end_at)
     for sale, installation, customer in db.execute(sales_query).all():
-        row = project_row(installation.id)
-        row["project"] = customer.name
+        row = project_row(installation.project_id or installation.id, installation)
+        row["project"] = db.get(Project, installation.project_id).name if installation.project_id else customer.name
         row["city"] = customer.city
         row["sales"] += Decimal(sale.total)
 
@@ -3320,21 +3436,26 @@ def profitability_report(
     ).join(Installation, Installation.id == Sale.installation_id).join(Customer, Customer.id == Sale.customer_id)
     if installation_id:
         corrections_query = corrections_query.where(Sale.installation_id == installation_id)
+    elif project_id:
+        corrections_query = corrections_query.where(Installation.project_id == project_id)
     if start_at is not None and end_at is not None:
         corrections_query = corrections_query.where(SaleCorrection.created_at >= start_at, SaleCorrection.created_at < end_at)
     for correction, sale, installation, customer in db.execute(corrections_query).all():
-        row = project_row(installation.id)
-        row["project"] = customer.name
+        row = project_row(installation.project_id or installation.id, installation)
+        row["project"] = db.get(Project, installation.project_id).name if installation.project_id else customer.name
         row["city"] = customer.city
         row["sales"] -= Decimal(correction.amount)
 
     material_query = select(InventoryMovement).where(InventoryMovement.movement_type.in_(["consumption", "consumption_return"]))
     if installation_id:
         material_query = material_query.where(InventoryMovement.installation_id == installation_id)
+    elif project_id:
+        material_query = material_query.join(Installation, Installation.id == InventoryMovement.installation_id).where(Installation.project_id == project_id)
     if start_at is not None and end_at is not None:
         material_query = material_query.where(InventoryMovement.created_at >= start_at, InventoryMovement.created_at < end_at)
     for movement in db.scalars(material_query).all():
-        row = project_row(movement.installation_id)
+        installation = db.get(Installation, movement.installation_id) if movement.installation_id else None
+        row = project_row(installation.project_id if installation and installation.project_id else (installation.id if installation else None), installation)
         row["material_events"] += 1
         if movement.unit_cost is None:
             row["missing_cost_movements"] += 1
@@ -3349,10 +3470,13 @@ def profitability_report(
     expenses_query = select(ProjectExpense)
     if installation_id:
         expenses_query = expenses_query.where(ProjectExpense.installation_id == installation_id)
+    elif project_id:
+        expenses_query = expenses_query.where(ProjectExpense.project_id == project_id)
     if period_start is not None and period_end is not None:
         expenses_query = expenses_query.where(ProjectExpense.occurred_on >= period_start, ProjectExpense.occurred_on < period_end)
     for expense in db.scalars(expenses_query).all():
-        row = project_row(expense.installation_id)
+        installation = db.get(Installation, expense.installation_id) if expense.installation_id else None
+        row = project_row(expense.project_id or ((installation.project_id or installation.id) if installation else None), installation)
         amount = Decimal(expense.amount)
         row["expenses"] += amount
         categories = row["expenses_by_category"]
@@ -3363,11 +3487,14 @@ def profitability_report(
     adjustments_query = select(ProfitabilityAdjustment)
     if installation_id:
         adjustments_query = adjustments_query.where(ProfitabilityAdjustment.installation_id == installation_id)
+    elif project_id:
+        adjustments_query = adjustments_query.join(Installation, Installation.id == ProfitabilityAdjustment.installation_id).where(Installation.project_id == project_id)
     if period_start is not None and period_end is not None:
         adjustments_query = adjustments_query.where(ProfitabilityAdjustment.occurred_on >= period_start, ProfitabilityAdjustment.occurred_on < period_end)
     adjustment_rows = db.scalars(adjustments_query).all()
     for adjustment in adjustment_rows:
-        row = project_row(adjustment.installation_id)
+        installation = db.get(Installation, adjustment.installation_id) if adjustment.installation_id else None
+        row = project_row(installation.project_id if installation and installation.project_id else (installation.id if installation else None), installation)
         amount = Decimal(adjustment.amount)
         row["returns_and_bonifications"] += amount
         row["adjustments_by_type"][adjustment.adjustment_type] += amount
@@ -3399,7 +3526,7 @@ def profitability_report(
     }
     material_cost_total = sum((row["materials_cost"] or Decimal("0") for row in rows), Decimal("0")) if missing_costs == 0 else None
     return {
-        "period": month or (f"Proyecto · {installation_id}" if installation_id else "Todos los periodos"),
+        "period": month or (f"Proyecto · {project_id or installation_id}" if project_id or installation_id else "Todos los periodos"),
         "basis": "Ventas por fecha de registro; costo de materiales por fecha de consumo confirmado; gastos por fecha capturada.",
         "rows": rows,
         "totals": {
