@@ -24,5 +24,5 @@ def test_inventory_catalog_migration_accepts_columns_created_by_initial_metadata
     inspector = inspect(engine)
     columns = {column["name"] for column in inspector.get_columns("ae_inventory")}
     indexes = {index["name"] for index in inspector.get_indexes("ae_inventory")}
-    assert {"description", "category", "brand", "model", "supplier_id", "barcode"} <= columns
+    assert {"description", "category", "subcategory", "brand", "model", "supplier_id", "barcode"} <= columns
     assert {"ix_ae_inventory_supplier_id", "uq_ae_inventory_barcode"} <= indexes

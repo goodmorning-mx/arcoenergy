@@ -196,6 +196,7 @@ class InventoryItem(Base):
     name: Mapped[str] = mapped_column(String(180), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
     category: Mapped[str] = mapped_column(String(100), default="")
+    subcategory: Mapped[str] = mapped_column(String(100), default="")
     brand: Mapped[str] = mapped_column(String(100), default="")
     model: Mapped[str] = mapped_column(String(120), default="")
     supplier_id: Mapped[str | None] = mapped_column(ForeignKey("ae_suppliers.id"), nullable=True, index=True)
