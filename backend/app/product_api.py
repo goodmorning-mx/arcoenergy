@@ -157,6 +157,22 @@ def _serialize_installation(row: Installation) -> dict:
     return result
 
 
+def _serialize_quote(row: Quote) -> dict:
+    """Keep private Drive identifiers server-side while preserving file status."""
+    result = _serialize(row)
+    result.pop("drive_file_id", None)
+    result["drive_available"] = bool(row.drive_file_id)
+    return result
+
+
+def _serialize_purchase_invoice(row: Purchase) -> dict:
+    """Expose invoice availability without exposing its private Drive ID."""
+    result = _serialize(row)
+    result.pop("invoice_drive_file_id", None)
+    result["invoice_available"] = bool(row.invoice_drive_file_id)
+    return result
+
+
 def _serialize_followup(row: FollowUp) -> dict:
     result = _serialize(row)
     result.pop("push_claimed_at", None)
@@ -942,13 +958,13 @@ def create_quote(data: QuoteInput, db: Session = Depends(get_db)):
     )
     db.add(row); db.flush()
     db.add(Activity(customer_id=customer.id, kind="cotización creada", note=f"Cotización {folio}, por ${total:,.2f} MXN.")); db.commit(); db.refresh(row)
-    return _serialize(row)
+    return _serialize_quote(row)
 
 
 @router.get("/quotes", dependencies=[Depends(require_permissions(auth_service, "quotes:read"))])
 def list_quotes(db: Session = Depends(get_db)):
     rows = db.scalars(select(Quote).order_by(Quote.created_at.desc())).all()
-    return [{**_serialize(row), "customer": _serialize(db.get(Customer, row.customer_id))} for row in rows]
+    return [{**_serialize_quote(row), "customer": _serialize(db.get(Customer, row.customer_id))} for row in rows]
 
 
 @router.patch("/quotes/{quote_id}/status", dependencies=[Depends(require_permissions(auth_service, "quotes:write"))])
@@ -962,7 +978,7 @@ def update_quote_status(quote_id: str, data: QuoteStatusInput, identity: AuthIde
     row.status = data.status
     db.add(Activity(customer_id=row.customer_id, kind="cotización actualizada", note=f"{row.folio}: {data.status}.", created_by=identity.email))
     db.commit(); db.refresh(row)
-    return _serialize(row)
+    return _serialize_quote(row)
 
 
 @router.get("/quotes/{quote_id}/pdf", dependencies=[Depends(require_permissions(auth_service, "quotes:read"))])
@@ -2641,7 +2657,7 @@ def _purchase_result(db: Session, purchase: Purchase):
     correction = db.scalar(select(PurchaseCorrection).where(PurchaseCorrection.purchase_id == purchase.id))
     reversed_payment_ids = {row[0] for row in db.execute(select(SupplierPayment.reversal_of_id).where(SupplierPayment.reversal_of_id.is_not(None))).all()}
     return {
-        **_serialize(purchase),
+        **_serialize_purchase_invoice(purchase),
         "status": "corrected" if correction else purchase.status,
         "supplier": {"id": supplier.id, "name": supplier.name} if supplier else None,
         "balance": Decimal("0") if correction else Decimal(purchase.total) - Decimal(purchase.paid_amount),
