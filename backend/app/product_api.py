@@ -142,6 +142,13 @@ def _serialize_inventory_movement(row: InventoryMovement | None, identity: AuthI
     return result
 
 
+def _serialize_work_order_material(row: WorkOrderMaterial, identity: AuthIdentity) -> dict:
+    result = _serialize(row)
+    if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
+        result.pop("unit_cost", None)
+    return result
+
+
 def _serialize_followup(row: FollowUp) -> dict:
     result = _serialize(row)
     result.pop("push_claimed_at", None)
@@ -1625,7 +1632,7 @@ def list_installations(identity: AuthIdentity = Depends(require_permissions(auth
             available_for_order = max(Decimal(str(item.quantity)) - other_reserved, Decimal("0")) if item and active else None
             shortage = max(remaining_to_issue - available_for_order, Decimal("0")) if available_for_order is not None else Decimal("0")
             serialized_materials.append({
-                **_serialize(material),
+                **_serialize_work_order_material(material, identity),
                 "item_name": item.name if item else "Artículo",
                 "remaining_quantity": max(Decimal(material.requested_quantity) - Decimal(material.consumed_quantity), Decimal("0")),
                 "remaining_to_issue": remaining_to_issue,
