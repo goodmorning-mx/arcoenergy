@@ -1235,3 +1235,13 @@ La revisión del resultado de ventas encontró que la orden anidada se serializa
 | US-14 | Parcial funcional | También se protegen los IDs privados de Drive en órdenes anidadas dentro de ventas. Siguen pendientes la auditoría completa de cada campo y la validación de permisos con cuentas reales de los cinco roles. |
 
 La migración `202611100088` añade la revisión append-only de US-14 y conserva la fuente literal. Producto integrado en el PR [#126](https://github.com/goodmorning-mx/arcoenergy/pull/126), merge commit `b7094e5829217b34733b0903b6e74f082952bf3d`. Factory actualizó la revisión esperada en el PR [#433](https://github.com/goodmorning-mx/goodmorning-factory/pull/433), merge commit `c6e47ad1d2e2c7f7c6f9b6fb8d860d53a38efcda`; el run [#42875164049](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42875164049) terminó correctamente al reconciliar el catálogo DEV. La API informa `ready`, el commit `b7094e5829217b34733b0903b6e74f082952bf3d` y el esquema `202611100088`; los cinco contenedores de aplicación observados en Coolify están saludables con esa imagen. `/`, `/crm/login`, `/app/login`, `/crm/` y `/app/` responden HTTP 200. Validación local: 3 pruebas dirigidas, suite backend completa (207 pruebas) y 34 pruebas de contrato de Factory aprobadas. Los jobs CI del PR de producto no iniciaron pasos por el bloqueo de facturación de GitHub; se registran por separado de las validaciones locales. No se cambiaron secretos ni configuración externa.
+
+## Iteración 77 — privacidad en la respuesta del checklist (2026-11-10)
+
+La continuación de la auditoría encontró que el endpoint para actualizar el checklist regresaba la orden con serialización genérica. Ahora usa la proyección protegida y mantiene la señal de disponibilidad de la solicitud de materiales sin revelar el ID privado de Drive. Una prueba regresiva ejecuta la actualización y comprueba la respuesta completa.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | La actualización del checklist ya oculta IDs privados de Drive. Sigue pendiente la revisión integral de campos y la comprobación con cuentas reales de los cinco roles. |
+
+La migración `202611100089` agrega una versión append-only de US-14 y conserva intacta su fuente literal. Validación local e integración DEV pendientes.

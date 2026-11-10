@@ -9,8 +9,15 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import create_engine, select
 
+from gm_auth.models import AuthIdentity
 from app.models import HistoryCard, Installation, Purchase, Quote, Sale
-from app.product_api import _sale_result, _serialize_purchase_invoice, _serialize_quote
+from app.product_api import (
+    InstallationChecklistInput,
+    _sale_result,
+    _serialize_purchase_invoice,
+    _serialize_quote,
+    update_installation_checklist,
+)
 
 
 def test_quote_and_purchase_serializers_omit_drive_ids_but_preserve_availability() -> None:
@@ -49,9 +56,30 @@ def test_sales_response_uses_private_drive_safe_installation_projection() -> Non
     assert "private-material-request-id" not in repr(result)
 
 
+def test_checklist_update_uses_private_drive_safe_installation_projection() -> None:
+    installation = Installation(
+        folio="AE-OT-2", customer_id="customer-1", status="assigned",
+        checklist=[{"task": "Confirmar materiales", "done": False}],
+        material_request_drive_file_id="private-checklist-drive-id",
+    )
+    db = Mock()
+    db.scalar.return_value = installation
+    identity = AuthIdentity(
+        "admin-1", "arcoenergy", frozenset({"administrador"}),
+        frozenset({"installations:write"}), "admin@example.com", "Admin",
+    )
+    data = InstallationChecklistInput(checklist=[{"task": "Confirmar materiales", "done": True}])
+
+    result = update_installation_checklist("installation-1", data, identity, db)
+
+    assert result["material_request_available"] is True
+    assert "material_request_drive_file_id" not in result
+    assert "private-checklist-drive-id" not in repr(result)
+
+
 def test_private_drive_id_revision_appends_to_us14_and_preserves_literal() -> None:
     root = Path(__file__).parents[1]
-    path = root / "alembic" / "versions" / "202611100088_nested_sales_drive_id_privacy_revision.py"
+    path = root / "alembic" / "versions" / "202611100089_checklist_drive_id_privacy_revision.py"
     spec = importlib.util.spec_from_file_location(path.stem, path)
     assert spec and spec.loader
     migration = importlib.util.module_from_spec(spec)
@@ -78,5 +106,5 @@ def test_private_drive_id_revision_appends_to_us14_and_preserves_literal() -> No
     assert [row["version"] for row in versions] == [1, 2]
     assert all(row["source_literal"] == literal for row in versions)
     assert len(versions) == 2
-    assert versions[1]["iteration"] == "Iteración 76 · privacidad de archivos en ventas · 2026-11-10"
-    assert any("ventas" in item for item in versions[1]["acceptance_criteria"])
+    assert versions[1]["iteration"] == "Iteración 77 · privacidad de archivos en checklist · 2026-11-10"
+    assert any("checklist" in item for item in versions[1]["acceptance_criteria"])

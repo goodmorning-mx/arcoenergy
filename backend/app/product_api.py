@@ -1877,7 +1877,7 @@ def update_installation_checklist(
             created_by=identity.email or "",
         ))
     db.commit(); db.refresh(installation)
-    return _serialize(installation)
+    return _serialize_installation(installation)
 
 
 @router.get("/installers", dependencies=[Depends(require_permissions(auth_service, "installations:read"))])
