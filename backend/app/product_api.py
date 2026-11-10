@@ -3806,17 +3806,34 @@ def operations_report(
 def dashboard(identity: AuthIdentity = Depends(require_permissions(auth_service, "customers:read")), db: Session = Depends(get_db)):
     active_quotes = Quote.status.in_(["draft", "sent"])
     result = {
-        "customers": db.scalar(select(func.count()).select_from(Customer)) or 0,
-        "quotes_open": db.scalar(select(func.count()).select_from(Quote).where(active_quotes)) or 0,
-        "quotes_amount": float(db.scalar(select(func.coalesce(func.sum(Quote.total), 0)).where(active_quotes)) or 0),
-        "installations_active": db.scalar(select(func.count()).select_from(Installation).where(Installation.status.notin_(("closed", "cancelled")))) or 0,
+        "customers": 0,
+        "quotes_open": 0,
+        "quotes_amount": 0.0,
+        "quotes_pending_approval": 0,
+        "installations_active": 0,
         "receivables_open": 0.0,
+        "receivables_overdue": {"count": 0, "amount": 0.0},
         "due_receivables": [],
         "low_stock_items": [],
+        "inventory_summary": {"total_items": 0, "available_items": 0, "low_stock_items": 0, "out_of_stock_items": 0},
+        "inventory_activity_7d": [],
         "account_balances": [],
     }
+    if "customers:read" in identity.permissions:
+        result["customers"] = db.scalar(select(func.count()).select_from(Customer)) or 0
+    if "quotes:read" in identity.permissions:
+        result["quotes_open"] = db.scalar(select(func.count()).select_from(Quote).where(active_quotes)) or 0
+        result["quotes_amount"] = float(db.scalar(select(func.coalesce(func.sum(Quote.total), 0)).where(active_quotes)) or 0)
+        result["quotes_pending_approval"] = db.scalar(select(func.count()).select_from(Quote).where(active_quotes, Quote.pricing_approved.is_(False))) or 0
+    if "installations:read" in identity.permissions:
+        result["installations_active"] = db.scalar(select(func.count()).select_from(Installation).where(Installation.status.notin_(("closed", "cancelled")))) or 0
     if "receivables:read" in identity.permissions:
         result["receivables_open"] = float(db.scalar(select(func.coalesce(func.sum(Receivable.amount-Receivable.paid_amount), 0)).where(Receivable.status != "paid", _uncorrected_receivable_filter())) or 0)
+        overdue_count, overdue_amount = db.execute(select(
+            func.count(Receivable.id),
+            func.coalesce(func.sum(Receivable.amount - Receivable.paid_amount), 0),
+        ).where(Receivable.status != "paid", Receivable.due_date < date.today(), _uncorrected_receivable_filter())).one()
+        result["receivables_overdue"] = {"count": overdue_count or 0, "amount": float(overdue_amount or 0)}
         due_rows = db.execute(select(Receivable, Customer.name).join(Customer, Customer.id == Receivable.customer_id)
             .where(Receivable.status != "paid", Receivable.due_date <= date.today() + timedelta(days=7), _uncorrected_receivable_filter())
             .order_by(Receivable.due_date).limit(10)).all()
@@ -3827,11 +3844,42 @@ def dashboard(identity: AuthIdentity = Depends(require_permissions(auth_service,
             .join(Installation, Installation.id == WorkOrderMaterial.installation_id)
             .where(Installation.status.notin_(("closed", "cancelled"))).group_by(WorkOrderMaterial.item_id)
         ).all()}
-        inventory_items = db.scalars(select(InventoryItem).where(InventoryItem.minimum_quantity > 0).order_by(InventoryItem.name)).all()
-        result["low_stock_items"] = [{"id": item.id, "name": item.name, "unit": item.unit,
-            "available_quantity": max(Decimal(item.quantity) - reserved.get(item.id, Decimal("0")), Decimal("0")),
-            "minimum_quantity": Decimal(item.minimum_quantity)} for item in inventory_items
-            if max(Decimal(item.quantity) - reserved.get(item.id, Decimal("0")), Decimal("0")) <= Decimal(item.minimum_quantity)][:10]
+        inventory_items = db.scalars(select(InventoryItem).order_by(InventoryItem.name)).all()
+        counts = result["inventory_summary"]
+        counts["total_items"] = len(inventory_items)
+        low_stock_items = []
+        for item in inventory_items:
+            available = max(Decimal(item.quantity) - reserved.get(item.id, Decimal("0")), Decimal("0"))
+            if available <= 0:
+                counts["out_of_stock_items"] += 1
+            elif item.minimum_quantity > 0 and available <= Decimal(item.minimum_quantity):
+                counts["low_stock_items"] += 1
+            else:
+                counts["available_items"] += 1
+            if item.minimum_quantity > 0 and available <= Decimal(item.minimum_quantity):
+                low_stock_items.append({"id": item.id, "name": item.name, "unit": item.unit,
+                    "available_quantity": available, "minimum_quantity": Decimal(item.minimum_quantity)})
+        result["low_stock_items"] = low_stock_items[:10]
+        start_day = date.today() - timedelta(days=6)
+        start_at = datetime.combine(start_day, datetime.min.time(), tzinfo=timezone.utc)
+        grouped_movements = db.execute(select(
+            func.date(InventoryMovement.created_at), InventoryMovement.movement_type, func.count(InventoryMovement.id),
+        ).where(InventoryMovement.created_at >= start_at).group_by(
+            func.date(InventoryMovement.created_at), InventoryMovement.movement_type,
+        )).all()
+        daily = {start_day + timedelta(days=offset): {"entries": 0, "exits": 0} for offset in range(7)}
+        for movement_day, movement_type, count in grouped_movements:
+            if isinstance(movement_day, str):
+                movement_day = date.fromisoformat(movement_day)
+            if movement_day not in daily:
+                continue
+            if movement_type in {"in", "purchase", "return"}:
+                daily[movement_day]["entries"] += count
+            elif movement_type in {"out", "damage", "purchase_reversal"}:
+                daily[movement_day]["exits"] += count
+        result["inventory_activity_7d"] = [
+            {"date": day.isoformat(), **daily[day]} for day in daily
+        ]
     if "accounts:read" in identity.permissions:
         accounts = db.scalars(select(FinancialAccount).where(FinancialAccount.active.is_(True)).order_by(FinancialAccount.name)).all()
         result["account_balances"] = [{"id": account.id, "name": account.name, "account_type": account.account_type,
