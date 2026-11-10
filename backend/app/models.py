@@ -98,11 +98,23 @@ class Activity(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
+class Project(Base):
+    __tablename__ = "ae_projects"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    code: Mapped[str] = mapped_column(String(40), unique=True, nullable=False, index=True)
+    customer_id: Mapped[str] = mapped_column(ForeignKey("ae_customers.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(180), nullable=False)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_by: Mapped[str] = mapped_column(String(180), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
 class Installation(Base):
     __tablename__ = "ae_installations"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     folio: Mapped[str | None] = mapped_column(String(36), unique=True, nullable=True)
     customer_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    project_id: Mapped[str | None] = mapped_column(ForeignKey("ae_projects.id"), nullable=True, index=True)
     quote_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     lead_installer: Mapped[str] = mapped_column(String(180), default="")
@@ -231,6 +243,7 @@ class ProjectExpense(Base):
     __table_args__ = (UniqueConstraint("reversal_of_id", name="uq_ae_expenses_reversal"),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     installation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    project_id: Mapped[str | None] = mapped_column(ForeignKey("ae_projects.id"), nullable=True, index=True)
     category: Mapped[str] = mapped_column(String(80), default="Viáticos")
     expense_type: Mapped[str] = mapped_column(String(20), default="unclassified", nullable=False)
     description: Mapped[str] = mapped_column(String(240), default="")

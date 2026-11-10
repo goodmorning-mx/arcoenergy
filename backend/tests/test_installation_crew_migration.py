@@ -8,7 +8,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import create_engine, select
 
-from app.models import HistoryCard, Installation
+from app.models import Customer, HistoryCard, Installation, Project
 
 
 def test_migration_backfills_existing_lead_and_revises_story_cards() -> None:
@@ -19,10 +19,13 @@ def test_migration_backfills_existing_lead_and_revises_story_cards() -> None:
     spec.loader.exec_module(migration)
 
     engine = create_engine("sqlite://")
+    Customer.__table__.create(engine)
+    Project.__table__.create(engine)
     Installation.__table__.create(engine)
     HistoryCard.__table__.create(engine)
     now = datetime.now(timezone.utc)
     with engine.begin() as connection:
+        connection.execute(Customer.__table__.insert(), {"id": "customer-1", "name": "Cliente", "phone": "", "email": "", "city": "", "address": "", "status": "lead", "source": "", "created_at": now})
         connection.execute(Installation.__table__.insert(), [
             {"id": "legacy-order", "customer_id": "customer-1", "lead_installer": " Crew@Example.Test ", "status": "scheduled", "checklist": [], "notes": ""},
             {"id": "unassigned-order", "customer_id": "customer-1", "lead_installer": "", "status": "scheduled", "checklist": [], "notes": ""},
