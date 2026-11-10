@@ -27,7 +27,7 @@ type CfdiProposal = { invoice_reference:string; purchase_date:string; supplier_r
 type Receivable = { id: string; customer_id: string; customer?: Customer; quote_id: string | null; due_date: string; amount: number; paid_amount: number; balance: number; installment_number: number; payment_method: string; status: 'pending' | 'partial' | 'overdue' | 'paid'; payments?: Array<{ id: string; amount: number; paid_on: string; reference: string; account_name: string; is_reversal: boolean; can_reverse: boolean }> };
 type Installer = { email: string; name: string };
 type Sale = { id: string; folio: string; customer_id: string; customer?: Customer; quote_id: string; quote?: { id: string; folio: string; payment_method: string }; installation_id: string; installation?: Installation; sale_type: 'cash' | 'credit'; total: number; receivable?: { due_date: string; amount: number; paid_amount: number } | null; receivables?: Array<{ installment_number: number; due_date: string; amount: number }>; installment_count?: number; materials: Array<{ id: string; item_name: string; quantity: number }>; created_at: string; can_reverse?: boolean; correction?: { reason: string; created_at: string; amount: number } | null };
-type Dashboard = { customers?: number; quotes_open?: number; quotes_amount?: number; installations_active?: number; receivables_open?: number; due_receivables?: Array<{id:string;customer:string;due_date:string;balance:number;status:'due'|'overdue'}>; low_stock_items?: Array<{id:string;name:string;unit:string;available_quantity:number;minimum_quantity:number}>; account_balances?: Array<{id:string;name:string;account_type:string;balance:number}> };
+type Dashboard = { customers?: number; quotes_open?: number; quotes_amount?: number; quotes_pending_approval?:number; installations_active?: number; receivables_open?: number; receivables_overdue?:{count:number;amount:number}; due_receivables?: Array<{id:string;customer:string;due_date:string;balance:number;status:'due'|'overdue'}>; low_stock_items?: Array<{id:string;name:string;unit:string;available_quantity:number;minimum_quantity:number}>; inventory_summary?:{total_items:number;available_items:number;low_stock_items:number;out_of_stock_items:number}; inventory_activity_7d?:Array<{date:string;entries:number;exits:number}>; account_balances?: Array<{id:string;name:string;account_type:string;balance:number}> };
 type CatalogPayload = { packages: Package[]; payment_methods: string[]; catalog_note: string };
 type ProfitabilityRow = { project_id?:string|null; project_code?:string; installation_id: string | null; folio: string | null; project: string; city: string; sales: number; materials_cost: number | null; expenses: number; expenses_by_category: Record<string, number>; expenses_by_type: { fixed:number; variable:number; unclassified:number }; returns_and_bonifications:number; adjustments_by_type:{return:number;bonification:number}; preliminary_result: number | null; missing_cost_movements: number; material_events: number };
 type ProfitabilityAdjustment = { id:string; installation_id:string|null; adjustment_type:'return'|'bonification'; description:string; amount:number; occurred_on:string; project:string; folio:string|null; can_reverse:boolean };
@@ -611,6 +611,12 @@ function DashboardView({ data, customers, quotes, followups, can, onCustomer, on
   const lowStock = data.low_stock_items || [];
   const due = data.due_receivables || [];
   const balances = data.account_balances || [];
+  const stock = data.inventory_summary || { total_items: 0, available_items: 0, low_stock_items: 0, out_of_stock_items: 0 };
+  const inventoryDays = data.inventory_activity_7d || [];
+  const maxMovement = Math.max(1, ...inventoryDays.map(day => Math.max(day.entries, day.exits)));
+  const stockGradient = stock.total_items
+    ? `conic-gradient(#d7a34a 0 ${stock.out_of_stock_items / stock.total_items * 100}%, #e87955 ${stock.out_of_stock_items / stock.total_items * 100}% ${(stock.out_of_stock_items + stock.low_stock_items) / stock.total_items * 100}%, #55a47a ${(stock.out_of_stock_items + stock.low_stock_items) / stock.total_items * 100}% 100%)`
+    : 'conic-gradient(#e8ece6 0 100%)';
   return <>
     <section className="metric-grid">
       {can('customers:read') && <Metric label="PROSPECTOS Y CLIENTES" value={String(data.customers ?? customers.length)} note="Registros en tu cartera" icon="♙" tone="sage"/>}
@@ -619,6 +625,29 @@ function DashboardView({ data, customers, quotes, followups, can, onCustomer, on
       {can('installations:read') && <Metric label="INSTALACIONES ACTIVAS" value={String(data.installations_active ?? 0)} note="Visibles para tu rol" icon="⌂" tone="mint"/>}
       {can('receivables:read') && <Metric label="CARTERA POR COBRAR" value={money(data.receivables_open ?? 0)} note="Saldo pendiente registrado" icon="$" tone="rose"/>}
     </section>
+    {can('inventory:read') && <section className="dashboard-grid dashboard-visuals">
+      <article className="surface-card dashboard-chart-card">
+        <div className="section-title"><div><span className="eyebrow">MOVIMIENTOS DE ALMACÉN · 7 DÍAS</span><h2>Entradas y salidas</h2></div><button className="text-button" onClick={() => onView('inventario')}>Ver kardex →</button></div>
+        {inventoryDays.length ? <><div className="movement-chart" role="img" aria-label="Conteo diario de movimientos de entrada y salida de almacén durante los últimos siete días">
+          {inventoryDays.map(day => <div className="movement-chart-day" key={day.date} title={`${new Date(`${day.date}T12:00:00`).toLocaleDateString('es-MX')}: ${day.entries} entradas y ${day.exits} salidas`}>
+            <div className="movement-chart-bars"><span className="movement-bar entry-bar" style={{height:`${Math.max(day.entries / maxMovement * 100, day.entries ? 5 : 1)}%`}}/><span className="movement-bar exit-bar" style={{height:`${Math.max(day.exits / maxMovement * 100, day.exits ? 5 : 1)}%`}}/></div>
+            <small>{new Date(`${day.date}T12:00:00`).toLocaleDateString('es-MX',{weekday:'short'}).replace('.','')}</small>
+            <span className="movement-chart-values">{day.entries} / {day.exits}</span>
+          </div>)}
+        </div><div className="movement-chart-legend"><span><i className="entry-dot"/>Entradas</span><span><i className="exit-dot"/>Salidas físicas</span><small>Movimientos registrados, no cantidades ni valuación.</small></div></> : <p className="empty-inline">Sin movimientos en almacén durante este periodo.</p>}
+      </article>
+      <article className="surface-card dashboard-opportunities">
+        <div className="section-title"><div><span className="eyebrow">RESUMEN Y OPORTUNIDADES</span><h2>Qué requiere atención</h2></div></div>
+        <div className="stock-opportunity">
+          <div className="stock-donut" role="img" aria-label={`${stock.out_of_stock_items} artículos agotados, ${stock.low_stock_items} artículos bajo mínimo y ${stock.available_items} artículos disponibles`} style={{background:stockGradient}}><div><b>{stock.total_items}</b><small>artículos</small></div></div>
+          <div className="stock-legend"><span><i className="stock-dot empty-dot"/>Agotados <b>{stock.out_of_stock_items}</b></span><span><i className="stock-dot low-dot"/>Bajo mínimo <b>{stock.low_stock_items}</b></span><span><i className="stock-dot available-dot"/>Disponibles <b>{stock.available_items}</b></span></div>
+        </div>
+        {stock.out_of_stock_items > 0 ? <p className="opportunity-note">Hay {stock.out_of_stock_items} artículos sin existencia disponible. Revisa el almacén antes de asignar material.</p> : stock.low_stock_items > 0 ? <p className="opportunity-note">Hay {stock.low_stock_items} artículos bajo su mínimo configurado. Revisa si requieren reposición.</p> : <p className="opportunity-note">Sin faltantes detectados con los mínimos configurados.</p>}
+        {can('receivables:read') && (data.receivables_overdue?.count || 0) > 0 && <button className="opportunity-link" onClick={() => onView('cobranza')}>Cobranza vencida: {money(data.receivables_overdue?.amount || 0)} · {data.receivables_overdue?.count} saldos →</button>}
+        {can('quotes:read') && (data.quotes_pending_approval || 0) > 0 && <button className="opportunity-link" onClick={() => onView('cotizaciones')}>{data.quotes_pending_approval} cotizaciones esperan aprobación de precio →</button>}
+        <button className="text-button opportunity-footer" onClick={() => onView('inventario')}>Revisar inventario →</button>
+      </article>
+    </section>}
     {(can('inventory:read') || can('receivables:read') || can('accounts:read')) && <section className="dashboard-grid">
       {can('inventory:read') && <div className="surface-card"><div className="section-title"><div><span className="eyebrow">ALMACÉN</span><h2>Alertas de existencias</h2></div><button className="text-button" onClick={() => onView('inventario')}>Abrir almacén →</button></div>{lowStock.length ? lowStock.map(item=><div className="focus-row" key={item.id}><div className="avatar-soft">▦</div><div><b>{item.name}</b><small>{item.available_quantity} {item.unit} disponibles · mínimo {item.minimum_quantity}</small></div><span className="status-chip status-overdue">Reponer</span></div>) : <p className="empty-inline">No hay artículos bajo el mínimo configurado.</p>}</div>}
       {can('receivables:read') && <div className="surface-card"><div className="section-title"><div><span className="eyebrow">COBRANZA</span><h2>Vencidos y próximos</h2></div><button className="text-button" onClick={() => onView('cobranza')}>Ver cartera →</button></div>{due.length ? due.map(item=><div className="focus-row" key={item.id}><div className="date-tile"><b>{new Date(`${item.due_date}T12:00:00`).getDate()}</b><small>{new Date(`${item.due_date}T12:00:00`).toLocaleDateString('es-MX',{month:'short'}).toUpperCase()}</small></div><div><b>{item.customer}</b><small>{item.status==='overdue'?'Vencido':'Vence pronto'} · {money(item.balance)}</small></div><span className={`status-chip ${item.status==='overdue'?'status-overdue':'status-draft'}`}>{item.status==='overdue'?'Vencido':'Próximo'}</span></div>) : <p className="empty-inline">Sin pagos vencidos ni próximos en los siguientes 7 días.</p>}</div>}
