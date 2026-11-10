@@ -1195,3 +1195,13 @@ La revisión posterior de US-14 encontró que la lista PWA de órdenes serializa
 | US-14 | Parcial funcional | El listado de órdenes oculta el costo unitario a instaladores y conserva información operativa. Sigue pendiente revisar el resto de campos y probar usuarios reales de los cinco roles. |
 
 La migración `202611100084` agrega esta nueva versión a US-14 sin modificar la fuente literal. Producto integrado mediante PR [#118](https://github.com/goodmorning-mx/arcoenergy/pull/118), merge commit `ef24521a45e09b7641c3859cd0a233e420aaed7e`. Factory actualizó el contrato de esquema mediante PR [#428](https://github.com/goodmorning-mx/goodmorning-factory/pull/428), merge commit `a60720d8de939c38d3e38dbd4e3d73db896a41ef`; el run [#42867339105](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42867339105) terminó correctamente tras desplegar, verificar `202611100084` y reconciliar respaldos externos. DEV reporta API `ready`, commit `ef24521a45e09b7641c3859cd0a233e420aaed7e` y esquema `202611100084`; `/api/health/ready`, `/api/version`, `/`, `/crm/login`, `/app/login`, `/crm/` y `/app/` respondieron HTTP 200. Validación local: 202 pruebas backend aprobadas. No se añadieron secretos ni variables de configuración.
+
+## Iteración 73 — fechas locales de seguimiento (2026-11-10)
+
+El CRM ofrecía las opciones de 3, 7, 15 y 30 días, pero calculaba la fecha con milisegundos UTC. Cerca de la medianoche local eso podía desplazar el contacto un día, y la fecha mínima del control también usaba UTC. El cálculo ahora avanza días de calendario en la zona horaria del navegador, incluyendo el inicio/fin de mes y cambios de horario estacional. Se conservan la fecha abierta, el comentario de bitácora y la asignación de responsable.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-4 | Parcial funcional | Presets y fecha mínima usan la fecha local; faltan validar el flujo con vendedores y cuentas/dispositivos reales. |
+
+La migración `202611100085` registra una versión append-only de US-4 sin modificar su fuente literal. Las pruebas cubren una programación cerca de medianoche en Cancún y un cálculo que atraviesa el cambio de horario estacional en Nueva York. Integración y despliegue DEV pendientes.
