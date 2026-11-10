@@ -388,7 +388,7 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 | --- | --- | --- |
 | US-1 | Parcial funcional | Configurar paquetes reales y validar PDF con el cliente. |
 | US-2 | Pendiente | Recibo PDF, OCR, fórmula y aprobación humana. |
-| US-3 | Parcial | PDF foliado y enlace WhatsApp; Drive y envío/adjunto automatizado no están configurados. |
+| US-3 | Parcial | PDF foliado se descarga y se archiva en Drive si las credenciales están configuradas; WhatsApp ofrece compartir/adjuntar desde el dispositivo. La configuración debe confirmarse en la cuenta real y no hay envío automático por API. |
 | US-4 | Funcional básico | Agregar alertas/notificaciones y responsable asignado. |
 | US-5–6 | Pendientes | Plantillas legales, carga segura de INE, consentimiento, firma y proveedor biométrico. |
 | US-7 | Parcial | Asignación y visibilidad para instalador; falta notificación push/SMS/WhatsApp. |
@@ -1194,4 +1194,4 @@ La revisión posterior de US-14 encontró que la lista PWA de órdenes serializa
 | --- | --- | --- |
 | US-14 | Parcial funcional | El listado de órdenes oculta el costo unitario a instaladores y conserva información operativa. Sigue pendiente revisar el resto de campos y probar usuarios reales de los cinco roles. |
 
-La migración `202611100084` agregará esta nueva versión a US-14 sin modificar la fuente literal. Se ejecutará suite y build y se registrarán los merges/despliegue DEV tras su integración.
+La migración `202611100084` agrega esta nueva versión a US-14 sin modificar la fuente literal. Producto integrado mediante PR [#118](https://github.com/goodmorning-mx/arcoenergy/pull/118), merge commit `ef24521a45e09b7641c3859cd0a233e420aaed7e`. Factory actualizó el contrato de esquema mediante PR [#428](https://github.com/goodmorning-mx/goodmorning-factory/pull/428), merge commit `a60720d8de939c38d3e38dbd4e3d73db896a41ef`; el run [#42867339105](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42867339105) terminó correctamente tras desplegar, verificar `202611100084` y reconciliar respaldos externos. DEV reporta API `ready`, commit `ef24521a45e09b7641c3859cd0a233e420aaed7e` y esquema `202611100084`; `/api/health/ready`, `/api/version`, `/`, `/crm/login`, `/app/login`, `/crm/` y `/app/` respondieron HTTP 200. Validación local: 202 pruebas backend aprobadas. No se añadieron secretos ni variables de configuración.
