@@ -78,10 +78,17 @@ def test_installer_consumption_decrements_stock_once_and_cannot_exceed_order(mon
         db.add_all([customer, account, item]); db.flush(); quote.customer_id = customer.id; db.add(quote); db.commit()
         created = create_sale(SaleInput(quote_id=quote.id, sale_type="cash", account_id=account.id,
             lead_installer="field@example.test", materials=[SaleMaterialInput(item_id=item.id, quantity=8)]), admin, db)
-        consume_result = consume_inventory(StockInput(item_id=item.id, quantity=3, installation_id=created["installation_id"]), installer, db)
+        consume_payload = StockInput(item_id=item.id, quantity=3, installation_id=created["installation_id"], operation_id="field-consume-cost-test")
+        consume_result = consume_inventory(consume_payload, installer, db)
         assert db.get(InventoryItem, item.id).quantity == Decimal("9.00")
         assert consume_result["movement"]["movement_type"] == "consumption"
         assert consume_result["physical_issue"]["movement_type"] == "out"
+        assert "unit_cost" not in consume_result["movement"]
+        assert "unit_cost" not in consume_result["physical_issue"]
+        assert "unit_cost" not in consume_result["item"]
+        consume_retry = consume_inventory(consume_payload, installer, db)
+        assert "unit_cost" not in consume_retry["movement"]
+        assert "unit_cost" not in consume_retry["physical_issue"]
         assert profitability_report(installation_id=created["installation_id"], db=db)["totals"]["materials_cost"] == Decimal("2700.00")
         damage = return_inventory(InventoryReturnInput(out_movement_id=consume_result["physical_issue"]["id"], quantity=1, condition="damaged"), installer, db)
         assert damage["movement"]["movement_type"] == "damage"

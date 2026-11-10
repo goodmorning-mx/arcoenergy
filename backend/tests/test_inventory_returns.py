@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from gm_auth.models import AuthIdentity
 
 from app.models import Base, Customer, Installation, InventoryItem, InventoryMovement, WorkOrderMaterial
-from app.product_api import InventoryReturnInput, list_inventory_movements, profitability_report, return_inventory
+from app.product_api import InventoryReturnInput, _serialize_inventory_movement, list_inventory_movements, profitability_report, return_inventory
 
 
 def setup_inventory():
@@ -44,6 +44,17 @@ def test_return_replenishes_inventory_and_tracks_source_exit() -> None:
     assert [(movement["movement_type"], movement["returnable_quantity"]) for movement in movements if movement["movement_type"] == "out"] == [("out", 1)]
     assert [movement["signed_quantity"] for movement in movements] == [4, -5]
     assert "unit_cost" not in result["movement"]
+    db.close()
+
+
+def test_inventory_movement_unit_cost_is_visible_only_with_cost_permission() -> None:
+    db, _item, _installation, issue = setup_inventory()
+    installer = AuthIdentity("field-1", "arcoenergy", frozenset({"instalador"}), frozenset({"inventory:read"}), "campo@example.test", "Campo")
+    accountant = AuthIdentity("accountant-1", "arcoenergy", frozenset({"contador"}), frozenset({"inventory:read", "inventory:costs:read"}), "accountant@example.test", "Cuenta")
+
+    assert "unit_cost" not in _serialize_inventory_movement(issue, installer)
+    assert _serialize_inventory_movement(issue, accountant)["unit_cost"] == Decimal("100.00")
+    assert _serialize_inventory_movement(None, installer) is None
     db.close()
 
 

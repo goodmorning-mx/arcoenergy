@@ -132,6 +132,16 @@ def _serialize_inventory_item(row: InventoryItem, identity: AuthIdentity) -> dic
     return result
 
 
+def _serialize_inventory_movement(row: InventoryMovement | None, identity: AuthIdentity) -> dict | None:
+    """Hide historical and current unit costs from roles without cost access."""
+    result = _serialize(row)
+    if result is None:
+        return None
+    if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
+        result.pop("unit_cost", None)
+    return result
+
+
 def _serialize_followup(row: FollowUp) -> dict:
     result = _serialize(row)
     result.pop("push_claimed_at", None)
@@ -2020,7 +2030,7 @@ def consume_inventory(data: StockInput, identity: AuthIdentity = Depends(require
             raise HTTPException(409, "El registro original de esta operación ya no está disponible.")
         physical_issue = db.get(InventoryMovement, movement.related_movement_id) if movement.related_movement_id else None
         serialized_item = _serialize_inventory_item(item, identity)
-        return {"movement": _serialize(movement), "physical_issue": _serialize(physical_issue) if physical_issue else None, "item": serialized_item}
+        return {"movement": _serialize_inventory_movement(movement, identity), "physical_issue": _serialize_inventory_movement(physical_issue, identity) if physical_issue else None, "item": serialized_item}
     if data.installation_id:
         installation = db.scalar(select(Installation).where(Installation.id == data.installation_id).with_for_update())
         if installation is None:
@@ -2071,7 +2081,7 @@ def consume_inventory(data: StockInput, identity: AuthIdentity = Depends(require
     _queue_low_stock_alert(db, background_tasks, item)
     db.commit(); db.refresh(movement)
     serialized_item = _serialize_inventory_item(item, identity)
-    return {"movement": _serialize(movement), "physical_issue": _serialize(physical_issue), "item": serialized_item}
+    return {"movement": _serialize_inventory_movement(movement, identity), "physical_issue": _serialize_inventory_movement(physical_issue, identity), "item": serialized_item}
 
 
 @router.post("/inventory/receive", status_code=201)
@@ -2101,9 +2111,7 @@ def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depend
         if movement is None or item is None:
             raise HTTPException(409, "El registro original de esta operación ya no está disponible.")
         serialized_item = _serialize_inventory_item(item, identity)
-        serialized_movement = _serialize(movement)
-        if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
-            serialized_movement.pop("unit_cost", None)
+        serialized_movement = _serialize_inventory_movement(movement, identity)
         return {"movement": serialized_movement, "item": serialized_item}
     returned = db.scalar(select(func.coalesce(func.sum(InventoryMovement.quantity), 0)).where(
         InventoryMovement.related_movement_id == source.id,
@@ -2179,10 +2187,7 @@ def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depend
     _queue_low_stock_alert(db, background_tasks, item)
     db.commit(); db.refresh(movement)
     serialized_item = _serialize_inventory_item(item, identity)
-    serialized_movement = _serialize(movement)
-    if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
-        serialized_item.pop("unit_cost", None)
-        serialized_movement.pop("unit_cost", None)
+    serialized_movement = _serialize_inventory_movement(movement, identity)
     return {"movement": serialized_movement, "item": serialized_item}
 
 
