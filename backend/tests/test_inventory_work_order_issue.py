@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from gm_auth.models import AuthIdentity
 
 from app.models import Base, Customer, Installation, InventoryItem, InventoryMovement, WorkOrderMaterial
-from app.product_api import StockIssueInput, issue_work_order_materials
+from app.product_api import StockIssueInput, issue_work_order_materials, list_installations
 from app.roles import ROLE_PERMISSIONS
 
 
@@ -104,3 +104,21 @@ def test_issue_rejects_duplicate_material_lines():
             {"work_order_material_id": material.id, "quantity": 1},
             {"work_order_material_id": material.id, "quantity": 1},
         ])
+
+
+def test_installation_materials_hide_cost_from_installer_but_keep_it_for_accountant():
+    db, order, _other, _item, _material, _identity = setup_orders()
+    order.lead_installer = "field@example.test"
+    installer = AuthIdentity("field-1", "arcoenergy", frozenset({"instalador"}),
+        frozenset({"installations:read", "inventory:read"}), "field@example.test", "Campo")
+    accountant = AuthIdentity("accountant-1", "arcoenergy", frozenset({"contador"}),
+        frozenset({"installations:read", "inventory:read", "inventory:costs:read"}), "accountant@example.test", "Contador")
+    db.commit()
+
+    field_material = next(row for row in list_installations(identity=installer, db=db) if row["id"] == order.id)["materials"][0]
+    accountant_material = next(row for row in list_installations(identity=accountant, db=db) if row["id"] == order.id)["materials"][0]
+
+    assert "unit_cost" not in field_material
+    assert field_material["requested_quantity"] == 8
+    assert accountant_material["unit_cost"] == Decimal("100.00")
+    db.close()

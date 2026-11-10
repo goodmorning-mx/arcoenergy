@@ -1185,3 +1185,13 @@ La revisión por rol encontró que `/inventory/consume` serializaba el costo uni
 | US-14 | Parcial funcional | Los endpoints de consumo nuevo y reintento offline ya no exponen costo unitario a instaladores; sigue pendiente validar la matriz completa con cuentas reales de cada rol. |
 
 La migración `202611100083` agrega esta evidencia a US-14 como una versión nueva y conserva intacta su fuente literal. Producto integrado mediante PR [#116](https://github.com/goodmorning-mx/arcoenergy/pull/116), merge commit `9bdafd83158aed39fce83123a23d114c858fd6fd`. Factory actualizó el contrato de esquema mediante PR [#427](https://github.com/goodmorning-mx/goodmorning-factory/pull/427), merge commit `3d4427574e3ffbd077da795ca8072c1788f551e3`; el run [#42866399583](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42866399583) terminó correctamente. DEV reporta API `ready`, commit `9bdafd83158aed39fce83123a23d114c858fd6fd` y esquema `202611100083`; `/api/health/ready`, `/api/version`, `/`, `/crm/login`, `/app/login`, `/crm/` y `/app/` respondieron HTTP 200. Validación local: 200 pruebas backend y builds de producción CRM/PWA aprobados. No se añadieron secretos ni configuración nueva.
+
+## Iteración 72 — privacidad de costos en órdenes de trabajo (2026-11-10)
+
+La revisión posterior de US-14 encontró que la lista PWA de órdenes serializaba `unit_cost` por cada material. Se agrega el mismo control por permiso a materiales solicitados: instaladores conservan cantidades y disponibilidad requeridas para su trabajo; solo contador/administración con permiso explícito reciben costos. Una regresión compara el payload para instalador y contador.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | El listado de órdenes oculta el costo unitario a instaladores y conserva información operativa. Sigue pendiente revisar el resto de campos y probar usuarios reales de los cinco roles. |
+
+La migración `202611100084` agregará esta nueva versión a US-14 sin modificar la fuente literal. Se ejecutará suite y build y se registrarán los merges/despliegue DEV tras su integración.
