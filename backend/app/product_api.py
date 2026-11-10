@@ -1396,7 +1396,7 @@ def _sale_result(db: Session, sale: Sale):
         **_serialize(sale),
         "quote": {"id": quote.id, "folio": quote.folio, "payment_method": quote.payment_method} if quote else None,
         "customer": {"id": customer.id, "name": customer.name, "phone": customer.phone, "email": customer.email, "city": customer.city} if customer else None,
-        "installation": {**_serialize(installation), "project": _project_result(db.get(Project, installation.project_id), db) if installation and installation.project_id else None, "assigned_installers": [row.installer_email for row in assignments] or ([installation.lead_installer] if installation and installation.lead_installer else []), "confirmed_installers": [row.installer_email for row in assignments if row.confirmed_at]},
+        "installation": {**_serialize_installation(installation), "project": _project_result(db.get(Project, installation.project_id), db) if installation and installation.project_id else None, "assigned_installers": [row.installer_email for row in assignments] or ([installation.lead_installer] if installation and installation.lead_installer else []), "confirmed_installers": [row.installer_email for row in assignments if row.confirmed_at]},
         "receivable": _serialize(receivables[0]) if receivables else None,
         "receivables": [_serialize(row) for row in receivables],
         "installment_count": len(receivables),
