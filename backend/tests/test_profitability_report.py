@@ -3,11 +3,11 @@ from decimal import Decimal
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from app.models import Base, Customer, Installation, InventoryMovement, ProjectExpense, Quote, Sale
-from app.product_api import profitability_report
+from app.models import Base, CashMovement, Customer, Installation, InventoryMovement, ProfitabilityAdjustment, ProjectExpense, Quote, Sale
+from app.product_api import PaymentCorrectionInput, profitability_report, reverse_profitability_adjustment
 
 
 def test_monthly_project_report_uses_sales_consumption_events_and_project_expenses() -> None:
@@ -31,24 +31,33 @@ def test_monthly_project_report_uses_sales_consumption_events_and_project_expens
                 reason="Sobrante recuperado", created_at=datetime(2026, 11, 5, tzinfo=timezone.utc)),
             ProjectExpense(installation_id=installation.id, category="Viáticos", expense_type="variable", description="Combustible", amount=5000, occurred_on=date(2026, 11, 5)),
             ProjectExpense(installation_id=None, category="Nómina", expense_type="fixed", description="Gasto operativo", amount=12000, occurred_on=date(2026, 11, 5)),
+            ProfitabilityAdjustment(installation_id=installation.id, adjustment_type="bonification", description="Bonificación autorizada", amount=2000, occurred_on=date(2026, 11, 6)),
         ])
         db.commit()
 
         report = profitability_report(month="2026-11", db=db)
         project_report = profitability_report(installation_id=installation.id, db=db)
+        adjustment = db.scalar(select(ProfitabilityAdjustment).where(ProfitabilityAdjustment.adjustment_type == "bonification"))
+        reversal = reverse_profitability_adjustment(adjustment.id, PaymentCorrectionInput(reason="Importe capturado incorrectamente"), identity=type("Identity", (), {"email": "contador@arcoenergy.mx"})(), db=db)
+        corrected = profitability_report(installation_id=installation.id, db=db)
+        assert reversal["amount"] == -Decimal("2000.00")
+        assert corrected["totals"]["returns_and_bonifications"] == Decimal("0.00")
+        assert db.query(CashMovement).count() == 0
 
     assert report["complete_financial_statement"] is False
-    assert report["returns_and_bonifications"] == {"recorded": False, "included": False}
+    assert report["returns_and_bonifications"] == {"recorded": True, "included": True, "total": Decimal("2000.00")}
     assert report["totals"]["sales"] == Decimal("100000.00")
     assert report["totals"]["materials_cost"] == Decimal("8000.00")
     assert report["totals"]["expenses"] == Decimal("17000.00")
     assert report["totals"]["expenses_by_type"] == {"fixed": Decimal("12000.00"), "variable": Decimal("5000.00"), "unclassified": Decimal("0")}
     assert report["rows"][0]["expenses_by_type"]["variable"] == Decimal("5000.00")
-    assert report["totals"]["preliminary_result"] == Decimal("75000.00")
+    assert report["totals"]["returns_and_bonifications"] == Decimal("2000.00")
+    assert report["totals"]["adjustments_by_type"] == {"return": Decimal("0"), "bonification": Decimal("2000.00")}
+    assert report["totals"]["preliminary_result"] == Decimal("77000.00")
     assert len(report["rows"]) == 2
     assert project_report["totals"]["expenses"] == Decimal("5000.00")
+    assert project_report["totals"]["preliminary_result"] == Decimal("89000.00")
     assert len(project_report["rows"]) == 1
-
 
 def test_report_validates_month_and_does_not_treat_missing_material_cost_as_zero() -> None:
     engine = create_engine("sqlite://")

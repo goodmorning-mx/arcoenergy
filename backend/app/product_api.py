@@ -29,7 +29,7 @@ from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
 from app.drive_storage import download_private_file, folder_status, save_private_file, save_quote_pdf
-from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, Purchase, PurchaseCorrection, PurchaseLine, PushSubscription, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
+from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, ProjectExpense, ProfitabilityAdjustment, Purchase, PurchaseCorrection, PurchaseLine, PushSubscription, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
 from app.reminders import send_due_followup_pushes
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 from app.web_push import send_push, validate_push_endpoint, vapid_public_key
@@ -585,6 +585,22 @@ class PaymentCorrectionInput(BaseModel):
         normalized = value.strip()
         if len(normalized) < 5:
             raise ValueError("Describe el motivo de la corrección (mínimo 5 caracteres).")
+        return normalized
+
+
+class ProfitabilityAdjustmentInput(BaseModel):
+    installation_id: str | None = None
+    adjustment_type: Literal["return", "bonification"]
+    description: str = Field(min_length=3, max_length=240)
+    amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+    occurred_on: date = Field(default_factory=date.today)
+
+    @field_validator("description")
+    @classmethod
+    def adjustment_description_has_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 3:
+            raise ValueError("Describe la devolución o bonificación.")
         return normalized
 
 
@@ -3162,6 +3178,76 @@ def whatsapp_link(phone: str, message: str):
     return {"url": f"https://wa.me/{digits}?text={urlquote(message)}", "automatic_sending": False}
 
 
+def _profitability_adjustment_result(row: ProfitabilityAdjustment, db: Session) -> dict:
+    installation = db.get(Installation, row.installation_id) if row.installation_id else None
+    customer = db.get(Customer, installation.customer_id) if installation else None
+    reversed_by = db.scalar(select(ProfitabilityAdjustment.id).where(ProfitabilityAdjustment.reversal_of_id == row.id))
+    return {
+        **_serialize(row),
+        "project": customer.name if customer else ("Sin proyecto" if row.installation_id is None else "Proyecto"),
+        "folio": installation.folio if installation else None,
+        "can_reverse": row.reversal_of_id is None and reversed_by is None,
+    }
+
+
+@router.get("/profitability-adjustments", dependencies=[Depends(require_permissions(auth_service, "reports:read"))])
+def list_profitability_adjustments(
+    month: str | None = None,
+    installation_id: str | None = None,
+    db: Session = Depends(get_db),
+):
+    query = select(ProfitabilityAdjustment).order_by(ProfitabilityAdjustment.occurred_on.desc(), ProfitabilityAdjustment.created_at.desc())
+    if month:
+        try:
+            year, month_number = (int(value) for value in month.split("-", maxsplit=1))
+            start = date(year, month_number, 1)
+            end = date(year + (month_number == 12), 1 if month_number == 12 else month_number + 1, 1)
+        except (ValueError, TypeError):
+            raise HTTPException(422, "El periodo debe tener formato AAAA-MM.")
+        query = query.where(ProfitabilityAdjustment.occurred_on >= start, ProfitabilityAdjustment.occurred_on < end)
+    if installation_id:
+        query = query.where(ProfitabilityAdjustment.installation_id == installation_id)
+    return [_profitability_adjustment_result(row, db) for row in db.scalars(query).all()]
+
+
+@router.post("/profitability-adjustments", status_code=201, dependencies=[Depends(require_permissions(auth_service, "accounts:manage"))])
+def create_profitability_adjustment(
+    data: ProfitabilityAdjustmentInput,
+    identity: AuthIdentity = Depends(identity_dependency(auth_service)),
+    db: Session = Depends(get_db),
+):
+    if data.installation_id and db.get(Installation, data.installation_id) is None:
+        raise HTTPException(404, "Proyecto u orden de trabajo no encontrado.")
+    row = ProfitabilityAdjustment(
+        installation_id=data.installation_id, adjustment_type=data.adjustment_type,
+        description=data.description, amount=data.amount, occurred_on=data.occurred_on,
+        created_by=identity.email or "",
+    )
+    db.add(row); db.commit(); db.refresh(row)
+    return _profitability_adjustment_result(row, db)
+
+
+@router.post("/profitability-adjustments/{adjustment_id}/reverse", status_code=201, dependencies=[Depends(require_permissions(auth_service, "accounts:manage"))])
+def reverse_profitability_adjustment(
+    adjustment_id: str,
+    data: PaymentCorrectionInput,
+    identity: AuthIdentity = Depends(identity_dependency(auth_service)),
+    db: Session = Depends(get_db),
+):
+    original = db.get(ProfitabilityAdjustment, adjustment_id)
+    if original is None:
+        raise HTTPException(404, "Devolución o bonificación no encontrada.")
+    if original.reversal_of_id is not None or db.scalar(select(ProfitabilityAdjustment.id).where(ProfitabilityAdjustment.reversal_of_id == original.id)):
+        raise HTTPException(409, "El registro ya fue corregido.")
+    reversal = ProfitabilityAdjustment(
+        installation_id=original.installation_id, adjustment_type=original.adjustment_type,
+        description=f"Corrección: {data.reason}", amount=-Decimal(original.amount),
+        occurred_on=date.today(), reversal_of_id=original.id, created_by=identity.email or "",
+    )
+    db.add(reversal); db.commit(); db.refresh(reversal)
+    return _profitability_adjustment_result(reversal, db)
+
+
 @router.get("/reports/profitability", dependencies=[Depends(require_permissions(auth_service, "reports:read"))])
 def profitability_report(
     month: str | None = None,
@@ -3211,6 +3297,8 @@ def profitability_report(
                 "expenses": Decimal("0"),
                 "expenses_by_category": {},
                 "expenses_by_type": {"fixed": Decimal("0"), "variable": Decimal("0"), "unclassified": Decimal("0")},
+                "returns_and_bonifications": Decimal("0"),
+                "adjustments_by_type": {"return": Decimal("0"), "bonification": Decimal("0")},
                 "missing_cost_movements": 0,
                 "material_events": 0,
             }
@@ -3272,15 +3360,29 @@ def profitability_report(
         expense_type = expense.expense_type if expense.expense_type in {"fixed", "variable"} else "unclassified"
         row["expenses_by_type"][expense_type] += amount
 
+    adjustments_query = select(ProfitabilityAdjustment)
+    if installation_id:
+        adjustments_query = adjustments_query.where(ProfitabilityAdjustment.installation_id == installation_id)
+    if period_start is not None and period_end is not None:
+        adjustments_query = adjustments_query.where(ProfitabilityAdjustment.occurred_on >= period_start, ProfitabilityAdjustment.occurred_on < period_end)
+    adjustment_rows = db.scalars(adjustments_query).all()
+    for adjustment in adjustment_rows:
+        row = project_row(adjustment.installation_id)
+        amount = Decimal(adjustment.amount)
+        row["returns_and_bonifications"] += amount
+        row["adjustments_by_type"][adjustment.adjustment_type] += amount
+
     rows = []
     for row in grouped.values():
         known_material_cost = row["materials_cost"] if row["missing_cost_movements"] == 0 else None
         rows.append({
             **row,
             "materials_cost": known_material_cost,
-            "preliminary_result": row["sales"] - known_material_cost - row["expenses"] if known_material_cost is not None else None,
+            "preliminary_result": row["sales"] - known_material_cost - row["expenses"] + row["returns_and_bonifications"] if known_material_cost is not None else None,
             "expenses_by_category": row["expenses_by_category"],
             "expenses_by_type": row["expenses_by_type"],
+            "returns_and_bonifications": row["returns_and_bonifications"],
+            "adjustments_by_type": row["adjustments_by_type"],
         })
     rows.sort(key=lambda row: (row["project"].casefold(), row["folio"] or ""))
     missing_costs = sum(row["missing_cost_movements"] for row in rows)
@@ -3289,6 +3391,11 @@ def profitability_report(
     expenses_by_type = {
         expense_type: sum((row["expenses_by_type"][expense_type] for row in rows), Decimal("0"))
         for expense_type in ("fixed", "variable", "unclassified")
+    }
+    adjustments_total = sum((row["returns_and_bonifications"] for row in rows), Decimal("0"))
+    adjustments_by_type = {
+        adjustment_type: sum((row["adjustments_by_type"][adjustment_type] for row in rows), Decimal("0"))
+        for adjustment_type in ("return", "bonification")
     }
     material_cost_total = sum((row["materials_cost"] or Decimal("0") for row in rows), Decimal("0")) if missing_costs == 0 else None
     return {
@@ -3300,10 +3407,12 @@ def profitability_report(
             "materials_cost": material_cost_total,
             "expenses": expenses_total,
             "expenses_by_type": expenses_by_type,
-            "preliminary_result": sales_total - material_cost_total - expenses_total if material_cost_total is not None else None,
+            "returns_and_bonifications": adjustments_total,
+            "adjustments_by_type": adjustments_by_type,
+            "preliminary_result": sales_total - material_cost_total - expenses_total + adjustments_total if material_cost_total is not None else None,
             "missing_cost_movements": missing_costs,
         },
-        "returns_and_bonifications": {"recorded": False, "included": False},
+        "returns_and_bonifications": {"recorded": bool(adjustment_rows), "included": True, "total": adjustments_total},
         "complete_financial_statement": False,
     }
 
