@@ -1225,3 +1225,13 @@ La revisión de US-14 encontró que las respuestas CRM de cotizaciones y compras
 | US-14 | Parcial funcional | Se ocultan IDs privados de Drive en respuestas de cotización y compra, conservando sus acciones autorizadas de descarga. Continúa pendiente auditar todos los campos y validar con cuentas reales de los cinco roles. |
 
 La migración `202611100087` agrega una versión append-only de US-14 y conserva el relato literal. Producto integrado mediante PR [#124](https://github.com/goodmorning-mx/arcoenergy/pull/124), merge commit `db66567e72df142ac4145922654bda0b0e233a78`. Factory actualizó la revisión esperada mediante PR [#432](https://github.com/goodmorning-mx/goodmorning-factory/pull/432), merge commit `0df9182b5ca3f044e2d85105e0413c3de468ce6c`; el run [#42873459988](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42873459988) completó despliegue, verificación de revisión viva y reconciliación de respaldos externos. DEV reporta API `ready`, commit `db66567e72df142ac4145922654bda0b0e233a78` y esquema `202611100087`; los cinco recursos Coolify están saludables con esa imagen. `/`, `/login`, `/crm/login`, `/app/login`, `/crm/` y `/app/` respondieron HTTP 200. El bundle CRM activo contiene `invoice_available` y no contiene `invoice_drive_file_id` ni `drive_file_id`. Validación local: 18 pruebas dirigidas, suite backend completa (206 pruebas) y build CRM aprobados; Factory: 34 pruebas de contrato, CodeQL y validación de provisioning aprobados. GitHub no inició los jobs CI de producto por el bloqueo de facturación de la cuenta. No hubo cambios de secretos ni configuración.
+
+## Iteración 76 — privacidad de archivos anidados en ventas (2026-11-10)
+
+La revisión del resultado de ventas encontró que la orden anidada se serializaba directamente y podía incluir `material_request_drive_file_id`, aunque el listado de órdenes ya ocultaba ese identificador. El resultado de ventas ahora reutiliza el serializador protegido de órdenes y expone únicamente `material_request_available`. La descarga continúa en su endpoint autenticado. Una prueba regresiva invoca el resultado completo de ventas con un ID señuelo y confirma que no aparece en la respuesta serializada.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | También se protegen los IDs privados de Drive en órdenes anidadas dentro de ventas. Siguen pendientes la auditoría completa de cada campo y la validación de permisos con cuentas reales de los cinco roles. |
+
+La migración `202611100088` añade la revisión append-only de US-14 y conserva la fuente literal. Validación local: 3 pruebas dirigidas aprobadas; suite backend completa pendiente de ejecución. Integración y despliegue DEV pendientes.
