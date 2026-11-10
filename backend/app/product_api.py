@@ -149,6 +149,14 @@ def _serialize_work_order_material(row: WorkOrderMaterial, identity: AuthIdentit
     return result
 
 
+def _serialize_installation(row: Installation) -> dict:
+    """Expose document availability without leaking the private Drive object ID."""
+    result = _serialize(row)
+    result.pop("material_request_drive_file_id", None)
+    result["material_request_available"] = bool(row.material_request_drive_file_id)
+    return result
+
+
 def _serialize_followup(row: FollowUp) -> dict:
     result = _serialize(row)
     result.pop("push_claimed_at", None)
@@ -1340,7 +1348,7 @@ def create_installation(data: InstallationInput, identity: AuthIdentity = Depend
     _record_installation_assignments(db, row.id, installers, identity.email or "")
     db.commit(); db.refresh(row)
     _queue_installation_push(db, background_tasks, installers, row.folio or row.id)
-    return {**_serialize(row), "assigned_installers": installers, "confirmed_installers": []}
+    return {**_serialize_installation(row), "assigned_installers": installers, "confirmed_installers": []}
 
 
 def _sale_result(db: Session, sale: Sale):
@@ -1640,7 +1648,7 @@ def list_installations(identity: AuthIdentity = Depends(require_permissions(auth
                 "shortage_quantity": shortage,
             })
         project = db.get(Project, row.project_id) if row.project_id else None
-        result.append({**_serialize(row),
+        result.append({**_serialize_installation(row),
             "assigned_installers": [assignment.installer_email for assignment in assignments] or ([row.lead_installer] if row.lead_installer else []),
             "confirmed_installers": [assignment.installer_email for assignment in assignments if assignment.confirmed_at],
             # Installation readers need field contact details, not the full CRM

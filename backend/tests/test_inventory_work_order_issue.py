@@ -109,6 +109,7 @@ def test_issue_rejects_duplicate_material_lines():
 def test_installation_materials_hide_cost_from_installer_but_keep_it_for_accountant():
     db, order, _other, _item, _material, _identity = setup_orders()
     order.lead_installer = "field@example.test"
+    order.material_request_drive_file_id = "private-drive-object-id"
     installer = AuthIdentity("field-1", "arcoenergy", frozenset({"instalador"}),
         frozenset({"installations:read", "inventory:read"}), "field@example.test", "Campo")
     accountant = AuthIdentity("accountant-1", "arcoenergy", frozenset({"contador"}),
@@ -121,4 +122,10 @@ def test_installation_materials_hide_cost_from_installer_but_keep_it_for_account
     assert "unit_cost" not in field_material
     assert field_material["requested_quantity"] == 8
     assert accountant_material["unit_cost"] == Decimal("100.00")
+    field_order = next(row for row in list_installations(identity=installer, db=db) if row["id"] == order.id)
+    accountant_order = next(row for row in list_installations(identity=accountant, db=db) if row["id"] == order.id)
+    assert "material_request_drive_file_id" not in field_order
+    assert "material_request_drive_file_id" not in accountant_order
+    assert field_order["material_request_available"] is True
+    assert accountant_order["material_request_available"] is True
     db.close()
