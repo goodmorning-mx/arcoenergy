@@ -2,7 +2,7 @@
 
 ## Fuentes y alcance
 
-La solicitud se revisó en el Word “COMENTARIOS Y MEJORAS PARA EL SISTEMA DE ARCO ENERGY” y en su versión PDF “MEJORAS AL SISTEMA ARCO ENERGY”. Ambos contienen la misma estructura de diez apartados; el PDF incluye la captura del menú y dashboard de ARCO ENERGY Inventario en Base44. La comparación vigente describe CRM/PWA/API de ArcoEnergy en DEV, aplicación `fc00dbc7aa25e1fde46eec1d879c91373d385bb0`, esquema `202611100081`. La UI de origen de César no se pudo consultar; la imagen del PDF sirve como referencia visual parcial. No se agregan reglas contables que el contador todavía deba definir.
+La solicitud se revisó en el Word “COMENTARIOS Y MEJORAS PARA EL SISTEMA DE ARCO ENERGY” y en su versión PDF “MEJORAS AL SISTEMA ARCO ENERGY”. Ambos contienen la misma estructura de diez apartados; el PDF incluye la captura del menú y dashboard de ARCO ENERGY Inventario en Base44. La comparación vigente describe CRM/PWA/API de ArcoEnergy en DEV, aplicación `4de38c56278b194373f9775ef866c20e8073e887`, esquema `202611100082`. La UI de origen de César no se pudo consultar; la imagen del PDF sirve como referencia visual parcial. No se agregan reglas contables que el contador todavía deba definir.
 
 ## Matriz de cobertura
 
