@@ -1205,3 +1205,13 @@ El CRM ofrecía las opciones de 3, 7, 15 y 30 días, pero calculaba la fecha con
 | US-4 | Parcial funcional | Presets y fecha mínima usan la fecha local; faltan validar el flujo con vendedores y cuentas/dispositivos reales. |
 
 La migración `202611100085` registra una versión append-only de US-4 sin modificar su fuente literal. Las pruebas cubren una programación cerca de medianoche en Cancún y un cálculo que atraviesa el cambio de horario estacional en Nueva York. Producto integrado mediante PR [#120](https://github.com/goodmorning-mx/arcoenergy/pull/120), merge commit `54467db82af5099e84a2439a00198e417bb4ca4a`. Factory fijó el esquema esperado mediante PR [#429](https://github.com/goodmorning-mx/goodmorning-factory/pull/429), merge commit `a1b62da3185d381fb8b2bf44b804d16f99a101dd`; el run [#42869556391](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42869556391) finalizó correctamente, desplegó los recursos, verificó revisiones del esquema vivo y reconcilió respaldos externos. DEV reporta API `ready`, commit `54467db82af5099e84a2439a00198e417bb4ca4a` y esquema `202611100085`; `/health`, `/health/ready`, `/version`, `/`, `/login`, `/crm/login`, `/app/login`, `/crm/` y `/app/` respondieron HTTP 200. Validación local previa: 203 pruebas backend, 2 pruebas de fecha CRM y build de producción CRM aprobados. No se pudo inspeccionar el navegador interactivo porque no había una sesión de navegador conectada. Las cuentas y dispositivos reales del equipo siguen pendientes para validar las historias con sus usuarios.
+
+## Iteración 74 — privacidad de documentos de instalación (2026-11-10)
+
+La revisión de US-14 detectó que la lista de órdenes serializaba el ID privado del archivo de Drive de la solicitud de materiales. La PWA no necesita ese ID para trabajar, y el CRM obtiene los bytes por una ruta autenticada y autorizada. La respuesta ahora omite el ID y entrega `material_request_available`; el CRM usa esa señal para mostrar la acción de descarga, preservando el acceso al documento sin publicar su identificador interno.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | El API oculta el ID privado de Drive en los resultados de órdenes y mantiene una señal de disponibilidad para el CRM. Siguen pendientes la auditoría integral de todos los campos y las pruebas con cuentas reales de los cinco roles. |
+
+La migración `202611100086` agrega una versión append-only de US-14 y conserva intacto el relato original. Validación local: 9 pruebas backend de privacidad de órdenes/contacto, suite backend completa (204 pruebas) y build de producción del CRM aprobados. Integración y despliegue DEV pendientes.
