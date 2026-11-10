@@ -247,6 +247,21 @@ class ProjectExpense(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
+class ProfitabilityAdjustment(Base):
+    """Append-only project return/bonification entries for preliminary reporting."""
+    __tablename__ = "ae_profitability_adjustments"
+    __table_args__ = (UniqueConstraint("reversal_of_id", name="uq_ae_profitability_adjustment_reversal"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    installation_id: Mapped[str | None] = mapped_column(ForeignKey("ae_installations.id"), nullable=True, index=True)
+    adjustment_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    description: Mapped[str] = mapped_column(String(240), nullable=False)
+    amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    occurred_on: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
+    reversal_of_id: Mapped[str | None] = mapped_column(ForeignKey("ae_profitability_adjustments.id"), nullable=True, index=True)
+    created_by: Mapped[str] = mapped_column(String(180), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
 class FinancialAccount(Base):
     __tablename__ = "ae_financial_accounts"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
