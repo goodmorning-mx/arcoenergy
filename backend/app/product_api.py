@@ -1509,6 +1509,8 @@ def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_depen
     if quote is None: raise HTTPException(404, "Cotización no encontrada.")
     if quote.status != "accepted": raise HTTPException(422, "Registra primero que el cliente aceptó la cotización.")
     if not quote.pricing_approved: raise HTTPException(422, "La propuesta requiere aprobación comercial antes de registrarse como venta.")
+    if quote.payment_method == "Plan 24":
+        raise HTTPException(422, "Plan 24 (tanda de paneles) requiere reglas de calendario y cobranza aprobadas; conserva la propuesta y define el plan con contabilidad antes de registrarla como venta.")
     if db.scalar(select(Sale.id).where(Sale.quote_id == quote.id)):
         raise HTTPException(409, "Esta cotización ya fue registrada como venta.")
     customer = db.get(Customer, quote.customer_id)

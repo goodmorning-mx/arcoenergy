@@ -13,6 +13,30 @@ from app.roles import ROLE_PERMISSIONS
 from app import product_api
 
 
+def test_plan24_quote_cannot_be_recorded_as_an_ordinary_credit_sale(monkeypatch) -> None:
+    monkeypatch.setattr(product_api.auth_service, "engine", installer_directory())
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    identity = AuthIdentity("admin-1", "arcoenergy", frozenset({"administrador"}), ROLE_PERMISSIONS["administrador"], "admin@example.test", "Admin")
+    with Session(engine) as db:
+        customer = Customer(name="Cliente Tanda")
+        quote = Quote(folio="AE-Q-P24", customer_id="", panel_count=8, panel_brand="Solar", panel_watts=600,
+            structure_name="Fija", inverter="Inversor 5 kW", payment_method="Plan 24", panel_subtotal=80000,
+            structure_cost=10000, inverter_cost=15000, total=105000, status="accepted", pricing_approved=True)
+        db.add(customer); db.flush(); quote.customer_id = customer.id; db.add(quote); db.commit()
+
+        with pytest.raises(HTTPException) as error:
+            create_sale(SaleInput(quote_id=quote.id, sale_type="credit", due_date=date.today(),
+                lead_installer="field@example.test", materials=[SaleMaterialInput(item_id="not-used", quantity=8)]), identity, db)
+
+        assert db.scalar(select(Sale.id)) is None
+        assert db.scalar(select(Installation.id)) is None
+        assert db.scalar(select(Receivable.id)) is None
+
+    assert error.value.status_code == 422
+    assert "Plan 24" in error.value.detail
+
+
 def installer_directory():
     engine = create_engine("sqlite://")
     users.metadata.create_all(engine)
