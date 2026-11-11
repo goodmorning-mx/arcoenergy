@@ -1581,6 +1581,7 @@ Se detectó que una propuesta con forma de pago Plan 24 podía convertirse en ve
 | Tarjeta | Estado revisado | Evidencia / alcance pendiente |
 | --- | --- | --- |
 | US-15 | Parcial funcional con bloqueo de Plan 24 | Prueba backend confirma que la propuesta permanece intacta y que no se crean venta, orden o cartera. Contabilidad debe definir anticipo, distribución de pagos, incumplimiento y efectos asociados antes de habilitar la tanda. |
+| US-36 | Parcial funcional | Entradas manuales elegibles ahora admiten reversa append-only con motivo y enlace. Compras, existencia inicial, entradas con actividad posterior y saldos insuficientes exigen conciliación; falta validar más ciclos de inventario con Contabilidad. |
 
 La migración `202611110120` agrega la revisión append-only de US-15 y conserva su relato original. `test_sales_work_orders.py` cubre el bloqueo de la ruta de creación; la interfaz CRM distingue la propuesta pendiente de una venta registrable.
 
@@ -1594,3 +1595,14 @@ La PWA ahora distingue rechazos de negocio de fallas temporales del protocolo: H
 | US-9 | Funcional básico con recuperación de fallas temporales | TypeScript distingue estados transitorios del conflicto permanente y mantiene idempotencia. La migración de historia conserva el texto original. Falta validar sesión vencida, limitación de solicitudes y retorno de conexión en teléfonos reales. |
 
 La migración `202611110121` agrega una revisión append-only de US-9. El build de producción PWA y las pruebas backend de migración validan el cambio.
+
+
+## Iteración 110 — corrección de entradas manuales de inventario (2026-11-11)
+
+Desde el kardex, Administración puede corregir una entrada manual errónea indicando el motivo. El sistema conserva la entrada original y registra una reversa enlazada, actualiza existencias y la muestra como salida compensatoria. Bloquea correcciones repetidas, existencias iniciales, compras, artículos con movimientos posteriores y casos donde la existencia actual no cubre la entrada, para evitar ocultar historial o desajustar el costeo.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-36 | Parcial funcional con reversa de entrada manual | API, kardex y CRM admiten correcciones append-only. Las compras siguen usando su corrección de origen. Reversas con actividad posterior/costo promedio requieren conciliación contable; falta validar casos reales con el contador. |
+
+La migración `202611110122` guarda una nueva versión de la tarjeta US-36 sin sobrescribir sus relatos previos. Pruebas backend cubren el movimiento compensatorio, las entradas no elegibles y los bloqueos de conciliación.
