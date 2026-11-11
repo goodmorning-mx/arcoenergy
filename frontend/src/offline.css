@@ -1,3 +1,5 @@
 .offline-banner{display:grid;gap:4px;margin:0 0 14px;padding:12px 14px;border:1px solid #e7c77f;border-radius:10px;background:#fff8e8;color:#684b18;font-size:12px}
 .offline-banner span{line-height:1.45}
 .offline-banner small{font-weight:700}
+.pending-action-list{display:grid;gap:10px;margin:0 0 14px}.pending-action-list>h2{font-size:16px;margin:0}.pending-action-list>p{font-size:12px;color:#59645e;margin:0}.pending-action-card{display:grid;gap:10px;padding:14px;border:1px solid #e5b7a7;border-radius:12px;background:#fffaf7}.pending-action-card>div{display:grid;gap:4px}.pending-action-card small,.pending-action-card span{font-size:12px;color:#59645e}.pending-action-edit{display:flex;align-items:end;gap:8px;flex-wrap:wrap}.pending-action-edit label{display:grid;gap:5px;font-size:12px;font-weight:700}.pending-action-edit input{width:110px;min-height:40px;border:1px solid #cbd3ce;border-radius:8px;padding:8px;font:inherit}.pending-action-card>.button{justify-self:start}
+.pending-action-warning{font-size:12px;color:#8a451b}

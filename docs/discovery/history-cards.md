@@ -104,7 +104,8 @@ Como instalador, quiero registrar desde la app el material gastado y al final de
 
 - Captura manual sencilla de materiales y cantidades.
 - Relación con instalación/proyecto.
-- **Pendiente:** confirmar si el descuento se hace al entregar, consumir o aprobar el reporte.
+- La cola offline conserva consumos y devoluciones con identificador idempotente; tras un rechazo mantiene el detalle entre recargas, pausa operaciones posteriores y permite corregir cantidad o retirar individualmente la acción tras revisión.
+- **Pendiente:** confirmar si el descuento se hace al entregar, consumir o aprobar el reporte y validar sincronización con instaladores en teléfonos reales.
 
 ### US-10 — Registrar viáticos y gastos de instalación
 
@@ -1549,3 +1550,14 @@ Se verificaron US-12 y US-38 contra CRM/API y las pruebas de reporte. El costo d
 | US-38 | Parcial funcional | El reporte preliminar cubre mes/proyecto y desglose fijo/variable, con flujo, cartera, existencias y gastos disponibles en CRM. Fechas de corte, reclasificaciones y tratamiento fiscal requieren aprobación de contabilidad. |
 
 La migración `202611110117` agrega versiones append-only para ambas tarjetas, preservando los textos fuente. `test_profitability_report.py`, `test_inventory_returns.py`, `test_accounts_cashflow.py` y `test_operations_report.py` ejercitan los componentes operativos; el cambio incluye una prueba de integridad de historia.
+
+
+## Iteración 106 — resolución de conflictos offline en campo (2026-11-11)
+
+La PWA ahora guarda en IndexedDB el estado y el motivo de los rechazos de acciones pendientes. La primera acción rechazada mantiene el orden FIFO y pausa la sincronización posterior; el instalador puede corregir la cantidad de un consumo o devolución para reintentar con el mismo `operation_id`, que el servidor valida de nuevo contra el inventario actual. Las operaciones se pueden retirar individualmente con confirmación. Si el servidor reporta que el identificador ya fue usado con otro payload, la interfaz no permite editarlo y advierte que se debe revisar el historial para evitar duplicar o perder un movimiento.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-9 | Funcional básico con resolución local de conflictos | Cola IndexedDB preservada entre recargas, detalle HTTP 4xx guardado, bloqueo FIFO y edición de cantidad para consumo/devolución. Falta validar sincronización simultánea y usabilidad con instaladores/dispositivos reales. |
+
+La migración `202611110118` agrega una nueva versión append-only de US-9 y conserva la fuente literal original. El build PWA y la prueba de integridad de migración se ejecutan antes de integrar.
