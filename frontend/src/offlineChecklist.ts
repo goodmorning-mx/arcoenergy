@@ -30,6 +30,8 @@ export type FieldActionQueueItem = {
   receipt?: { name: string; type: string; blob: Blob };
   summary: string;
   queued_at: string;
+  last_error?: string;
+  last_error_status?: number;
 };
 
 const DATABASE = 'arcoenergy-field-cache';
@@ -155,6 +157,22 @@ export async function readFieldActionQueue(owner: string): Promise<FieldActionQu
 
 export async function removeFieldAction(operationId: string): Promise<void> {
   await withStore(ACTION_QUEUE, 'readwrite', store => store.delete(operationId));
+}
+
+export async function updateFieldAction(operationId: string, patch: Partial<FieldActionQueueItem>): Promise<void> {
+  const database = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(ACTION_QUEUE, 'readwrite');
+    const store = transaction.objectStore(ACTION_QUEUE);
+    const request = store.get(operationId);
+    request.onsuccess = () => {
+      if (request.result) store.put({ ...request.result, ...patch });
+    };
+    request.onerror = () => { database.close(); reject(request.error || new Error('No se pudo leer la operación pendiente.')); };
+    transaction.oncomplete = () => { database.close(); resolve(); };
+    transaction.onerror = () => { database.close(); reject(transaction.error || new Error('No se pudo actualizar la operación pendiente.')); };
+    transaction.onabort = () => { database.close(); reject(transaction.error || new Error('Se canceló la actualización local.')); };
+  });
 }
 
 export function checklistQueueKey(owner: string, installationId: string, task: string): string {
