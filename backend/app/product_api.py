@@ -497,6 +497,18 @@ class StockReceiptInput(BaseModel):
     reason: str = "entrada de almacén"
 
 
+class InventoryMovementCorrectionInput(BaseModel):
+    reason: str = Field(min_length=5, max_length=120)
+
+    @field_validator("reason")
+    @classmethod
+    def reason_must_contain_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 5:
+            raise ValueError("Describe el motivo de la corrección (mínimo 5 caracteres).")
+        return normalized
+
+
 class InventoryItemInput(BaseModel):
     name: str = Field(min_length=2, max_length=180)
     description: str = Field(default="", max_length=1000)
@@ -2136,6 +2148,45 @@ def receive_inventory(data: StockReceiptInput, identity: AuthIdentity = Depends(
     return {"movement": _serialize(movement), "item": _serialize_inventory_item(item, identity)}
 
 
+@router.post("/inventory/movements/{movement_id}/reverse", status_code=201)
+def reverse_manual_inventory_receipt(movement_id: str, data: InventoryMovementCorrectionInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:manage")), db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
+    source = db.scalar(select(InventoryMovement).where(InventoryMovement.id == movement_id).with_for_update())
+    if source is None:
+        raise HTTPException(404, "No se encontró el movimiento de almacén.")
+    if source.movement_type == "receipt_reversal":
+        raise HTTPException(409, "Una reversa no se puede volver a corregir.")
+    if source.movement_type != "in" or source.installation_id or source.purchase_line_id or source.reason.strip().lower() == "existencia inicial":
+        raise HTTPException(409, "Solo se pueden revertir entradas manuales; compras, órdenes y existencias iniciales se corrigen desde su origen.")
+    existing = db.scalar(select(InventoryMovement).where(
+        InventoryMovement.related_movement_id == source.id,
+        InventoryMovement.movement_type == "receipt_reversal",
+    ))
+    if existing is not None:
+        raise HTTPException(409, "Esta entrada ya fue corregida; consulta la reversa enlazada en el kardex.")
+    later_movement = db.scalar(select(InventoryMovement.id).where(
+        InventoryMovement.item_id == source.item_id,
+        InventoryMovement.created_at > source.created_at,
+        InventoryMovement.reason != "existencia inicial",
+    ).limit(1))
+    if later_movement is not None:
+        raise HTTPException(409, "El artículo tiene movimientos posteriores; requiere conciliación para conservar el costeo del almacén.")
+    item = db.scalar(select(InventoryItem).where(InventoryItem.id == source.item_id).with_for_update())
+    if item is None:
+        raise HTTPException(409, "El artículo de la entrada ya no existe en el catálogo.")
+    if Decimal(str(item.quantity)) < Decimal(str(source.quantity)):
+        raise HTTPException(409, "La existencia actual es menor que la entrada; requiere conciliación antes de corregirla.")
+    item.quantity = Decimal(str(item.quantity)) - Decimal(str(source.quantity))
+    reversal = InventoryMovement(
+        item_id=source.item_id, related_movement_id=source.id,
+        quantity=source.quantity, movement_type="receipt_reversal", unit_cost=source.unit_cost,
+        reason=data.reason, created_by=identity.email or "",
+    )
+    db.add(reversal)
+    _queue_low_stock_alert(db, background_tasks, item)
+    db.commit(); db.refresh(reversal)
+    return {"movement": _serialize_inventory_movement(reversal, identity), "item": _serialize_inventory_item(item, identity)}
+
+
 @router.post("/inventory/returns", status_code=201)
 def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depends(require_any_permission(auth_service, "inventory:write", "inventory:issue")), db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
     source = db.scalar(select(InventoryMovement).where(InventoryMovement.id == data.out_movement_id).with_for_update())
@@ -2251,6 +2302,17 @@ def list_inventory_movements(
         return_rows.related_movement_id == InventoryMovement.id,
         return_rows.movement_type.in_(["return", "damage"]),
     ).correlate(InventoryMovement).scalar_subquery()
+    reversal_rows = aliased(InventoryMovement)
+    has_reversal = select(reversal_rows.id).where(
+        reversal_rows.related_movement_id == InventoryMovement.id,
+        reversal_rows.movement_type == "receipt_reversal",
+    ).correlate(InventoryMovement).exists()
+    later_rows = aliased(InventoryMovement)
+    has_later_movement = select(later_rows.id).where(
+        later_rows.item_id == InventoryMovement.item_id,
+        later_rows.created_at > InventoryMovement.created_at,
+        later_rows.reason != "existencia inicial",
+    ).correlate(InventoryMovement).exists()
     query = select(InventoryMovement, InventoryItem.name, InventoryItem.unit, returned_total.label("returned_quantity")).join(
         InventoryItem, InventoryItem.id == InventoryMovement.item_id
     )
@@ -2273,7 +2335,8 @@ def list_inventory_movements(
     result = []
     for movement, item_name, unit, returned_quantity in rows:
         line = _serialize(movement)
-        line.update({"item_name": item_name, "unit": unit, "signed_quantity": -float(movement.quantity) if movement.movement_type in {"out", "waste"} else (0.0 if movement.movement_type in {"consumption", "consumption_return", "damage"} else float(movement.quantity))})
+        line.update({"item_name": item_name, "unit": unit, "signed_quantity": -float(movement.quantity) if movement.movement_type in {"out", "waste", "purchase_reversal", "receipt_reversal"} else (0.0 if movement.movement_type in {"consumption", "consumption_return", "damage"} else float(movement.quantity))})
+        line["can_reverse"] = bool(movement.movement_type == "in" and not movement.installation_id and not movement.purchase_line_id and movement.reason.strip().lower() != "existencia inicial" and not db.scalar(select(has_reversal).where(InventoryMovement.id == movement.id)) and not db.scalar(select(has_later_movement).where(InventoryMovement.id == movement.id)))
         if movement.movement_type == "out":
             line["returnable_quantity"] = max(0.0, float(movement.quantity) - float(returned_quantity or 0))
         if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
@@ -4117,7 +4180,7 @@ def dashboard(identity: AuthIdentity = Depends(require_permissions(auth_service,
                 continue
             if movement_type in {"in", "purchase", "return"}:
                 daily[movement_day]["entries"] += count
-            elif movement_type in {"out", "damage", "purchase_reversal"}:
+            elif movement_type in {"out", "damage", "purchase_reversal", "receipt_reversal"}:
                 daily[movement_day]["exits"] += count
         result["inventory_activity_7d"] = [
             {"date": day.isoformat(), **daily[day]} for day in daily
