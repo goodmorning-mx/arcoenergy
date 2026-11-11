@@ -23,7 +23,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/github-script@v7
-        continue-on-error: true
         env:
           PORTAL_OIDC_AUDIENCE: software.goodmorning.mx
         with:
@@ -147,7 +146,7 @@ jobs:
               }
             }
             if (delivered === 0) {
-              throw new Error('No Software portal recorded this product event.');
+              core.warning('No Software portal recorded this product event; product checks continue independently.');
             }
 
             if (event === 'push' && context.ref === 'refs/heads/dev') {
@@ -214,7 +213,7 @@ jobs:
                 }
               }
               if (verificationDelivered === 0) {
-                throw new Error('No Software portal recorded runtime verification.');
+                core.warning('Software portal did not record runtime verification.');
               }
               if (!verified) {
                 throw new Error(`Runtime did not confirm source SHA ${sourceSha} for ${environment}.`);
