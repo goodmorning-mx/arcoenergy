@@ -105,6 +105,7 @@ Como instalador, quiero registrar desde la app el material gastado y al final de
 - Captura manual sencilla de materiales y cantidades.
 - Relación con instalación/proyecto.
 - La cola offline conserva consumos y devoluciones con identificador idempotente; tras un rechazo mantiene el detalle entre recargas, pausa operaciones posteriores y permite corregir cantidad o retirar individualmente la acción tras revisión.
+- Respuestas HTTP temporales por sesión vencida, timeout, disponibilidad temprana o límite de solicitudes conservan la acción sin fijarla como conflicto permanente y permiten reintentar.
 - **Pendiente:** confirmar si el descuento se hace al entregar, consumir o aprobar el reporte y validar sincronización con instaladores en teléfonos reales.
 
 ### US-10 — Registrar viáticos y gastos de instalación
@@ -1582,3 +1583,14 @@ Se detectó que una propuesta con forma de pago Plan 24 podía convertirse en ve
 | US-15 | Parcial funcional con bloqueo de Plan 24 | Prueba backend confirma que la propuesta permanece intacta y que no se crean venta, orden o cartera. Contabilidad debe definir anticipo, distribución de pagos, incumplimiento y efectos asociados antes de habilitar la tanda. |
 
 La migración `202611110120` agrega la revisión append-only de US-15 y conserva su relato original. `test_sales_work_orders.py` cubre el bloqueo de la ruta de creación; la interfaz CRM distingue la propuesta pendiente de una venta registrable.
+
+
+## Iteración 109 — reintentos de sincronización temporal (2026-11-11)
+
+La PWA ahora distingue rechazos de negocio de fallas temporales del protocolo: HTTP 401, 408, 425, 429 y 5xx conservan la acción y no la marcan como conflicto que bloquee la cola tras recargar. Para 401 indica renovar la sesión; para 429 indica esperar; el control de reintento manual vuelve a enviar el mismo `operation_id`. Respuestas permanentes de permiso o validación siguen mostrando el detalle y pausando la cola FIFO para revisión.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-9 | Funcional básico con recuperación de fallas temporales | TypeScript distingue estados transitorios del conflicto permanente y mantiene idempotencia. La migración de historia conserva el texto original. Falta validar sesión vencida, limitación de solicitudes y retorno de conexión en teléfonos reales. |
+
+La migración `202611110121` agrega una revisión append-only de US-9. El build de producción PWA y las pruebas backend de migración validan el cambio.
