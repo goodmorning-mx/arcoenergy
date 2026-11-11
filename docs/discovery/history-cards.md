@@ -1357,3 +1357,16 @@ Se volvió a recorrer DEV luego de integrar la matriz técnica: sitio, CRM y PWA
 | US-40 | Parcial funcional | PWA y login reales activos, sin marcadores demo, y API privada; faltan usuarios asignados, login y pruebas push con los teléfonos del equipo. |
 
 La migración `202611110099` añade versiones append-only para ambas tarjetas y conserva sus relatos originales. No se crearon cuentas reales ni se cambiaron credenciales: la lista de personas/correos y el acceso inicial de administración deben configurarse por ArcoEnergy.
+
+## Iteración 88 — auditoría de cuentas y configuración de Drive (2026-11-11)
+
+La inspección de solo lectura al API y su base de datos DEV no mostró valores de cuenta ni credenciales: solo contó roles activos y verificó si las variables están configuradas. Hay una cuenta activa con rol administrador y ninguna activa con roles contador, marketing, instalador o cliente. En el contenedor API DEV, `GOOGLE_DRIVE_FOLDER_ID` y `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` están vacíos, por lo que los archivos no pueden archivarse en Drive desde este entorno.
+
+| Tarjeta | Estado revisado | Cambio / alcance pendiente |
+| --- | --- | --- |
+| US-13 | Parcial funcional | Los flujos Drive existen en código, pero DEV no tiene carpeta ni credenciales autorizadas; falta definir permisos, retención y sincronización general. |
+| US-14 | Parcial funcional | La matriz de permisos se probó técnicamente; aún no hay cuentas activas para cuatro roles con las cuales validar su alcance real. |
+| US-39 | Parcial funcional | Hay una cuenta administradora activa y login real; faltan las cuentas autorizadas del personal y recorrer el sistema con ellas. |
+| US-40 | Parcial funcional | La PWA funciona y exige autenticación, pero faltan cuentas de campo/cliente y pruebas en sus dispositivos. |
+
+La migración `202611110100` agrega versiones append-only y preserva los relatos originales. No incluye nombres, correos, contraseñas ni secretos. Para completar estos flujos se necesita que ArcoEnergy autorice y configure la carpeta de Drive y entregue las identidades autorizadas para los cuatro roles restantes.
