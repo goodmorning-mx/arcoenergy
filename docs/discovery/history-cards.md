@@ -1346,3 +1346,14 @@ Con los repositorios habilitados para CI público, la comprobación se repitió 
 | US-14 | Parcial funcional | Las 35 rutas privadas de lectura se verificaron anónimamente en el despliegue. Quedan pendientes las pruebas de acceso por entidad/campo y la validación con cuentas reales de los cinco roles. |
 
 La migración `202611110098` añade esta revisión append-only y conserva el relato original. El producto se integró mediante el PR [#141](https://github.com/goodmorning-mx/arcoenergy/pull/141); Factory actualizó el esquema esperado en el PR [#444](https://github.com/goodmorning-mx/goodmorning-factory/pull/444). La reconciliación [#42942363132](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42942363132) completó despliegue, revisión del esquema vivo y respaldo externo verificado. La CI del producto pasó en [#42941951969](https://github.com/goodmorning-mx/arcoenergy/actions/runs/42941951969); la comprobación Factory pasó en [#42942232535](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42942232535). El smoke test actual también confirmó en Chrome los tres formularios de login. No se crearon cuentas ni se cambiaron secretos.
+
+## Iteración 87 — accesos reales sin modo de prueba (2026-11-11)
+
+Se volvió a recorrer DEV luego de integrar la matriz técnica: sitio, CRM y PWA sirven sus bundles publicados; `/login`, `/crm/login` y `/app/login` muestran formularios reales en Chrome. Los bundles activos de CRM/PWA no contienen texto de modo trial, demo o prueba gratuita. La API está lista en commit `2d833a00a81941d408d3c6f5d05066ca2ce6eff5`, esquema `202611110098`; las 35 rutas GET privadas devuelven `401` sin sesión.
+
+| Tarjeta | Estado revisado | Cambio / alcance pendiente |
+| --- | --- | --- |
+| US-39 | Parcial funcional | Superficie pública/CRM activa sin modo de prueba; falta el recorrido autenticado con el administrador y personal real. |
+| US-40 | Parcial funcional | PWA y login reales activos, sin marcadores demo, y API privada; faltan usuarios asignados, login y pruebas push con los teléfonos del equipo. |
+
+La migración `202611110099` añade versiones append-only para ambas tarjetas y conserva sus relatos originales. No se crearon cuentas reales ni se cambiaron credenciales: la lista de personas/correos y el acceso inicial de administración deben configurarse por ArcoEnergy.
