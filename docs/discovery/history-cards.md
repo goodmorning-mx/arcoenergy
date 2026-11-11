@@ -1514,3 +1514,17 @@ Se cotejó US-30 con el directorio CRM y los datos de compras. El usuario autori
 | US-30 | Funcional básico | La API prueba alta/lista y la suite de compras verifica deuda y saldo tras abonos. El cliente debe confirmar campos adicionales y si quiere un estado explícito de proveedor inactivo/archivado. |
 
 La migración `202611110114` añade la versión 2 de US-30 sin reescribir la fuente. El endpoint exige permisos `suppliers:read` para consultar y `suppliers:manage` para alta. Los pagos a proveedor se registran desde la compra asociada, conservando el vínculo contable.
+
+## Iteración 103 — dashboard y dependencias legales (2026-11-11)
+
+Se verificó US-19 contra el CRM y el endpoint de dashboard: presenta cartera vencida/próxima, saldos visibles por permiso, disponibilidad y faltantes de almacén, una gráfica de entradas/salidas de siete días y accesos a acciones prioritarias. Contabilidad y administración todavía deben aprobar los umbrales y métricas del negocio.
+
+También se revisaron US-5 y US-6 contra el requisito original. No hay plantillas legales aprobadas ni reglas acordadas para guardar INE; tampoco se ha aprobado proveedor, consentimiento o proceso para firma/biometría. Las tarjetas nuevas registran esas dependencias de manera explícita. No se generan documentos ni se recoge información sensible hasta contar con las decisiones y materiales correspondientes; se mantiene la alternativa de firma física solicitada.
+
+| Tarjeta | Estado revisado | Alcance pendiente |
+| --- | --- | --- |
+| US-19 | Funcional básico | El dashboard cubre los indicadores visibles y las gráficas operativas existentes. Falta que administración/contador confirme fórmulas, umbrales y prioridades. |
+| US-5 | Bloqueada por material legal y privacidad | Requiere plantillas aprobadas y política de datos/consentimiento para INE del titular y responsable solidario. |
+| US-6 | Bloqueada por decisión legal y proveedor | Requiere confirmar validez, consentimiento, proveedor de firma/verificación y manejo de excepción física. |
+
+La migración `202611110115` añade versiones append-only para US-5, US-6 y US-19 sin alterar las fuentes originales. Las pruebas existentes de dashboard/API y la prueba nueva de migración validan criterios y conservación del texto literal.
