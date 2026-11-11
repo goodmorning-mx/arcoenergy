@@ -1444,3 +1444,13 @@ La PWA ahora usa un decodificador local de ZXing al abrir la cámara, incluidos 
 | US-28 | Parcial funcional | La cámara ya no depende de `BarcodeDetector` y conserva búsqueda manual/lector teclado. Falta validarlo en teléfonos, formatos de etiqueta y lectores reales; queda pendiente confirmar el comportamiento de cámara sin conexión. |
 
 La migración `202611110107` agrega una revisión append-only de US-28. Producto integrado por PR [#154](https://github.com/goodmorning-mx/arcoenergy/pull/154), merge commit `984f648628fda1a1efe2559aec127daac996eca1`; CI pasó backend, CRM, frontend, Next.js y Docker/Chrome en [#43071831401](https://github.com/goodmorning-mx/arcoenergy/actions/runs/43071831401) y tras el merge en [#43072191113](https://github.com/goodmorning-mx/arcoenergy/actions/runs/43072191113). DEV sirve la API lista y PWA con commit `984f648628fda1a1efe2559aec127daac996eca1`; `/app/` respondió HTTP 200. La validación automatizada de Chrome confirma que las rutas renderizan; la cámara física requiere validación con dispositivos de ArcoEnergy.
+
+## Iteración 96 — cobertura de reportes operativos (2026-11-11)
+
+Se contrastó US-29 con la implementación actual del CRM y del endpoint privado `/v1/reports/operations`. La superficie de reportes presenta la gráfica circular y tabla de existencias, movimientos del almacén con rango de fechas y CSV paginado, conteos/listas de clientes y proveedores, proyectos/órdenes agrupados por estado y gastos del periodo con categoría, tipo, descripción, proyecto, cuenta y responsable. La API filtra costos unitarios y caja/bancos según los permisos. Estos reportes descriptivos no se presentan como estados financieros oficiales.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-29 | Funcional básico | Cubre las secciones descritas en la tarjeta y sus criterios registrados; backend prueba agregados, paginación, fechas y ocultamiento de costos. Fórmulas contables y resultado oficial quedan en US-12/US-38, sujetos a validación del contador. |
+
+La migración `202611110108` añade una nueva versión append-only de US-29 sin alterar la fuente. Evidencia de producto ya integrada: PR [#154](https://github.com/goodmorning-mx/arcoenergy/pull/154), CI [#43071831401](https://github.com/goodmorning-mx/arcoenergy/actions/runs/43071831401), merge commit `984f648628fda1a1efe2559aec127daac996eca1`; pruebas unitarias específicas en `backend/tests/test_operations_report.py`. Para esta revisión de tarjeta, se agregan prueba de preservación del texto original, CI del nuevo esquema y verificación posterior a despliegue.
