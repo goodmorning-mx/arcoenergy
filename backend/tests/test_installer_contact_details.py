@@ -67,9 +67,20 @@ def test_installation_materials_report_shortage_against_other_orders_reservation
         db.commit()
 
         result = list_installations(manager, db)
+        installer_a = AuthIdentity(
+            "installer-a", "arcoenergy", frozenset({"instalador"}),
+            ROLE_PERMISSIONS["instalador"], "a@example.test", "Instalador A",
+        )
+        field_result = list_installations(installer_a, db)
 
     by_folio = {order["folio"]: order for order in result}
     for folio in ("AE-OT-A", "AE-OT-B"):
         line = by_folio[folio]["materials"][0]
         assert line["available_for_order"] == 2
         assert line["shortage_quantity"] == 6
+    assert [order["folio"] for order in field_result] == ["AE-OT-A"]
+    field_material = field_result[0]["materials"][0]
+    assert field_material["item_name"] == "Panel solar"
+    assert field_material["requested_quantity"] == 8
+    assert field_material["available_for_order"] == 2
+    assert field_material["shortage_quantity"] == 6
