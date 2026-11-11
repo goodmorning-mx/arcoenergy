@@ -153,7 +153,7 @@ Como contador/administrador, quiero registrar las ventas con sus datos principal
 - Capturar fecha del proyecto, cliente, código y domicilio del proyecto.
 - Capturar subtotal, impuestos y valor de venta.
 - Registrar si es contado, crédito o parte del plan 24 (tanda de paneles).
-- **Pendiente:** reglas de impuestos, pagos mixtos y efecto exacto en inventario/cuentas.
+- **Pendiente:** reglas de impuestos, pagos mixtos y efecto exacto en inventario/cuentas. Plan 24/tanda puede quedar en la propuesta, pero no se registra como venta ni crédito estándar hasta que contabilidad defina el anticipo y calendario.
 
 ### US-16 — Consultar saldo y registrar cobranza de clientes
 
@@ -1571,3 +1571,14 @@ Se añadió una auditoría estática que recorre cada endpoint HTTP definido baj
 | US-14 | Parcial funcional | Todas las rutas privadas tienen una dependencia de permiso explícita según el inventario estático, además de las pruebas existentes de permisos por rol y aislamiento de cliente. La comprobación no sustituye la matriz aprobada por responsables ni pruebas con las cuentas reales de los cinco roles. |
 
 La migración `202611110119` agrega una versión append-only de US-14 y conserva el texto fuente original. `test_api_route_authorization_inventory.py`, `test_role_authorization.py` y `test_roles.py` validan cobertura de dependencias, matriz de roles y aislamiento de datos.
+
+
+## Iteración 108 — resguardo de ventas Plan 24 (2026-11-11)
+
+Se detectó que una propuesta con forma de pago Plan 24 podía convertirse en venta de crédito ordinaria y generar cuotas estándar, aunque la tanda no tiene reglas definidas. La API ahora rechaza esa conversión antes de crear datos contables u operativos y el CRM mantiene visible la propuesta, explica el motivo y deshabilita la acción de registrar venta. Las propuestas Plan 24 siguen permitidas para conversación comercial; su conversión requiere aprobación de reglas del contador.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-15 | Parcial funcional con bloqueo de Plan 24 | Prueba backend confirma que la propuesta permanece intacta y que no se crean venta, orden o cartera. Contabilidad debe definir anticipo, distribución de pagos, incumplimiento y efectos asociados antes de habilitar la tanda. |
+
+La migración `202611110120` agrega la revisión append-only de US-15 y conserva su relato original. `test_sales_work_orders.py` cubre el bloqueo de la ruta de creación; la interfaz CRM distingue la propuesta pendiente de una venta registrable.
