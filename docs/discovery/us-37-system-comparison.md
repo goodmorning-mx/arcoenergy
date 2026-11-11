@@ -2,7 +2,7 @@
 
 ## Fuentes y alcance
 
-La solicitud se revisó en el Word “COMENTARIOS Y MEJORAS PARA EL SISTEMA DE ARCO ENERGY” y en su versión PDF “MEJORAS AL SISTEMA ARCO ENERGY”. Ambos contienen la misma estructura de diez apartados; el PDF incluye la captura del menú y dashboard de ARCO ENERGY Inventario en Base44. La comparación vigente describe CRM/PWA/API de ArcoEnergy en DEV, aplicación `4de38c56278b194373f9775ef866c20e8073e887`, esquema `202611100082`. La UI de origen de César no se pudo consultar; la imagen del PDF sirve como referencia visual parcial. No se agregan reglas contables que el contador todavía deba definir.
+La solicitud se revisó en el Word “COMENTARIOS Y MEJORAS PARA EL SISTEMA DE ARCO ENERGY” y en su versión PDF “MEJORAS AL SISTEMA ARCO ENERGY”. Ambos contienen la misma estructura de diez apartados; el PDF incluye la captura del menú y dashboard de ARCO ENERGY Inventario en Base44. La comparación vigente describe CRM/PWA/API de ArcoEnergy en DEV. No se agregan reglas contables que el contador todavía deba definir.
 
 ## Matriz de cobertura
 
@@ -52,4 +52,8 @@ La API DEV informa commit `b5740b6232445af2d066e5e4a5e54b12a3251049` y esquema `
 | Usuarios | CRM: Equipo | Roles y permisos por endpoint operativos; faltan cuentas autorizadas de todo el personal y validación del alcance con cada rol. |
 | Configuración | Catálogo, Equipo, Cuentas y configuración organizacional | Funciones repartidas por área; no hay una sección única de configuración como la referencia. Confirmar si hace falta para el cliente. |
 
-La comparación se limita al menú y las secciones visibles en la captura del PDF y a las funciones expresadas en el Word. No afirma paridad con pantallas que no aparecen en la referencia ni con la instancia privada de César. Para completar la comparación visual y de comportamiento se necesita acceso al sistema actual o capturas navegables de sus secciones.
+La comparación funcional se limita a las secciones visibles del menú y a las funciones expresadas en el Word. No afirma paridad con pantallas que no aparecen en la referencia ni con la instancia autenticada de César. Para completar la comparación visual y de comportamiento se necesita acceso autorizado a sus pantallas o capturas navegables.
+
+## Consulta pública de referencia — 2026-11-11
+
+Se consultó `https://arco-energy.base44.app/`; la página y el bundle público `https://arco-energy.base44.app/assets/index-R4F2cERi.js` respondieron HTTP 200. El bundle SHA-256 `5034ad69f06abeca357fa722128cf4f1d31e6d5c7ffcf5b64a2b4aa6c03bddfc` declara el menú con etiquetas y rutas exactas: Dashboard `/`, Inventario `/inventory`, Entradas `/entries`, Salidas `/exits`, Kardex `/kardex`, Escáner `/scanner`, Reportes `/reports`, Proveedores `/suppliers`, Proyectos `/projects`, Usuarios `/users` y Configuración `/settings`. Esto confirma que el menú del PDF corresponde a una instancia pública activa al momento de la consulta; el acceso aquí solo alcanzó recursos públicos y no verificó pantallas renderizadas ni acciones autenticadas. La tarjeta US-37 conserva este límite y enlaza el hash como evidencia de validación.

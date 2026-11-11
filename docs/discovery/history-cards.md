@@ -1667,3 +1667,14 @@ Se cotejaron las 42 fuentes iniciales contra los artefactos disponibles. Las fue
 | US-42 | Parcial funcional | La base append-only conserva las versiones y ahora registra ubicaciones de fuente para US-33–35. Sigue pendiente cotejar con stakeholders las tarjetas reconstruidas, validar los ASR y definir almacenamiento/retención de fuentes sensibles. |
 
 La migración `202611110127` agrega versiones nuevas sin sobrescribir el texto literal ni los metadatos históricos. Las pruebas verifican preservación de versiones, ubicaciones de los dos audios y correspondencia de sus hashes con el manifiesto de fuentes.
+
+
+## Iteración 116 — cotejo del menú público Base44 para US-37 (2026-11-11)
+
+Se abrió la URL pública de ArcoEnergy Inventario referida en el Word del contador. La raíz y su bundle de navegación respondieron HTTP 200. El bundle declara las 11 etiquetas y rutas que aparecen en el menú de la captura del PDF; se guarda su SHA-256 como evidencia reproducible. La consulta llegó solo a recursos públicos: no acredita pantallas renderizadas, información tras autenticación ni operaciones del sistema.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-37 | Parcial funcional | Menú de referencia vigente cotejado con el PDF: 11 etiquetas y rutas confirmadas mediante bundle público con hash. Falta comparación visual y de comportamiento autenticada con César; la matriz CRM/PWA continúa separando implementado y pendiente. |
+
+La migración `202611110128` agrega una nueva versión append-only de US-37, conserva su relato literal y asocia el bundle público como evidencia de validación.
