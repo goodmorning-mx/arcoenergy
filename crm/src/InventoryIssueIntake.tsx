@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
+import './material-ocr.css';
 
 type IntakeMaterial = { id: string; item_id: string; item_name: string; requested_quantity: number; preissued_quantity: number; remaining_to_issue: number };
 type IntakeInstallation = { id: string; folio?: string | null; status: string; customer?: { name: string; city: string }; materials?: IntakeMaterial[]; material_request_available?: boolean; material_request_filename?: string };
@@ -30,6 +31,9 @@ export function InventoryIssueIntake({
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState('');
   const [archiveNotice, setArchiveNotice] = useState('');
+  const [extractedText, setExtractedText] = useState('');
+  const [extractionMethod, setExtractionMethod] = useState('');
+  const [reading, setReading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const fileUrl = useMemo(() => file ? URL.createObjectURL(file) : '', [file]);
   const installation = installations.find(row => row.id === installationId);
@@ -43,10 +47,37 @@ export function InventoryIssueIntake({
     const selected = event.target.files?.[0] || null;
     setFailure('');
     setArchiveNotice('');
+    setExtractedText('');
+    setExtractionMethod('');
     if (!selected) { setFile(null); return; }
     if (!acceptedFile(selected)) { setFailure('Elige una imagen JPG, PNG, WebP o un archivo PDF.'); event.target.value = ''; return; }
     if (selected.size > 12 * 1024 * 1024) { setFailure('El archivo debe pesar 12 MB o menos.'); event.target.value = ''; return; }
     setFile(selected);
+  }
+
+  async function readDocument() {
+    if (!file || !installation) return;
+    setReading(true);
+    setFailure('');
+    setExtractedText('');
+    setExtractionMethod('');
+    try {
+      const contentType = file.type || ({ pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }[file.name.toLowerCase().split('.').pop() || ''] ?? 'application/octet-stream');
+      const response = await fetch('/api/v1/inventory/read-material-request', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType, 'X-Document-Name': encodeURIComponent(file.name) },
+        body: file,
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.detail || 'No se pudo leer el documento. Captura las cantidades manualmente.');
+      if (!result.review_only || result.source_stored !== false || result.inventory_changed !== false) {
+        throw new Error('La respuesta de lectura no cumple el modo de revisión segura.');
+      }
+      setExtractedText(String(result.extracted_text || ''));
+      setExtractionMethod(String(result.extraction_method || ''));
+    } catch (error) {
+      setFailure(`${error instanceof Error ? error.message : 'No se pudo leer el documento.'} Puedes continuar con captura manual.`);
+    } finally { setReading(false); }
   }
 
   async function archiveRequest(): Promise<{ reference: string; archived: boolean }> {
@@ -149,7 +180,9 @@ export function InventoryIssueIntake({
     <div className="issue-mode" role="group" aria-label="Tipo de movimiento"><button type="button" className={mode === 'issue' ? 'selected' : ''} onClick={() => { setMode('issue'); setFailure(''); }}>Salida de material</button><button type="button" className={mode === 'return' ? 'selected' : ''} onClick={() => { setMode('return'); setFailure(''); }}>Devolución / merma</button></div>
     <form className="issue-form" onSubmit={event => void submit(event)}>
       <label className="field"><span>Orden de trabajo</span><select value={installationId} onChange={event => { setInstallationId(event.target.value); setQuantities({}); setMovementId(''); setReturnQuantity(''); setArchiveNotice(''); }} required><option value="">Selecciona una orden</option>{installations.filter(row => row.status !== 'closed').map(row => <option key={row.id} value={row.id}>{row.folio || 'Orden'} · {row.customer?.name || 'Cliente'} · {row.customer?.city || 'Ubicación pendiente'}</option>)}</select></label>
-      <label className="field"><span>Solicitud de materiales · foto o PDF</span><input id="work-order-scan" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" onChange={chooseFile} required/><small className="muted-copy">Máximo 12 MB. Al confirmar, se intenta archivar la solicitud en la carpeta privada de Drive.</small></label>
+      <label className="field"><span>Solicitud de materiales · foto o PDF</span><input id="work-order-scan" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" onChange={chooseFile} disabled={reading || busy} required/><small className="muted-copy">Máximo 12 MB. Al confirmar, se intenta archivar la solicitud en la carpeta privada de Drive.</small></label>
+      {file && <button type="button" className="button button-outline" onClick={() => void readDocument()} disabled={reading || busy || !installation}>{reading ? 'Leyendo documento…' : 'Leer texto para revisión'}</button>}
+      {extractedText && <section className="material-ocr-review" aria-label="Texto reconocido para revisión"><div><b>Texto reconocido · {extractionMethod === 'texto_pdf' ? 'PDF con texto' : 'OCR'}</b><small>Lectura asistida solamente. Verifica el documento original y captura las cantidades manualmente; aquí no se confirma ni modifica inventario.</small></div><pre>{extractedText}</pre></section>}
       {installation?.material_request_available && <div className="archived-document"><span>Solicitud archivada: <b>{installation.material_request_filename || 'documento'}</b></span><button type="button" className="button button-outline" onClick={() => void downloadArchivedRequest()} disabled={downloading}>{downloading ? 'Descargando…' : 'Descargar de Drive'}</button></div>}
       {archiveNotice && <p className="muted-copy" role="status">{archiveNotice}</p>}
       {fileUrl && <div className="issue-preview" aria-label="Vista previa de la solicitud">{isPdf ? <iframe src={fileUrl} title="Solicitud de materiales en PDF" /> : <img src={fileUrl} alt="Solicitud de materiales adjunta para revisión"/>}<span>{file?.name}</span></div>}
