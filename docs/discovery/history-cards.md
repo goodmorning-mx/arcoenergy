@@ -1413,3 +1413,13 @@ La transcripción PDF/OCR ahora propone candidatos de RFC, folio/UUID, fecha y t
 La migración `202611110104` agrega una revisión append-only de US-22 y conserva el literal fuente. La cobertura automatizada comprueba RFC múltiples, folio, fecha, exclusión del subtotal como total y preservación de la tarjeta original.
 
 La implementación quedó integrada en el PR [#148](https://github.com/goodmorning-mx/arcoenergy/pull/148), merge commit `c2f6f85a45ef306fd45088e37e1d01bbcdf490c5`; la CI pasó en [#43061326896](https://github.com/goodmorning-mx/arcoenergy/actions/runs/43061326896), incluidos backend, CRM, frontend, Next.js y Docker/Chrome con OCR real. Factory actualizó la revisión esperada mediante PR [#451](https://github.com/goodmorning-mx/goodmorning-factory/pull/451), merge commit `79a8014`; la reconciliación [#43062139545](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/43062139545) desplegó, verificó el esquema vivo `202611110104` y respaldos externos. La API DEV informa estado `ready`, commit `c2f6f85a45ef306fd45088e37e1d01bbcdf490c5` y revisión `202611110104`; sitio, accesos y shells CRM/PWA responden HTTP 200. El bundle CRM publicado contiene la revisión y aplicación de candidatos.
+
+## Iteración 93 — compartir PDF de cotización con confirmación (2026-11-11)
+
+En CRM, el selector de archivos nativo ahora se invoca desde una confirmación explícita después de descargar/preparar la cotización. Si el navegador no comparte archivos, el enlace de WhatsApp descarga el PDF y abre el mensaje en el mismo gesto de usuario, evitando depender de un popup iniciado después de la llamada de red. El estado informa si Drive archivó el PDF o no; el sistema no afirma que el mensaje fue enviado.
+
+| Tarjeta | Estado revisado | Cambio / alcance pendiente |
+| --- | --- | --- |
+| US-3 | Parcial funcional | El flujo de compartir tiene una acción confirmada y un fallback WhatsApp/descarga que conserva la activación del navegador. Falta validar el uso con dispositivos reales y decidir si se requiere envío/confirmación automática por API. |
+
+La migración `202611110105` añade una versión append-only de US-3 y conserva el relato fuente.

@@ -1,0 +1,5 @@
+.quote-share-dialog{display:grid;gap:12px;padding:18px 22px 22px}
+.quote-share-dialog p{margin:0;color:#53645a;font-size:12px;line-height:1.6}
+.quote-share-dialog .button{display:flex;justify-content:center;align-items:center;text-align:center;text-decoration:none;min-height:42px}
+.quote-share-dialog small{color:#77847b;font-size:10px;line-height:1.5}
+@media(max-width:600px){.quote-share-dialog{padding:15px}}
