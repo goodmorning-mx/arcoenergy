@@ -1642,3 +1642,14 @@ Se actualizó la matriz de las secciones visibles en el Word/PDF del contador fr
 | US-37 | Parcial funcional | La matriz coteja cada sección visible de la fuente con CRM/PWA y registra la versión viva de DEV. Falta comparar visual y funcionalmente con el sistema actual de César; no se pudo hacer la inspección visual del portal en este entorno y Administración debe confirmar si necesita una pantalla única de Configuración. |
 
 La migración `202611110125` agrega una versión append-only de US-37, conservando el relato fuente y las versiones previas.
+
+
+## Iteración 114 — consentimiento y contacto del agente público (2026-11-11)
+
+La prueba viva del endpoint `/v1/public/agent/chat` respondió HTTP 200; como el catálogo no tiene paquetes con precio aprobado, el agente no dio cifras. Se corrigió la instrucción para que nunca solicite datos personales en la conversación ni afirme que guardó un prospecto: remite al formulario comercial, que presenta el aviso de privacidad y consentimiento. La interfaz explica este límite antes de iniciar el chat.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-41 | Parcial funcional | Agente público conectado a herramienta de catálogo de solo lectura; endpoint vivo respondió y respetó precios no aprobados. Contacto ahora pasa por formulario con privacidad/consentimiento. Faltan paquetes comerciales reales aprobados y validar el recorrido de cotización completo. |
+
+La migración `202611110126` agrega una versión append-only de US-41 sin alterar su fuente literal.
