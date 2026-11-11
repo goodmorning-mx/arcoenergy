@@ -1561,3 +1561,13 @@ La PWA ahora guarda en IndexedDB el estado y el motivo de los rechazos de accion
 | US-9 | Funcional básico con resolución local de conflictos | Cola IndexedDB preservada entre recargas, detalle HTTP 4xx guardado, bloqueo FIFO y edición de cantidad para consumo/devolución. Falta validar sincronización simultánea y usabilidad con instaladores/dispositivos reales. |
 
 La migración `202611110118` agrega una nueva versión append-only de US-9 y conserva la fuente literal original. El build PWA y la prueba de integridad de migración se ejecutan antes de integrar.
+
+## Iteración 107 — inventario automático de autorización API (2026-11-11)
+
+Se añadió una auditoría estática que recorre cada endpoint HTTP definido bajo `/v1` y falla si una ruta no declara `require_permissions` o `require_any_permission` en su decorador o firma. Solo permite sin autenticación los endpoints públicos de captación de prospectos y chat; si se agrega una nueva ruta pública, debe incorporarse explícitamente a la lista de excepciones revisada. Los endpoints de suscripción push conservan su permiso en el parámetro de identidad.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | Todas las rutas privadas tienen una dependencia de permiso explícita según el inventario estático, además de las pruebas existentes de permisos por rol y aislamiento de cliente. La comprobación no sustituye la matriz aprobada por responsables ni pruebas con las cuentas reales de los cinco roles. |
+
+La migración `202611110119` agrega una versión append-only de US-14 y conserva el texto fuente original. `test_api_route_authorization_inventory.py`, `test_role_authorization.py` y `test_roles.py` validan cobertura de dependencias, matriz de roles y aislamiento de datos.
