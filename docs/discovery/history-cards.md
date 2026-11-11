@@ -1454,3 +1454,13 @@ Se contrastó US-29 con la implementación actual del CRM y del endpoint privado
 | US-29 | Funcional básico | Cubre las secciones descritas en la tarjeta y sus criterios registrados; backend prueba agregados, paginación, fechas y ocultamiento de costos. Fórmulas contables y resultado oficial quedan en US-12/US-38, sujetos a validación del contador. |
 
 La migración `202611110108` añade una nueva versión append-only de US-29 sin alterar la fuente. Evidencia de producto ya integrada: PR [#154](https://github.com/goodmorning-mx/arcoenergy/pull/154), CI [#43071831401](https://github.com/goodmorning-mx/arcoenergy/actions/runs/43071831401), merge commit `984f648628fda1a1efe2559aec127daac996eca1`; pruebas unitarias específicas en `backend/tests/test_operations_report.py`. Para esta revisión de tarjeta, se agregan prueba de preservación del texto original, CI del nuevo esquema y verificación posterior a despliegue.
+
+## Iteración 97 — preparación offline del escáner (2026-11-11)
+
+Al iniciar sesión con una cuenta instalador y conexión, la PWA carga en segundo plano el módulo ZXing mientras el service worker está listo. Su estrategia de caché de red guarda las solicitudes GET bajo `/app/`, incluido el chunk diferido del lector. Esto prepara la lectura con cámara para un posterior uso sin señal, sin cargar el módulo al iniciar sesión de otros roles. Si la precarga falla, queda la captura manual y el último inventario sincronizado.
+
+| Tarjeta | Estado revisado | Cambio / alcance pendiente |
+| --- | --- | --- |
+| US-28 | Parcial funcional | El chunk de cámara se precarga para instaladores conectados y se almacena en la caché del service worker; manual y lector teclado siguen disponibles. Falta recorrer conexión → precarga → modo avión → lectura con teléfono/etiqueta reales. |
+
+La migración `202611110109` registra una revisión append-only de US-28. La implementación comparte bundle diferido con PR [#154](https://github.com/goodmorning-mx/arcoenergy/pull/154); esta revisión suma la precarga al iniciar sesión de instalador. Se verifica typecheck y build local, pruebas de migración y la CI de producto con build Docker/Chrome. La cámara física en modo avión sigue pendiente de validación con ArcoEnergy.

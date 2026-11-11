@@ -61,6 +61,26 @@ function App() {
     return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); };
   }, []);
   useEffect(() => {
+    if (!identity?.roles.includes('instalador') || !navigator.onLine || !('serviceWorker' in navigator)) return;
+    let active = true;
+    // Load the lazy scanner chunk while online so the PWA shell's runtime
+    // cache can serve it later when installers are working without a signal.
+    void navigator.serviceWorker.ready
+      .then(async () => {
+        if (!active) return;
+        if (!navigator.serviceWorker.controller) {
+          await new Promise<void>(resolve => {
+            const finish = () => { window.clearTimeout(timeout); navigator.serviceWorker.removeEventListener('controllerchange', finish); resolve(); };
+            const timeout = window.setTimeout(finish, 5000);
+            navigator.serviceWorker.addEventListener('controllerchange', finish, { once: true });
+          });
+        }
+        if (active && navigator.onLine && navigator.serviceWorker.controller) await import('@zxing/browser');
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [identity?.email, identity?.roles]);
+  useEffect(() => {
     if (!identity?.email) { setOfflineQueue([]); return; }
     void readChecklistQueue(identity.email).then(setOfflineQueue).catch(() => setNotificationMessage('No se pudo leer la cola local de cambios.'));
     void readFieldActionQueue(identity.email).then(setActionQueue).catch(() => setActionMessage('No se pudo leer la cola local de operaciones.'));
