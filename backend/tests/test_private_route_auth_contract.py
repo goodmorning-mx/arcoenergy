@@ -1,5 +1,9 @@
-from fastapi.routing import APIRoute
+import re
 
+from fastapi.routing import APIRoute
+from fastapi.testclient import TestClient
+
+from app.main import app
 from app.product_api import router
 
 
@@ -36,3 +40,20 @@ def test_only_explicitly_public_product_routes_may_skip_bearer_auth() -> None:
                 unprotected.append(f"{method} {route.path}")
 
     assert unprotected == []
+
+
+def test_every_private_product_get_route_rejects_anonymous_requests() -> None:
+    client = TestClient(app)
+    private_get_routes = [
+        route
+        for route in router.routes
+        if isinstance(route, APIRoute)
+        and "GET" in (route.methods or ())
+        and ("GET", route.path) not in PUBLIC_PRODUCT_ROUTES
+    ]
+    assert private_get_routes
+
+    for route in private_get_routes:
+        path = re.sub(r"\{[^}]+\}", "00000000-0000-4000-8000-000000000000", route.path)
+        response = client.get(path, params={"phone": "+521234567890", "message": "auth-audit"})
+        assert response.status_code in {401, 403}, f"{route.path} returned {response.status_code} without authentication"

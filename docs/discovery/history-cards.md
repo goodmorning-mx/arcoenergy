@@ -1316,3 +1316,13 @@ La auditoría de la tarjeta US-14 ya verificaba algunas colecciones anónimas en
 La revisión se registra en una nueva versión append-only de US-14; conserva relato y fuente originales.
 
 La migración `202611110095` se integró mediante el PR [#137](https://github.com/goodmorning-mx/arcoenergy/pull/137), commit `1a91baac55cd6158d34debca4b9a1eaaea926ba2`; su CI pasó en [#42938073821](https://github.com/goodmorning-mx/arcoenergy/actions/runs/42938073821). Factory actualizó el contrato de DEV en el PR [#442](https://github.com/goodmorning-mx/goodmorning-factory/pull/442), commit `2122af4c1d3e2558e1e28146dd3615e74046835c`; la reconciliación [#42938540397](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42938540397) confirmó la revisión viva `202611110095` y un respaldo externo verificado. La API DEV reporta el commit integrado y esquema `202611110095`; `/`, `/login`, `/crm/login`, `/app/login`, `/crm/` y `/app/` responden HTTP 200; clientes, cotizaciones, instalaciones, portal de cliente y equipo devuelven HTTP 401 sin sesión. La validación local completó 221 pruebas backend y una instalación híbrida limpia con todos los servicios saludables.
+
+## Iteración 84 — auditoría anónima de las rutas de lectura (2026-11-11)
+
+La prueba anterior aseguraba que cada ruta incluyera seguridad Bearer en el router, pero no llamaba al handler completo. Se añade una comprobación de integración local que recorre todas las rutas GET privadas del API y comprueba que un cliente sin sesión reciba 401/403. En DEV se recorrieron las 34 rutas GET privadas publicadas por OpenAPI: todas respondieron 401 y ninguna devolvió información.
+
+| Tarjeta | Estado revisado | Cambio / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | La protección anónima se verifica para las 34 rutas GET en DEV y se mantiene cubierta por una prueba automatizada local. Queda pendiente probar el acceso por rol, entidad y campo con usuarios reales de los cinco roles. |
+
+La migración `202611110096` añade una revisión append-only a US-14 y conserva la fuente original.
