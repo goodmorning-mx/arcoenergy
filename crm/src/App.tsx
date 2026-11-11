@@ -4,7 +4,7 @@ import { useAuth } from '@goodmorning/gm-auth';
 import { QRCodeSVG } from 'qrcode.react';
 import { OperationsReportView } from './OperationsReportView';
 import { InventoryIssueIntake } from './InventoryIssueIntake';
-import { addLocalCalendarDays, localDateInputValue } from './dateUtils';
+import { addCalendarDaysToIsoDate, addLocalCalendarDays, localDateInputValue } from './dateUtils';
 import './inventory-labels.css';
 
 type View = 'inicio' | 'clientes' | 'cotizaciones' | 'ventas' | 'seguimientos' | 'proyectos' | 'instalaciones' | 'inventario' | 'gastos' | 'cobranza' | 'cuentas' | 'proveedores' | 'compras' | 'reportes' | 'catalogo' | 'equipo' | 'historial';
@@ -674,7 +674,7 @@ function FollowupsView({ items, onComplete, onCustomer, pushActive, onTogglePush
 
 const expenseCategories = ['Nómina', 'Combustible', 'Impuestos', 'Intereses', 'Préstamos', 'Mantenimiento', 'Servicios', 'Viáticos', 'Materiales', 'Otro'];
 function ExpensesView({ items, installations, projects, accounts, canWrite, canCorrect, onSubmit, onReverse, onDownloadReceipt, pendingReceipt, onRetryReceipt }: { items: ProjectExpense[]; installations: Installation[]; projects: Project[]; accounts: FinancialAccount[]; canWrite: boolean; canCorrect: boolean; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onReverse: (expense: ProjectExpense, reason: string) => void; onDownloadReceipt: (expense: ProjectExpense) => void; pendingReceipt:{expense:ProjectExpense;file:File}|null; onRetryReceipt:()=>void }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = cancunDate();
   const month = today.slice(0, 7);
   const [correction, setCorrection] = useState<ProjectExpense | null>(null);
   const monthTotal = items.filter(item => item.occurred_on.startsWith(month)).reduce((sum, item) => sum + Number(item.amount), 0);
@@ -690,7 +690,7 @@ function ExpensesView({ items, installations, projects, accounts, canWrite, canC
 
 function AccountsView({ accounts, selectedId, onSelect, movements, canManage, canWrite, onCreateAccount, onCreateMovement, onTransfer, onReverse }: { accounts: FinancialAccount[]; selectedId: string; onSelect: (id: string) => void; movements: CashMovement[]; canManage: boolean; canWrite: boolean; onCreateAccount: (event: FormEvent<HTMLFormElement>) => void; onCreateMovement: (event: FormEvent<HTMLFormElement>) => void; onTransfer: (event: FormEvent<HTMLFormElement>) => void; onReverse: (movement: CashMovement, reason: string) => void }) {
   const selected = accounts.find(account => account.id === selectedId);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = cancunDate();
   const [correctionMovement, setCorrectionMovement] = useState<CashMovement | null>(null);
   function submitCorrection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -707,13 +707,15 @@ function SuppliersView({ items, canWrite, onSubmit }: { items: Supplier[]; canWr
 }
 
 function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token, onItems, onSuppliers, onAccounts, onInventory, announce }: { items: Purchase[]; suppliers: Supplier[]; inventory: InventoryItem[]; accounts: FinancialAccount[]; canWrite: boolean; token: string; onItems: (rows: Purchase[]) => void; onSuppliers: (rows: Supplier[]) => void; onAccounts: (rows: FinancialAccount[]) => void; onInventory: (rows: InventoryItem[]) => void; announce: (message: string, type?: Notice['type']) => void }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = cancunDate();
   const [lines, setLines] = useState([{ item_id: '', quantity: '1', unit_cost: '' }]);
   const [paymentPurchase, setPaymentPurchase] = useState<Purchase | null>(null);
   const [purchaseToCorrect, setPurchaseToCorrect] = useState<Purchase | null>(null);
   const [correctionPayment, setCorrectionPayment] = useState<{ purchase: Purchase; payment: NonNullable<Purchase['payments']>[number] } | null>(null);
   const [terms, setTerms] = useState<'cash' | 'credit'>('cash');
   const [supplierId, setSupplierId] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [dueDateManuallyEdited, setDueDateManuallyEdited] = useState(false);
   const [initialPayment, setInitialPayment] = useState('0');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [purchaseDate, setPurchaseDate] = useState(today);
@@ -724,6 +726,13 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
   const [invoiceDownloadId, setInvoiceDownloadId] = useState('');
   const [newMaterialLine, setNewMaterialLine] = useState<number | null>(null);
   const supplier = suppliers.find(item => item.id === supplierId);
+  useEffect(() => {
+    if (terms !== 'credit' || !supplier?.credit_days) {
+      setDueDate('');
+      return;
+    }
+    if (!dueDateManuallyEdited) setDueDate(addCalendarDaysToIsoDate(purchaseDate, supplier.credit_days));
+  }, [purchaseDate, supplier?.credit_days, terms, dueDateManuallyEdited]);
   const total = lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unit_cost || 0), 0);
   const materialSummary = lines.filter(line => line.item_id).map(line => {
     const item = inventory.find(row => row.id === line.item_id);
@@ -772,7 +781,7 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
         }
       }
       onItems([purchase, ...items]); form.reset(); setLines([{ item_id: '', quantity: '1', unit_cost: '' }]);
-      setSupplierId(''); setTerms('cash'); setInitialPayment('0'); setInvoiceNumber(''); setPurchaseDate(today); setCfdiProposal(null); setCfdiError(''); setInvoiceFile(null);
+      setSupplierId(''); setTerms('cash'); setDueDate(''); setDueDateManuallyEdited(false); setInitialPayment('0'); setInvoiceNumber(''); setPurchaseDate(today); setCfdiProposal(null); setCfdiError(''); setInvoiceFile(null);
       const [, supplierRows, accountRows, inventoryRows] = await Promise.all([
         request<Purchase[]>('/purchases', token).then(onItems), request<Supplier[]>('/suppliers', token),
         request<FinancialAccount[]>('/accounts', token), request<InventoryItem[]>('/inventory', token),
@@ -876,10 +885,10 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
     {canWrite && <section className="surface-card table-surface purchase-entry"><div className="section-title"><div><span className="eyebrow">ENTRADA DE ALMACÉN + CUENTAS POR PAGAR</span><h2>Registrar compra de materiales</h2></div></div>
       <form className="form-grid" onSubmit={submitPurchase}>
         <div className="cfdi-import span-two"><label className="field"><span>Factura fuente · XML CFDI, PDF o foto</span><input type="file" accept=".xml,.pdf,application/xml,text/xml,application/pdf,image/jpeg,image/png,image/webp" onChange={chooseInvoiceDocument} disabled={cfdiBusy}/></label><small>El XML precarga datos para revisión. PDF o foto requieren captura manual de proveedor, artículos, cantidades e importes. Al registrar se intentará archivar el archivo en Drive si está conectado.</small>{invoiceFile&&<small>Archivo adjunto a esta compra: {invoiceFile.name}</small>}{cfdiBusy&&<p role="status">Leyendo factura…</p>}{cfdiError&&<p className="error-message" role="alert">{cfdiError}</p>}{cfdiProposal&&<div className="cfdi-review"><div><b>CFDI leído · revisión requerida</b><button type="button" className="text-button" onClick={()=>{setCfdiProposal(null);setCfdiError('');}}>Quitar precarga</button></div><p>{cfdiProposal.supplier_name||'Proveedor sin nombre'} · RFC {cfdiProposal.supplier_rfc} · {cfdiProposal.invoice_reference} · {cfdiProposal.purchase_date}</p><p>Subtotal declarado {money(Number(cfdiProposal.declared_subtotal))} · Descuento global {money(Number(cfdiProposal.global_discount))} · Total factura {money(Number(cfdiProposal.declared_total))}</p><p>{lines.filter(line=>line.item_id).length}/{lines.length} conceptos relacionados a artículos. Importe de compra revisado: {money(total)}.</p>{(!cfdiSupplierMatches||!cfdiLinesMapped||!cfdiTotalMatches)&&<p className="cfdi-warning">No se puede registrar esta precarga hasta relacionar cada artículo, seleccionar el proveedor con RFC coincidente y hacer coincidir el total. Impuestos, descuentos globales y fletes no se distribuyen automáticamente; ajusta los costos con la regla del contador o quita la precarga para capturarla manualmente.</p>}{cfdiProposal.requires_accounting_review&&<p className="cfdi-warning">El total incluye diferencia contra el subtotal neto de conceptos. Revisa tratamiento de impuestos/ajustes antes de confirmar.</p>}</div>}</div>
-        <label className="field span-two"><span>Proveedor</span><select value={supplierId} onChange={event => { const value = event.target.value; setSupplierId(value); const selected = suppliers.find(row => row.id === value); setTerms(selected?.payment_terms || 'cash'); setInitialPayment(selected?.payment_terms === 'cash' ? String(total) : '0'); }} required><option value="">Selecciona proveedor</option>{suppliers.filter(item => item.active).map(item => <option key={item.id} value={item.id}>{item.name} · {item.payment_terms === 'credit' ? `Crédito ${item.credit_days} días` : 'Contado'}</option>)}</select>{!suppliers.length && <small className="muted-copy">Registra primero un proveedor en el apartado Proveedores.</small>}</label>
-        <Field label="Factura / referencia" name="invoice_number" value={invoiceNumber} onChange={setInvoiceNumber} placeholder="Folio de factura"/><Field label="Fecha de compra" name="purchase_date" type="date" value={purchaseDate} onChange={setPurchaseDate} required/>
-        <label className="field"><span>Forma acordada</span><select value={terms} onChange={event => { const value = event.target.value as 'cash' | 'credit'; setTerms(value); setInitialPayment(value === 'cash' ? String(total) : '0'); }}><option value="cash">Contado</option><option value="credit" disabled={!supplier?.credit_days}>Crédito</option></select></label>
-        {terms === 'credit' && <Field label="Fecha límite de pago" name="due_date" type="date" defaultValue={supplier?.credit_days ? new Date(Date.now() + supplier.credit_days * 86400000).toISOString().slice(0, 10) : ''} min={today}/>}
+        <label className="field span-two"><span>Proveedor</span><select value={supplierId} onChange={event => { const value = event.target.value; setSupplierId(value); setDueDateManuallyEdited(false); const selected = suppliers.find(row => row.id === value); setTerms(selected?.payment_terms || 'cash'); setInitialPayment(selected?.payment_terms === 'cash' ? String(total) : '0'); }} required><option value="">Selecciona proveedor</option>{suppliers.filter(item => item.active).map(item => <option key={item.id} value={item.id}>{item.name} · {item.payment_terms === 'credit' ? `Crédito ${item.credit_days} días` : 'Contado'}</option>)}</select>{!suppliers.length && <small className="muted-copy">Registra primero un proveedor en el apartado Proveedores.</small>}</label>
+        <Field label="Factura / referencia" name="invoice_number" value={invoiceNumber} onChange={setInvoiceNumber} placeholder="Folio de factura"/><Field label="Fecha de compra" name="purchase_date" type="date" value={purchaseDate} onChange={value => { setPurchaseDate(value); setDueDateManuallyEdited(false); }} required/>
+        <label className="field"><span>Forma acordada</span><select value={terms} onChange={event => { const value = event.target.value as 'cash' | 'credit'; setTerms(value); setDueDateManuallyEdited(false); setInitialPayment(value === 'cash' ? String(total) : '0'); }}><option value="cash">Contado</option><option value="credit" disabled={!supplier?.credit_days}>Crédito</option></select></label>
+        {terms === 'credit' && <Field label="Fecha límite de pago" name="due_date" type="date" value={dueDate} onChange={value => { setDueDate(value); setDueDateManuallyEdited(true); }} min={purchaseDate}/>}
         <div className="span-two purchase-lines"><div className="panel-head"><div><h3>Material recibido</h3><p>Los precios quedan guardados en cada movimiento del kardex.</p></div><button type="button" className="button button-outline" onClick={() => setLines(rows => [...rows, { item_id: '', quantity: '1', unit_cost: '' }])}>＋ Agregar artículo</button></div>
           {lines.map((line, index) => <div className="purchase-line" key={index}><label className="field"><span>Artículo</span><select value={line.item_id} onChange={event => { const selectedItem = inventory.find(row => row.id === event.target.value); setLines(rows => rows.map((row, i) => i === index ? { ...row, item_id: event.target.value, unit_cost: row.unit_cost || String(selectedItem?.unit_cost || '') } : row)); }} required><option value="">Selecciona material</option>{inventory.map(item => <option key={item.id} value={item.id}>{item.name} · stock {item.quantity} {item.unit}</option>)}</select><button type="button" className="text-button" onClick={()=>setNewMaterialLine(index)}>＋ Dar de alta un artículo faltante</button></label><Field label="Cantidad" type="number" min="0.01" step="0.01" value={line.quantity} onChange={value => setLines(rows => rows.map((row, i) => i === index ? { ...row, quantity: value } : row))} required/><Field label="Costo unitario MXN" type="number" min="0.01" step="0.01" value={line.unit_cost} onChange={value => setLines(rows => rows.map((row, i) => i === index ? { ...row, unit_cost: value } : row))} required/>{lines.length > 1 && <button type="button" className="icon-button" aria-label="Quitar artículo" onClick={() => setLines(rows => rows.filter((_, i) => i !== index))}>×</button>}</div>)}
         </div>
@@ -959,7 +968,7 @@ function SalesView({ items, quotes, inventory, installers, accounts, canWrite, t
       <label className="field span-two"><span>Cotización aceptada</span><select value={quoteId || selectedQuote?.id || ''} onChange={event => setQuoteId(event.target.value)} required>{acceptedQuotes.map(quote => <option key={quote.id} value={quote.id}>{quote.folio} · {quote.customer?.name || 'Cliente'} · {money(Number(quote.total))}</option>)}</select></label>
       {selectedQuote && <div className="quote-total span-two"><div><small>TOTAL DE PROPUESTA</small><strong>{money(Number(selectedQuote.total))}</strong><span>{selectedQuote.customer?.name} · {selectedQuote.panel_count} paneles · {selectedQuote.installation_city}</span></div><span>{selectedQuote.payment_method}</span></div>}
       <label className="field"><span>Tipo de venta</span><select value={saleType} onChange={event => setSaleType(event.target.value as 'cash' | 'credit')}><option value="cash">Contado · liquidado</option><option value="credit">Crédito · financiamiento por cuotas</option></select></label>
-      {saleType === 'cash' ? <label className="field"><span>Cuenta que recibió el total</span><select name="account_id" required defaultValue=""><option value="">Selecciona caja o banco</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name} · {money(Number(account.current_balance))}</option>)}</select></label> : <><Field label="Primer vencimiento" name="due_date" type="date" defaultValue={new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)} required/><Field label="Número de cuotas" name="installment_count" type="number" min="1" max="60" defaultValue={1} required/><label className="field"><span>Frecuencia de pago</span><select name="installment_frequency" defaultValue="monthly"><option value="weekly">Semanal</option><option value="biweekly">Quincenal</option><option value="monthly">Mensual</option></select></label></>}
+      {saleType === 'cash' ? <label className="field"><span>Cuenta que recibió el total</span><select name="account_id" required defaultValue=""><option value="">Selecciona caja o banco</option>{accounts.map(account => <option key={account.id} value={account.id}>{account.name} · {money(Number(account.current_balance))}</option>)}</select></label> : <><Field label="Primer vencimiento" name="due_date" type="date" defaultValue={addCalendarDaysToIsoDate(cancunDate(), 30)} required/><Field label="Número de cuotas" name="installment_count" type="number" min="1" max="60" defaultValue={1} required/><label className="field"><span>Frecuencia de pago</span><select name="installment_frequency" defaultValue="monthly"><option value="weekly">Semanal</option><option value="biweekly">Quincenal</option><option value="monthly">Mensual</option></select></label></>}
       <label className="field"><span>Cuadrilla instaladora</span><select name="assigned_installers" multiple required size={Math.min(5, Math.max(2, installers.length))}>{installers.map(item => <option key={item.email} value={item.email}>{item.name || item.email} · {item.email}</option>)}</select><small>Selecciona una o más cuentas instaladoras activas; la primera será responsable.</small></label>
       <Field label="Fecha de instalación" name="scheduled_at" type="datetime-local"/>
       <div className="span-two purchase-lines"><div className="panel-head"><div><h3>Material solicitado en la orden</h3><p>Las cantidades se validan contra almacén y se descuentan al registrar la venta.</p></div><button type="button" className="button button-outline" onClick={() => setMaterials(rows => [...rows, { item_id: '', quantity: '1' }])}>＋ Agregar material</button></div>
@@ -975,9 +984,8 @@ function SalesView({ items, quotes, inventory, installers, accounts, canWrite, t
 }
 
 function ReceivablesView({ items, customers, quotes, accounts, canWrite, token, onCreate, onItems, onAccounts, announce }: { items: Receivable[]; customers: Customer[]; quotes: Quote[]; accounts: FinancialAccount[]; canWrite: boolean; token: string; onCreate: (event: FormEvent<HTMLFormElement>) => void; onItems: (rows: Receivable[]) => void; onAccounts: (rows: FinancialAccount[]) => void; announce: (message: string, type?: Notice['type']) => void }) {
-  const today = new Date().toISOString().slice(0, 10);
-  const nextWeek = new Date(`${today}T00:00:00Z`); nextWeek.setUTCDate(nextWeek.getUTCDate() + 7);
-  const nextWeekDate = nextWeek.toISOString().slice(0, 10);
+  const today = cancunDate();
+  const nextWeekDate = addCalendarDaysToIsoDate(today, 7);
   const [scheduleFilter, setScheduleFilter] = useState<'all' | 'overdue' | 'today' | 'upcoming' | 'paid'>('all');
   const [paymentReceivable, setPaymentReceivable] = useState<Receivable | null>(null);
   const [correctionPayment, setCorrectionPayment] = useState<{ receivable: Receivable; payment: NonNullable<Receivable['payments']>[number] } | null>(null);

@@ -1278,3 +1278,18 @@ El informe de CRM ya agrupaba costos por proyecto en la consulta mensual, pero n
 | US-38 | Parcial funcional | El resultado preliminar mensual se puede filtrar por proyecto y agrupa varias órdenes; falta aprobación de fechas, fórmula fiscal/contable y cierre formal. |
 
 La migración `202611100092` añade versiones append-only a US-12 y US-38, conservando los relatos fuente. Producto integrado en el PR [#134](https://github.com/goodmorning-mx/arcoenergy/pull/134), merge commit `b9149b6c670e706d5a6771c1ff24c6a3e71fd940`. Factory fijó la revisión esperada en el PR [#438](https://github.com/goodmorning-mx/goodmorning-factory/pull/438), merge commit `f35a1d5d1eb89872943f69aa2d1de907f78e57f0`; el run [#42933620227](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42933620227) completó la reconciliación DEV. La API informa `ok`, el commit `b9149b6c670e706d5a6771c1ff24c6a3e71fd940` y esquema `202611100092`. `/`, `/login`, `/crm/login`, `/app/login`, `/crm/` y `/app/` responden HTTP 200; clientes, cotizaciones, instalaciones y portal responden 401 sin sesión. Los bundles servidos de CRM/PWA no contienen marcas trial/demo. Validación enfocada: 4 pruebas backend aprobadas y 34 pruebas de contrato de Factory aprobadas. Los jobs de CI del PR de producto fallaron antes de ejecutar pasos; no se cuentan como validaciones. La auditoría confirma que no se presenta un modo trial/demo, pero no sustituye la validación interactiva con cuentas reales, que no fueron creadas.
+
+## Iteración 81 — calendario de cobranza y caja (2026-11-11)
+
+La agenda de cobranza comparaba fechas con UTC aunque las fechas de seguimiento ya respetaban el calendario de la aplicación. Cerca de la medianoche del contenedor, una cuota podía aparecer en estado distinto entre el CRM, el dashboard y el mensaje de WhatsApp. Se unificó el cálculo en `America/Cancun`, que ya utilizaba el CRM y el sistema de recordatorios, y se calcula la siguiente semana sumando días calendario a una fecha ISO. Gastos, movimientos de caja y compras toman la fecha de negocio; los vencimientos de proveedores y cuotas de clientes suman días calendario sin convertir primero la fecha a UTC. Los vencimientos a crédito de proveedores se derivan de la fecha de compra y los días de crédito configurados, y se recalculan al cambiar esa fecha salvo que el usuario ajuste manualmente el vencimiento.
+
+| Tarjeta | Estado revisado | Cambio / alcance pendiente |
+| --- | --- | --- |
+| US-11 | Parcial funcional | La agenda y el mensaje de WhatsApp ahora comparten la fecha de negocio al clasificar cuotas próximas, de hoy o vencidas. Faltan validar planes, intereses y la zona horaria oficial con ArcoEnergy. |
+| US-16 | Parcial funcional | El formulario de cobranza usa la fecha de negocio para capturar pagos; las reglas de distribución multi-cuota y mora siguen pendientes. |
+| US-17 | Parcial funcional | El formulario de gastos usa la fecha de negocio. Falta validación contable de categorías y conceptos recurrentes. |
+| US-18 | Funcional básico | Los movimientos manuales de caja/banco usan la fecha de negocio; conciliación bancaria sigue pendiente. |
+| US-31 | Parcial funcional | El vencimiento sugerido de compra a crédito suma los días del proveedor a la fecha de compra, con edición manual. Sigue pendiente conciliación. |
+| US-34 | Parcial funcional | Los movimientos y avisos basados en fecha usan un calendario común configurable; faltan otros ciclos de corrección y conciliación. |
+
+La migración `202611110093` agrega revisiones append-only a las tarjetas anteriores y conserva los relatos originales. Validación local: 218 pruebas backend, 4 pruebas de fecha CRM, build CRM y 34 pruebas del contrato Factory aprobadas. El despliegue DEV queda pendiente.

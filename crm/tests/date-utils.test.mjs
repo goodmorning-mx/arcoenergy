@@ -24,3 +24,18 @@ test('follow-up days keep the selected calendar date across DST changes', () => 
   assert.equal(dateUtils.localDateInputValue(beforeDst), '2026-03-08');
   assert.equal(dateUtils.addLocalCalendarDays(beforeDst, 3), '2026-03-11');
 });
+
+test('accounting due dates add calendar days without a UTC timezone shift', () => {
+  process.env.TZ = 'America/Cancun';
+  assert.equal(dateUtils.addCalendarDaysToIsoDate('2026-11-10', 7), '2026-11-17');
+  assert.equal(dateUtils.addCalendarDaysToIsoDate('2026-12-25', 30), '2027-01-24');
+  assert.equal(dateUtils.addCalendarDaysToIsoDate('2026-03-08', 1), '2026-03-09');
+  process.env.TZ = 'Pacific/Honolulu';
+  assert.equal(dateUtils.addCalendarDaysToIsoDate('2026-11-10', 7), '2026-11-17');
+});
+
+test('accounting calendar date helper rejects malformed and impossible dates', () => {
+  assert.throws(() => dateUtils.addCalendarDaysToIsoDate('2026-2-01', 1), RangeError);
+  assert.throws(() => dateUtils.addCalendarDaysToIsoDate('2026-02-30', 1), RangeError);
+  assert.throws(() => dateUtils.addCalendarDaysToIsoDate('2026-02-01', 1.5), RangeError);
+});
