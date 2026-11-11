@@ -2903,6 +2903,61 @@ def _extract_purchase_invoice_text(content: bytes, content_type: str) -> tuple[s
     return extracted, "ocr"
 
 
+def _suggest_purchase_invoice_fields(text: str) -> dict[str, list[dict[str, str]]]:
+    """Extract reviewable invoice field candidates; these values never post accounting entries."""
+    from datetime import date
+
+    suggestions: dict[str, list[dict[str, str]]] = {
+        "supplier_rfc": [], "invoice_reference": [], "purchase_date": [], "declared_total": [],
+    }
+    seen: dict[str, set[str]] = {key: set() for key in suggestions}
+
+    def add(field: str, value: str, source: str) -> None:
+        normalized = value.strip()
+        key = normalized.casefold()
+        if normalized and key not in seen[field] and len(suggestions[field]) < 8:
+            seen[field].add(key)
+            suggestions[field].append({"value": normalized, "source": source.strip()[:240]})
+
+    date_pattern = re.compile(r"(?<!\d)(\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{4}-\d{2}-\d{2})(?!\d)")
+    amount_pattern = re.compile(r"(?<!\d)(?:\$\s*)?(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)")
+    for raw_line in text.splitlines()[:2000]:
+        line = raw_line.strip()
+        if not line:
+            continue
+        upper = line.upper()
+        for match in re.finditer(r"\b[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}\b", upper):
+            add("supplier_rfc", match.group(0), line)
+        if re.search(r"\b(folio|factura|uuid|folio fiscal|no\.?\s*(?:de\s*)?factura|serie)\b", upper, re.I):
+            candidate = re.search(r"(?:folio\s*fiscal|folio|factura|uuid|no\.?\s*(?:de\s*)?factura|serie)\s*[:#-]?\s*([A-Z0-9][A-Z0-9./_-]{2,})", line, re.I)
+            if candidate:
+                value = candidate.group(1).rstrip(".,;:")
+                if value.casefold() not in {"electronica", "electrónica", "de", "fecha"}:
+                    add("invoice_reference", value, line)
+        if re.search(r"\b(fecha|date)\b", upper, re.I) and not re.search(r"\b(vencimiento|pago|limite|l[ií]mite)\b", upper, re.I):
+            for match in date_pattern.finditer(line):
+                value = match.group(1)
+                try:
+                    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+                        parsed = date.fromisoformat(value)
+                    else:
+                        day, month, year = re.split(r"[/-]", value)
+                        parsed = date(int(year), int(month), int(day))
+                    add("purchase_date", parsed.isoformat(), line)
+                except ValueError:
+                    continue
+        if re.search(r"\b(total|importe total|total a pagar|gran total|amount due)\b", upper, re.I) and not re.search(r"\b(subtotal|impuesto|iva|traslado|retenci[oó]n|descuento)\b", upper, re.I):
+            for match in amount_pattern.finditer(line):
+                value = match.group(1).replace(",", "")
+                try:
+                    amount = float(value)
+                except ValueError:
+                    continue
+                if amount >= 0:
+                    add("declared_total", f"{amount:.2f}", line)
+    return suggestions
+
+
 @router.post("/purchases/read-invoice-document", dependencies=[Depends(require_permissions(auth_service, "purchases:write"))])
 async def read_purchase_invoice_document(request: Request):
     """Return a transient OCR/text proposal; never create a purchase or store the document."""
@@ -2936,6 +2991,7 @@ async def read_purchase_invoice_document(request: Request):
         "filename": re.sub(r"[^\w.() -]", "_", raw_name).strip(" .")[:220] or "factura",
         "extraction_method": extraction_method,
         "extracted_text": text[:40_000],
+        "suggestions": _suggest_purchase_invoice_fields(text[:40_000]),
         "review_only": True,
         "source_stored": False,
         "purchase_created": False,

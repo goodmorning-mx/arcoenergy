@@ -2,6 +2,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.product_api import _parse_purchase_cfdi_xml
+from app.product_api import _suggest_purchase_invoice_fields
 
 
 CFDI_XML = """<?xml version="1.0" encoding="UTF-8"?>
@@ -60,6 +61,23 @@ def test_cfdi_parser_enforces_size_limit() -> None:
     assert error.value.status_code == 413
 
 
+def test_invoice_document_candidates_are_reviewable_and_exclude_subtotal() -> None:
+    candidates = _suggest_purchase_invoice_fields("""Factura de proveedor
+RFC emisor: AAA010101AAA
+RFC receptor: BBB020202BBB
+Folio: AE-2026-123
+Fecha de emisión: 06/11/2026
+Subtotal: $1,000.00
+IVA: $160.00
+Total a pagar: $1,160.00 MXN""")
+
+    assert [row["value"] for row in candidates["supplier_rfc"]] == ["AAA010101AAA", "BBB020202BBB"]
+    assert [row["value"] for row in candidates["invoice_reference"]] == ["AE-2026-123"]
+    assert [row["value"] for row in candidates["purchase_date"]] == ["2026-11-06"]
+    assert [row["value"] for row in candidates["declared_total"]] == ["1160.00"]
+    assert candidates["declared_total"][0]["source"] == "Total a pagar: $1,160.00 MXN"
+
+
 def test_purchase_invoice_pdf_text_extraction_is_transient_and_review_only(monkeypatch) -> None:
     import asyncio
     from starlette.requests import Request
@@ -86,6 +104,7 @@ def test_purchase_invoice_pdf_text_extraction_is_transient_and_review_only(monke
         "filename": "factura.pdf",
         "extraction_method": "texto_pdf",
         "extracted_text": "Factura\nTotal: 123.00",
+        "suggestions": {"supplier_rfc": [], "invoice_reference": [], "purchase_date": [], "declared_total": [{"value": "123.00", "source": "Total: 123.00"}]},
         "review_only": True,
         "source_stored": False,
         "purchase_created": False,
@@ -183,6 +202,7 @@ def test_purchase_invoice_document_returns_review_only_and_does_not_store_source
         "filename": "factura.pdf",
         "extraction_method": "texto_pdf",
         "extracted_text": "Factura\nTotal: 123.00",
+        "suggestions": {"supplier_rfc": [], "invoice_reference": [], "purchase_date": [], "declared_total": [{"value": "123.00", "source": "Total: 123.00"}]},
         "review_only": True,
         "source_stored": False,
         "purchase_created": False,

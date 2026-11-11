@@ -1401,3 +1401,13 @@ US-22 ya aceptaba PDF y fotografías como fuente adjunta, pero solo el XML CFDI 
 | US-22 | Parcial funcional | CFDI estructurado, texto PDF y OCR de imagen/PDF escaneado disponibles como ayuda revisable; falta validar precisión con facturas reales y decidir qué campos pueden precargarse de forma segura. |
 
 La migración `202611110103` añade una versión append-only de US-22 y conserva su relato literal. PDFium se utiliza bajo su distribución Apache-2.0/BSD-3-Clause y queda serializado en el proceso porque su motor no es seguro ante llamadas simultáneas; Tesseract procesa imágenes con límite de tiempo. La prueba cubre extracción PDF con capa de texto, OCR simulado con idioma `spa+eng`, validación del archivo, respuesta transitoria y conservación de la fuente de la tarjeta.
+
+## Iteración 92 — candidatos estructurados de factura (2026-11-11)
+
+La transcripción PDF/OCR ahora propone candidatos de RFC, folio/UUID, fecha y total, con la línea fuente para revisión. El usuario aplica cada campo de forma explícita al formulario; un RFC solo selecciona automáticamente un proveedor cuando hay una coincidencia activa única. El total extraído sirve como referencia visual y no cambia artículos, cantidades, costos ni cuentas. Se conserva la transcripción temporal y la lectura no registra compras ni movimientos.
+
+| Tarjeta | Estado revisado | Cambio / alcance pendiente |
+| --- | --- | --- |
+| US-22 | Parcial funcional | Se pueden revisar y aplicar candidatos individuales de PDF/foto. Artículos, cantidades e importes siguen manuales; falta validar precisión con facturas reales y acordar reglas de impuestos, fletes y descuentos con contabilidad. |
+
+La migración `202611110104` agrega una revisión append-only de US-22 y conserva el literal fuente. La cobertura automatizada comprueba RFC múltiples, folio, fecha, exclusión del subtotal como total y preservación de la tarjeta original.
