@@ -1464,3 +1464,13 @@ Al iniciar sesión con una cuenta instalador y conexión, la PWA carga en segund
 | US-28 | Parcial funcional | El chunk de cámara se precarga para instaladores conectados y se almacena en la caché del service worker; manual y lector teclado siguen disponibles. Falta recorrer conexión → precarga → modo avión → lectura con teléfono/etiqueta reales. |
 
 La migración `202611110109` registra una revisión append-only de US-28. La implementación comparte bundle diferido con PR [#154](https://github.com/goodmorning-mx/arcoenergy/pull/154); esta revisión suma la precarga al iniciar sesión de instalador. Se verifica typecheck y build local, pruebas de migración y la CI de producto con build Docker/Chrome. La cámara física en modo avión sigue pendiente de validación con ArcoEnergy.
+
+## Iteración 98 — cobertura del seguimiento comercial (2026-11-11)
+
+Se cotejó US-4 con su fuente de Goito. El drawer CRM permite añadir nota a la bitácora o programar seguimiento para 3, 7, 15 y 30 días, o seleccionar una fecha libre futura; captura el comentario del cliente y la persona responsable. La agenda/lista muestra seguimientos y la ficha conserva actividad. El recordatorio push es adicional: que el dispositivo no reciba una notificación no elimina ni oculta el seguimiento guardado.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-4 | Funcional básico | Cubre presets, fecha libre, responsable, comentario y bitácora. Pruebas backend verifican creación, asignación y alcance por usuario; el CRM compila. Falta validar recepción del aviso con vendedores y dispositivos reales. |
+
+La migración `202611110110` agrega versión append-only de US-4 y conserva el texto fuente literal. La agenda, CRM y endpoints son anteriores; esta iteración registra la comprobación de criterios y añade prueba de integridad de la versión. 
