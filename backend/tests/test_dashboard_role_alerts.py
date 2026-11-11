@@ -8,26 +8,27 @@ from gm_auth.models import AuthIdentity
 from app.models import Base, Customer, FinancialAccount, Installation, InventoryItem, InventoryMovement, Quote, Receivable
 from app.product_api import dashboard
 from app.roles import ROLE_PERMISSIONS
+from app.time_utils import business_today
 
 
 def test_dashboard_returns_permission_scoped_operational_alerts() -> None:
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
     with Session(engine) as db:
+        today = business_today()
         customer = Customer(name="Cliente de prueba")
         db.add(customer); db.flush()
         db.add_all([
             InventoryItem(name="Panel solar", unit="pieza", quantity=2, minimum_quantity=3, unit_cost=4000),
             InventoryItem(name="Artículo agotado", unit="pieza", quantity=0, minimum_quantity=1),
             InventoryItem(name="Artículo disponible", unit="pieza", quantity=10, minimum_quantity=2),
-            Receivable(customer_id=customer.id, due_date=date.today(), amount=Decimal("1500"), paid_amount=Decimal("500"), status="pending"),
-            Receivable(customer_id=customer.id, due_date=date.today() - timedelta(days=1), amount=Decimal("200"), paid_amount=Decimal("0"), status="overdue"),
+            Receivable(customer_id=customer.id, due_date=today, amount=Decimal("1500"), paid_amount=Decimal("500"), status="pending"),
+            Receivable(customer_id=customer.id, due_date=today - timedelta(days=1), amount=Decimal("200"), paid_amount=Decimal("0"), status="overdue"),
             FinancialAccount(name="Caja", account_type="cash", opening_balance=Decimal("300")),
             Installation(customer_id=customer.id, status="assigned"),
             Quote(folio="AE-Q-1", customer_id=customer.id, panel_count=8, panel_subtotal=10000, structure_cost=2000,
                   inverter_cost=3000, total=15000, status="draft", pricing_approved=False),
         ])
-        today = datetime.now(timezone.utc).date()
         movement_time = datetime.combine(today - timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc)
         db.add_all([
             InventoryMovement(item_id="solar", quantity=2, movement_type="purchase", created_at=movement_time),

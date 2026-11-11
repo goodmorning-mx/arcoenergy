@@ -52,9 +52,16 @@ def upgrade() -> None:
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
             sa.UniqueConstraint("endpoint", name="uq_ae_push_subscriptions_endpoint"),
         )
-    indexes = {index["name"] for index in sa.inspect(bind).get_indexes("ae_push_subscriptions")}
-    if "ix_ae_push_subscriptions_installer_email" not in indexes:
+    inspector = sa.inspect(bind)
+    columns = {column["name"] for column in inspector.get_columns("ae_push_subscriptions")}
+    indexes = {index["name"] for index in inspector.get_indexes("ae_push_subscriptions")}
+    # The initial domain revision creates tables from current ORM metadata. On
+    # a fresh database that means this table may already use the newer
+    # user_email column, before this historical installer_email revision runs.
+    if "installer_email" in columns and "ix_ae_push_subscriptions_installer_email" not in indexes:
         op.create_index("ix_ae_push_subscriptions_installer_email", "ae_push_subscriptions", ["installer_email"])
+    elif "user_email" in columns and "ix_ae_push_subscriptions_user_email" not in indexes:
+        op.create_index("ix_ae_push_subscriptions_user_email", "ae_push_subscriptions", ["user_email"])
 
     history = sa.Table("ae_history_cards", sa.MetaData(), autoload_with=bind)
     for story_id, (criteria, questions) in REVISIONS.items():
