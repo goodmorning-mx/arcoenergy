@@ -25,6 +25,7 @@ type CashMovement = { id: string; account_id: string; direction: 'in' | 'out'; a
 type Supplier = { id: string; name: string; rfc: string; phone: string; email: string; payment_terms: 'cash' | 'credit'; credit_days: number; active: boolean; current_balance: number };
 type Purchase = { id: string; folio: string; supplier_id: string; supplier?: { id: string; name: string }; invoice_number: string; invoice_available?: boolean; invoice_filename?: string; invoice_content_type?: string; payment_terms: 'cash' | 'credit'; purchase_date: string; due_date: string | null; total: number; paid_amount: number; balance: number; status: string; can_reverse?: boolean; correction?: { reason: string } | null; payments?: Array<{ id: string; amount: number; paid_on: string; reference: string; is_reversal: boolean; can_reverse: boolean }>; lines: Array<{ id: string; item_name: string; quantity: number; unit_cost: number; line_total: number }> };
 type CfdiProposal = { invoice_reference:string; purchase_date:string; supplier_rfc:string; supplier_name:string; declared_subtotal:number; global_discount:number; declared_total:number; requires_accounting_review:boolean; concepts:Array<{identifier:string;product_service_key:string;description:string;quantity:number;unit:string;net_line_amount:number;unit_cost_before_global_adjustments:number}> };
+type InvoiceTextProposal = { filename:string; extraction_method:'texto_pdf'|'ocr'; extracted_text:string; review_only:true; source_stored:false; purchase_created:false };
 type Receivable = { id: string; customer_id: string; customer?: Customer; quote_id: string | null; due_date: string; amount: number; paid_amount: number; balance: number; installment_number: number; payment_method: string; status: 'pending' | 'partial' | 'overdue' | 'paid'; payments?: Array<{ id: string; amount: number; paid_on: string; reference: string; account_name: string; is_reversal: boolean; can_reverse: boolean }> };
 type Installer = { email: string; name: string };
 type Sale = { id: string; folio: string; customer_id: string; customer?: Customer; quote_id: string; quote?: { id: string; folio: string; payment_method: string }; installation_id: string; installation?: Installation; sale_type: 'cash' | 'credit'; total: number; receivable?: { due_date: string; amount: number; paid_amount: number } | null; receivables?: Array<{ installment_number: number; due_date: string; amount: number }>; installment_count?: number; materials: Array<{ id: string; item_name: string; quantity: number }>; created_at: string; can_reverse?: boolean; correction?: { reason: string; created_at: string; amount: number } | null };
@@ -720,6 +721,7 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [purchaseDate, setPurchaseDate] = useState(today);
   const [cfdiProposal, setCfdiProposal] = useState<CfdiProposal|null>(null);
+  const [invoiceTextProposal, setInvoiceTextProposal] = useState<InvoiceTextProposal|null>(null);
   const [cfdiBusy, setCfdiBusy] = useState(false);
   const [cfdiError, setCfdiError] = useState('');
   const [invoiceFile, setInvoiceFile] = useState<File|null>(null);
@@ -781,7 +783,7 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
         }
       }
       onItems([purchase, ...items]); form.reset(); setLines([{ item_id: '', quantity: '1', unit_cost: '' }]);
-      setSupplierId(''); setTerms('cash'); setDueDate(''); setDueDateManuallyEdited(false); setInitialPayment('0'); setInvoiceNumber(''); setPurchaseDate(today); setCfdiProposal(null); setCfdiError(''); setInvoiceFile(null);
+      setSupplierId(''); setTerms('cash'); setDueDate(''); setDueDateManuallyEdited(false); setInitialPayment('0'); setInvoiceNumber(''); setPurchaseDate(today); setCfdiProposal(null); setInvoiceTextProposal(null); setCfdiError(''); setInvoiceFile(null);
       const [, supplierRows, accountRows, inventoryRows] = await Promise.all([
         request<Purchase[]>('/purchases', token).then(onItems), request<Supplier[]>('/suppliers', token),
         request<FinancialAccount[]>('/accounts', token), request<InventoryItem[]>('/inventory', token),
@@ -836,7 +838,7 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    setCfdiError(''); setInvoiceFile(null); setCfdiBusy(true);
+    setCfdiError(''); setInvoiceTextProposal(null); setInvoiceFile(null); setCfdiBusy(true);
     try {
       if (!file.name.toLowerCase().endsWith('.xml')) throw new Error('Selecciona el XML CFDI de la factura.');
       if (file.size > 2 * 1024 * 1024) throw new Error('El archivo XML debe ser menor a 2 MiB.');
@@ -860,14 +862,37 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
 
   function chooseInvoiceDocument(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    if (!file) { setInvoiceFile(null); return; }
+    if (!file) { setInvoiceFile(null); setCfdiProposal(null); setInvoiceTextProposal(null); setCfdiError(''); return; }
+    setInvoiceFile(null); setCfdiProposal(null); setInvoiceTextProposal(null); setCfdiError('');
     const extension = file.name.toLowerCase().split('.').pop() || '';
     if (extension === 'xml') { void importCfdi(event); return; }
     const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(file.type)
       || ['pdf', 'jpg', 'jpeg', 'png', 'webp'].includes(extension);
     if (!allowed) { setCfdiError('Adjunta un XML CFDI, PDF, JPG, PNG o WebP.'); event.target.value = ''; return; }
     if (file.size > 12 * 1024 * 1024) { setCfdiError('PDF y fotografías deben pesar 12 MB o menos.'); event.target.value = ''; return; }
-    setCfdiError(''); setCfdiProposal(null); setInvoiceFile(file);
+    setCfdiError(''); setCfdiProposal(null); setInvoiceTextProposal(null); setInvoiceFile(file);
+  }
+
+  async function readInvoiceDocument() {
+    if (!invoiceFile) return;
+    setCfdiBusy(true); setCfdiError(''); setInvoiceTextProposal(null);
+    try {
+      const extension = invoiceFile.name.toLowerCase().split('.').pop() || '';
+      const contentType = invoiceFile.type || ({ pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' } as Record<string, string>)[extension];
+      if (!contentType) throw new Error('No se pudo identificar el tipo de factura.');
+      const response = await fetch(`${apiBase}/purchases/read-invoice-document`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': contentType, 'X-Document-Name': invoiceFile.name },
+        body: invoiceFile,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.detail || 'No se pudo leer el documento.');
+      const proposal = payload as InvoiceTextProposal;
+      setInvoiceTextProposal(proposal);
+      announce(proposal.extraction_method === 'ocr' ? 'OCR listo para revisión; valida manualmente cada dato.' : 'Texto de factura listo para revisión.');
+    } catch (error) {
+      setCfdiError(error instanceof Error ? error.message : 'No se pudo leer el documento.');
+    } finally { setCfdiBusy(false); }
   }
 
   async function downloadInvoice(purchase: Purchase) {
@@ -884,7 +909,7 @@ function PurchasesView({ items, suppliers, inventory, accounts, canWrite, token,
   return <>
     {canWrite && <section className="surface-card table-surface purchase-entry"><div className="section-title"><div><span className="eyebrow">ENTRADA DE ALMACÉN + CUENTAS POR PAGAR</span><h2>Registrar compra de materiales</h2></div></div>
       <form className="form-grid" onSubmit={submitPurchase}>
-        <div className="cfdi-import span-two"><label className="field"><span>Factura fuente · XML CFDI, PDF o foto</span><input type="file" accept=".xml,.pdf,application/xml,text/xml,application/pdf,image/jpeg,image/png,image/webp" onChange={chooseInvoiceDocument} disabled={cfdiBusy}/></label><small>El XML precarga datos para revisión. PDF o foto requieren captura manual de proveedor, artículos, cantidades e importes. Al registrar se intentará archivar el archivo en Drive si está conectado.</small>{invoiceFile&&<small>Archivo adjunto a esta compra: {invoiceFile.name}</small>}{cfdiBusy&&<p role="status">Leyendo factura…</p>}{cfdiError&&<p className="error-message" role="alert">{cfdiError}</p>}{cfdiProposal&&<div className="cfdi-review"><div><b>CFDI leído · revisión requerida</b><button type="button" className="text-button" onClick={()=>{setCfdiProposal(null);setCfdiError('');}}>Quitar precarga</button></div><p>{cfdiProposal.supplier_name||'Proveedor sin nombre'} · RFC {cfdiProposal.supplier_rfc} · {cfdiProposal.invoice_reference} · {cfdiProposal.purchase_date}</p><p>Subtotal declarado {money(Number(cfdiProposal.declared_subtotal))} · Descuento global {money(Number(cfdiProposal.global_discount))} · Total factura {money(Number(cfdiProposal.declared_total))}</p><p>{lines.filter(line=>line.item_id).length}/{lines.length} conceptos relacionados a artículos. Importe de compra revisado: {money(total)}.</p>{(!cfdiSupplierMatches||!cfdiLinesMapped||!cfdiTotalMatches)&&<p className="cfdi-warning">No se puede registrar esta precarga hasta relacionar cada artículo, seleccionar el proveedor con RFC coincidente y hacer coincidir el total. Impuestos, descuentos globales y fletes no se distribuyen automáticamente; ajusta los costos con la regla del contador o quita la precarga para capturarla manualmente.</p>}{cfdiProposal.requires_accounting_review&&<p className="cfdi-warning">El total incluye diferencia contra el subtotal neto de conceptos. Revisa tratamiento de impuestos/ajustes antes de confirmar.</p>}</div>}</div>
+        <div className="cfdi-import span-two"><label className="field"><span>Factura fuente · XML CFDI, PDF o foto</span><input type="file" accept=".xml,.pdf,application/xml,text/xml,application/pdf,image/jpeg,image/png,image/webp" onChange={chooseInvoiceDocument} disabled={cfdiBusy}/></label><small>El XML CFDI puede precargar conceptos. PDF y fotos pueden leerse para mostrar texto OCR como ayuda; valida cada dato y captura manualmente proveedor, artículos, cantidades e importes. Nada se registra hasta confirmar la compra.</small>{invoiceFile&&<small>Archivo adjunto a esta compra: {invoiceFile.name}</small>}{invoiceFile&&!cfdiProposal&&<button type="button" className="button button-small button-outline" onClick={()=>void readInvoiceDocument()} disabled={cfdiBusy}>{cfdiBusy?'Leyendo factura…':'Leer PDF o foto'}</button>}{cfdiBusy&&<p role="status">Procesando factura en memoria…</p>}{cfdiError&&<p className="error-message" role="alert">{cfdiError}</p>}{invoiceTextProposal&&<div className="cfdi-review"><div><b>{invoiceTextProposal.extraction_method==='ocr'?'Texto detectado por OCR':'Texto extraído del PDF'} · revisión manual</b><button type="button" className="text-button" onClick={()=>void navigator.clipboard.writeText(invoiceTextProposal.extracted_text).then(()=>announce('Texto copiado para la captura.')).catch(()=>announce('El navegador no permitió copiar el texto.','error'))}>Copiar texto</button></div><p>El archivo se leyó en memoria y no se guardó desde esta acción. Esta lectura no crea una compra ni altera el inventario.</p><pre className="invoice-ocr-preview">{invoiceTextProposal.extracted_text}</pre></div>}{cfdiProposal&&<div className="cfdi-review"><div><b>CFDI leído · revisión requerida</b><button type="button" className="text-button" onClick={()=>{setCfdiProposal(null);setCfdiError('');}}>Quitar precarga</button></div><p>{cfdiProposal.supplier_name||'Proveedor sin nombre'} · RFC {cfdiProposal.supplier_rfc} · {cfdiProposal.invoice_reference} · {cfdiProposal.purchase_date}</p><p>Subtotal declarado {money(Number(cfdiProposal.declared_subtotal))} · Descuento global {money(Number(cfdiProposal.global_discount))} · Total factura {money(Number(cfdiProposal.declared_total))}</p><p>{lines.filter(line=>line.item_id).length}/{lines.length} conceptos relacionados a artículos. Importe de compra revisado: {money(total)}.</p>{(!cfdiSupplierMatches||!cfdiLinesMapped||!cfdiTotalMatches)&&<p className="cfdi-warning">No se puede registrar esta precarga hasta relacionar cada artículo, seleccionar el proveedor con RFC coincidente y hacer coincidir el total. Impuestos, descuentos globales y fletes no se distribuyen automáticamente; ajusta los costos con la regla del contador o quita la precarga para capturarla manualmente.</p>}{cfdiProposal.requires_accounting_review&&<p className="cfdi-warning">El total incluye diferencia contra el subtotal neto de conceptos. Revisa tratamiento de impuestos/ajustes antes de confirmar.</p>}</div>}</div>
         <label className="field span-two"><span>Proveedor</span><select value={supplierId} onChange={event => { const value = event.target.value; setSupplierId(value); setDueDateManuallyEdited(false); const selected = suppliers.find(row => row.id === value); setTerms(selected?.payment_terms || 'cash'); setInitialPayment(selected?.payment_terms === 'cash' ? String(total) : '0'); }} required><option value="">Selecciona proveedor</option>{suppliers.filter(item => item.active).map(item => <option key={item.id} value={item.id}>{item.name} · {item.payment_terms === 'credit' ? `Crédito ${item.credit_days} días` : 'Contado'}</option>)}</select>{!suppliers.length && <small className="muted-copy">Registra primero un proveedor en el apartado Proveedores.</small>}</label>
         <Field label="Factura / referencia" name="invoice_number" value={invoiceNumber} onChange={setInvoiceNumber} placeholder="Folio de factura"/><Field label="Fecha de compra" name="purchase_date" type="date" value={purchaseDate} onChange={value => { setPurchaseDate(value); setDueDateManuallyEdited(false); }} required/>
         <label className="field"><span>Forma acordada</span><select value={terms} onChange={event => { const value = event.target.value as 'cash' | 'credit'; setTerms(value); setDueDateManuallyEdited(false); setInitialPayment(value === 'cash' ? String(total) : '0'); }}><option value="cash">Contado</option><option value="credit" disabled={!supplier?.credit_days}>Crédito</option></select></label>

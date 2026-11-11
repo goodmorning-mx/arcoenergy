@@ -13,3 +13,5 @@ gm-agent @ git+https://github.com/goodmorning-mx/gm-agent.git@06500d8c935ea2cbe5
 reportlab==4.4.4
 google-auth[requests]==2.62.1
 pywebpush==2.5.0
+pytesseract==0.3.13
+pypdfium2==5.14.0

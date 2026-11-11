@@ -86,6 +86,33 @@ jobs:
       - run: docker build --tag goodmorning-mvp-template-gateway:ci ./gateway
       - run: docker build --tag goodmorning-mvp-template-seo:ci ./seo
       - run: docker compose --profile hybrid up --build --wait
+      - name: Verify real invoice OCR in the backend container
+        run: |
+          docker compose exec -T backend python - <<'PY'
+          from io import BytesIO
+          from PIL import Image, ImageDraw, ImageFont
+          from reportlab.pdfgen import canvas
+          from reportlab.lib.utils import ImageReader
+          from app.product_api import _extract_purchase_invoice_text
+
+          image = Image.new('RGB', (1600, 600), 'white')
+          draw = ImageDraw.Draw(image)
+          font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 72)
+          for index, line in enumerate(['FACTURA DE PRUEBA', 'ARCO ENERGY SA DE CV', 'TOTAL MXN 1250.00']):
+              draw.text((60, 60 + index * 160), line, font=font, fill='black')
+          photo = BytesIO()
+          image.save(photo, format='JPEG', quality=92)
+          photo_text, photo_method = _extract_purchase_invoice_text(photo.getvalue(), 'image/jpeg')
+          pdf_bytes = BytesIO()
+          pdf = canvas.Canvas(pdf_bytes, pagesize=(612, 792))
+          pdf.drawImage(ImageReader(image), 24, 330, width=564, height=211)
+          pdf.save()
+          scan_text, scan_method = _extract_purchase_invoice_text(pdf_bytes.getvalue(), 'application/pdf')
+          assert photo_method == scan_method == 'ocr'
+          for detected in (photo_text, scan_text):
+              assert 'FACTURA DE PRUEBA' in detected
+              assert '1250.00' in detected
+          PY
       - run: curl --fail http://127.0.0.1:18081/api/health
       - run: curl --fail http://127.0.0.1:18081/api/version | grep -F '"commit_sha":"unknown"'
       - run: curl --fail http://127.0.0.1:18081/ | grep -F 'ArcoEnergy'

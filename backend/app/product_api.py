@@ -7,6 +7,7 @@ import hashlib
 import json
 from io import BytesIO
 import re
+from threading import Lock
 from typing import Literal
 from urllib.parse import quote as urlquote, unquote
 from uuid import uuid4
@@ -14,6 +15,7 @@ import xml.etree.ElementTree as ET
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import IntegrityError
@@ -39,6 +41,7 @@ settings = get_settings()
 engine = create_database_engine()
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 router = APIRouter(prefix="/v1", tags=["arcoenergy"])
+_pdfium_lock = Lock()
 _agent_services: dict[str, AgentService] = {}
 _agent_conversations: dict[tuple[str, str], Conversation] = {}
 
@@ -2837,6 +2840,106 @@ _PURCHASE_INVOICE_TYPES = {
     "image/webp": (".webp", b"RIFF"),
 }
 _PURCHASE_INVOICE_MAX_BYTES = 12 * 1024 * 1024
+
+
+def _extract_purchase_invoice_text(content: bytes, content_type: str) -> tuple[str, str]:
+    """Extract invoice text for review without persisting the uploaded source."""
+    import pypdfium2 as pdfium
+    import pytesseract
+    from PIL import Image, ImageOps
+
+    if content_type == "application/pdf":
+        try:
+            with _pdfium_lock:
+                document = pdfium.PdfDocument(content)
+                if len(document) > 20:
+                    document.close()
+                    raise HTTPException(413, "La lectura admite hasta 20 páginas por factura.")
+                searchable = "\n".join(document[index].get_textpage().get_text_range() for index in range(len(document)))
+                if len(searchable.strip()) >= 40:
+                    document.close()
+                    return searchable.strip(), "texto_pdf"
+                if len(document) > 8:
+                    document.close()
+                    raise HTTPException(413, "El OCR admite hasta 8 páginas escaneadas por factura.")
+                images = []
+                for index in range(len(document)):
+                    page = document[index]
+                    width, height = page.get_size()
+                    scale = min(2.0, (2_000_000 / max(width * height, 1.0)) ** 0.5)
+                    images.append(page.render(scale=scale).to_pil().copy())
+                document.close()
+        except Exception as exc:
+            if isinstance(exc, HTTPException):
+                raise
+            raise HTTPException(422, "No se pudo abrir el PDF de la factura.") from exc
+    else:
+        try:
+            image = Image.open(BytesIO(content))
+        except Exception as exc:
+            raise HTTPException(422, "No se pudo abrir la fotografía de la factura.") from exc
+        if image.width * image.height > 20_000_000:
+            raise HTTPException(413, "La imagen de la factura excede 20 megapíxeles.")
+        try:
+            image = ImageOps.exif_transpose(image)
+            image.load()
+        except Exception as exc:
+            raise HTTPException(422, "No se pudo decodificar la fotografía de la factura.") from exc
+        images = iter((image,))
+
+    try:
+        extracted = "\n\n".join(
+            pytesseract.image_to_string(image.convert("RGB"), lang="spa+eng", config="--psm 6", timeout=12).strip()
+            for image in images
+        ).strip()
+    except pytesseract.TesseractNotFoundError as exc:
+        raise HTTPException(503, "El servicio OCR no está disponible temporalmente.") from exc
+    except pytesseract.TesseractError as exc:
+        raise HTTPException(503, "No está disponible el idioma requerido para OCR.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(504, "La lectura OCR excedió el tiempo permitido.") from exc
+    if not extracted:
+        raise HTTPException(422, "No se detectó texto legible. Captura los datos manualmente y adjunta el archivo.")
+    return extracted, "ocr"
+
+
+@router.post("/purchases/read-invoice-document", dependencies=[Depends(require_permissions(auth_service, "purchases:write"))])
+async def read_purchase_invoice_document(request: Request):
+    """Return a transient OCR/text proposal; never create a purchase or store the document."""
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    formats = {
+        "application/pdf": (".pdf", b"%PDF-"),
+        "image/jpeg": (".jpg", b"\xff\xd8\xff"),
+        "image/png": (".png", b"\x89PNG\r\n\x1a\n"),
+        "image/webp": (".webp", b"RIFF"),
+    }
+    expected = formats.get(content_type)
+    if expected is None:
+        raise HTTPException(415, "Selecciona un PDF o fotografía JPG, PNG o WebP.")
+    try:
+        declared_length = int(request.headers.get("content-length", "0"))
+    except ValueError:
+        raise HTTPException(400, "Tamaño de archivo no válido.") from None
+    if declared_length > _PURCHASE_INVOICE_MAX_BYTES:
+        raise HTTPException(413, "La factura debe pesar 12 MB o menos.")
+    content = bytearray()
+    async for chunk in request.stream():
+        if len(content) + len(chunk) > _PURCHASE_INVOICE_MAX_BYTES:
+            raise HTTPException(413, "La factura debe pesar 12 MB o menos.")
+        content.extend(chunk)
+    raw = bytes(content)
+    if not raw or not raw.startswith(expected[1]) or (content_type == "image/webp" and raw[8:12] != b"WEBP"):
+        raise HTTPException(415, "El contenido del archivo no coincide con su formato.")
+    text, extraction_method = await run_in_threadpool(_extract_purchase_invoice_text, raw, content_type)
+    raw_name = unquote(request.headers.get("x-document-name", "factura")).replace("\\", "/").split("/")[-1]
+    return {
+        "filename": re.sub(r"[^\w.() -]", "_", raw_name).strip(" .")[:220] or "factura",
+        "extraction_method": extraction_method,
+        "extracted_text": text[:40_000],
+        "review_only": True,
+        "source_stored": False,
+        "purchase_created": False,
+    }
 
 
 @router.put("/purchases/{purchase_id}/invoice-file")
