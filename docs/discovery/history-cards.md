@@ -1336,3 +1336,13 @@ Se amplía US-14 para comprobar el comportamiento de membresía vigente de los c
 | US-14 | Parcial funcional | Las cinco matrices de permisos y la conexión de cada endpoint privado con un guard están automatizadas. Falta que responsables del negocio revisen el alcance funcional con cuentas reales, especialmente los datos visibles y asignaciones por proyecto. |
 
 La migración `202611110097` registra esta revisión append-only en US-14 sin alterar el relato fuente.
+
+## Iteración 86 — auditoría desplegada de rutas privadas (2026-11-11)
+
+Con los repositorios habilitados para CI público, la comprobación se repitió contra DEV ya desplegado: las 35 rutas GET privadas publicadas por OpenAPI respondieron HTTP 401 sin sesión. La API reporta `ready`, commit `dcf384f0ad8dc09f7b2007da14685c2be6672663` y esquema `202611110097`; los manifiestos de versión de PWA y CRM reportan el mismo commit. `/`, `/app/login/`, `/crm/login/` y `/crm/` respondieron HTTP 200, y Chrome renderizó los formularios de `/app/login`, `/crm/login` y `/login`.
+
+| Tarjeta | Estado revisado | Cambio / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | Las 35 rutas privadas de lectura se verificaron anónimamente en el despliegue. Quedan pendientes las pruebas de acceso por entidad/campo y la validación con cuentas reales de los cinco roles. |
+
+La migración `202611110098` añade esta revisión append-only y conserva el relato original. El producto se integró mediante el PR [#141](https://github.com/goodmorning-mx/arcoenergy/pull/141); Factory actualizó el esquema esperado en el PR [#444](https://github.com/goodmorning-mx/goodmorning-factory/pull/444). La reconciliación [#42942363132](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42942363132) completó despliegue, revisión del esquema vivo y respaldo externo verificado. La CI del producto pasó en [#42941951969](https://github.com/goodmorning-mx/arcoenergy/actions/runs/42941951969); la comprobación Factory pasó en [#42942232535](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42942232535). El smoke test actual también confirmó en Chrome los tres formularios de login. No se crearon cuentas ni se cambiaron secretos.
