@@ -33,3 +33,23 @@ La solicitud se revisó en el Word “COMENTARIOS Y MEJORAS PARA EL SISTEMA DE A
 ## Validación visual de las fuentes
 
 El PDF fuente tiene cuatro páginas; se revisaron visualmente sus páginas, incluido el menú/dashboard de referencia en la primera página, y se cotejó el texto con la transcripción del Word. La imagen muestra Dashboard, Inventario, Entradas, Salidas, Kardex, Escáner, Reportes, Proveedores, Proyectos, Usuarios y Configuración. La solicitud escrita detalla diez apartados funcionales; no especifica comportamiento de Usuarios ni Configuración.
+
+## Revisión actual de DEV — 2026-11-11
+
+La API DEV informa commit `b5740b6232445af2d066e5e4a5e54b12a3251049` y esquema `202611110124`. Web, PWA, CRM y `/health` responden HTTP 200. El menú del CRM en el código de esa release expone Inicio, Clientes, Cotizaciones, Seguimientos, Ventas, Instalaciones, Inventario, Compras, Proveedores, Gastos, Cuentas, Reportes, Proyectos, Catálogo, Historial y Equipo. Esta evidencia confirma rutas/recursos publicados; no sustituye una revisión visual de navegador ni una comparación con la instancia viva de César.
+
+| Sección visible en la referencia Base44 | Sección actual en CRM/PWA | Comparación y brecha concreta |
+| --- | --- | --- |
+| Dashboard | CRM: Inicio y Reportes | Tarjetas y alertas de operación, más métricas por permiso. Los indicadores/umbrales requieren validación administrativa y contable. |
+| Inventario | CRM: Inventario; PWA: Inventario | Catálogo descriptivo, disponibilidad/reservas, mínimos, responsable de reabasto y etiqueta QR imprimible. Confirmar unidades, etiquetas y existencias con almacén. |
+| Entradas | CRM: Compras | Compra multirrenglón, proveedor, factura/XML revisable, pago/crédito y actualización de existencias/cuentas. Faltan reglas de impuestos/fletes/descuentos y Drive autorizado. |
+| Salidas | CRM: Instalaciones; PWA: Material/gasto | Orden de trabajo con solicitud, reserva/salida física, consumo y devolución enlazados. Falta validar el circuito físico y aprobar excepciones contables. |
+| Kardex | CRM: Inventario → Historial de almacén | Filtro por artículo/fecha, paginación y CSV completo; costos según permiso. El rendimiento y costos históricos requieren datos reales. |
+| Escáner | PWA: Inventario; CRM: etiqueta/código | Cámara, captura manual y lector tipo teclado tienen fallback. Falta probar cámara, etiqueta y modo avión en teléfonos reales. |
+| Reportes | CRM: Reportes y Cuentas | Reporte operativo, caja/cartera, almacén, gastos y resultado preliminar por periodo/proyecto. No equivale a estados financieros aprobados. |
+| Proveedores | CRM: Proveedores y Compras | Proveedor, términos, plazo, saldos por pagar y pagos trazables. Aún faltan conciliación y políticas contables de documentos/costos. |
+| Proyectos | CRM: Proyectos e Instalaciones | Entidad de proyecto con código y órdenes/gastos asociados. Falta que administración confirme el formato y cardinalidad comercial. |
+| Usuarios | CRM: Equipo | Roles y permisos por endpoint operativos; faltan cuentas autorizadas de todo el personal y validación del alcance con cada rol. |
+| Configuración | Catálogo, Equipo, Cuentas y configuración organizacional | Funciones repartidas por área; no hay una sección única de configuración como la referencia. Confirmar si hace falta para el cliente. |
+
+La comparación se limita al menú y las secciones visibles en la captura del PDF y a las funciones expresadas en el Word. No afirma paridad con pantallas que no aparecen en la referencia ni con la instancia privada de César. Para completar la comparación visual y de comportamiento se necesita acceso al sistema actual o capturas navegables de sus secciones.

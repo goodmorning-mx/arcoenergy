@@ -1631,3 +1631,14 @@ Se cotejaron criterios fuente y pruebas actuales para catálogo, salida/consumo,
 | US-27 | Funcional básico | CRM filtra kardex por artículo/fecha, pagina resultados y descarga el intervalo completo; los costos solo aparecen/exportan con permiso. Falta validar volumen real y costo histórico incompleto. |
 
 La migración `202611110124` agrega versiones append-only para US-20, US-24, US-26 y US-27; conserva cada relato fuente y sus versiones anteriores.
+
+
+## Iteración 113 — comparación actual de portales para US-37 (2026-11-11)
+
+Se actualizó la matriz de las secciones visibles en el Word/PDF del contador frente a las pantallas actuales de CRM y PWA. La referencia incluye Dashboard, Inventario, Entradas, Salidas, Kardex, Escáner, Reportes, Proveedores, Proyectos, Usuarios y Configuración. La revisión de DEV registra commit `b5740b6232445af2d066e5e4a5e54b12a3251049`, esquema `202611110124` y HTTP 200 para API, web, CRM y PWA. La matriz separa las funciones implementadas de las brechas y no infiere pantallas que no estén en la fuente.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-37 | Parcial funcional | La matriz coteja cada sección visible de la fuente con CRM/PWA y registra la versión viva de DEV. Falta comparar visual y funcionalmente con el sistema actual de César; no se pudo hacer la inspección visual del portal en este entorno y Administración debe confirmar si necesita una pantalla única de Configuración. |
+
+La migración `202611110125` agrega una versión append-only de US-37, conservando el relato fuente y las versiones previas.
