@@ -3381,6 +3381,7 @@ def _profitability_adjustment_result(row: ProfitabilityAdjustment, db: Session) 
 def list_profitability_adjustments(
     month: str | None = None,
     installation_id: str | None = None,
+    project_id: str | None = None,
     db: Session = Depends(get_db),
 ):
     query = select(ProfitabilityAdjustment).order_by(ProfitabilityAdjustment.occurred_on.desc(), ProfitabilityAdjustment.created_at.desc())
@@ -3394,6 +3395,12 @@ def list_profitability_adjustments(
         query = query.where(ProfitabilityAdjustment.occurred_on >= start, ProfitabilityAdjustment.occurred_on < end)
     if installation_id:
         query = query.where(ProfitabilityAdjustment.installation_id == installation_id)
+    if project_id:
+        if db.get(Project, project_id) is None:
+            raise HTTPException(404, "Proyecto no encontrado.")
+        query = query.join(Installation, Installation.id == ProfitabilityAdjustment.installation_id).where(
+            Installation.project_id == project_id,
+        )
     return [_profitability_adjustment_result(row, db) for row in db.scalars(query).all()]
 
 

@@ -6,8 +6,8 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from app.models import Base, CashMovement, Customer, Installation, InventoryMovement, ProfitabilityAdjustment, ProjectExpense, Quote, Sale
-from app.product_api import PaymentCorrectionInput, profitability_report, reverse_profitability_adjustment
+from app.models import Base, CashMovement, Customer, Installation, InventoryMovement, ProfitabilityAdjustment, Project, ProjectExpense, Quote, Sale
+from app.product_api import PaymentCorrectionInput, list_profitability_adjustments, profitability_report, reverse_profitability_adjustment
 
 
 def test_monthly_project_report_uses_sales_consumption_events_and_project_expenses() -> None:
@@ -78,3 +78,34 @@ def test_report_validates_month_and_does_not_treat_missing_material_cost_as_zero
     assert report["totals"]["missing_cost_movements"] == 1
     assert report["totals"]["materials_cost"] is None
     assert report["totals"]["preliminary_result"] is None
+
+
+def test_project_report_and_adjustment_agenda_filter_by_project_across_work_orders() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with Session(engine) as db:
+        customer = Customer(name="Cliente proyecto", city="Tampico")
+        other_customer = Customer(name="Otro cliente", city="Altamira")
+        db.add_all([customer, other_customer]); db.flush()
+        project = Project(code="AE-P-TEST-1", customer_id=customer.id, name="Proyecto multiorden")
+        other_project = Project(code="AE-P-TEST-2", customer_id=other_customer.id, name="Otro proyecto")
+        db.add_all([project, other_project]); db.flush()
+        first_order = Installation(customer_id=customer.id, project_id=project.id, folio="AE-OT-P-1")
+        second_order = Installation(customer_id=customer.id, project_id=project.id, folio="AE-OT-P-2")
+        other_order = Installation(customer_id=other_customer.id, project_id=other_project.id, folio="AE-OT-P-3")
+        db.add_all([first_order, second_order, other_order]); db.flush()
+        db.add_all([
+            ProfitabilityAdjustment(installation_id=first_order.id, adjustment_type="return", description="Ajuste uno", amount=100, occurred_on=date(2026, 11, 2)),
+            ProfitabilityAdjustment(installation_id=second_order.id, adjustment_type="bonification", description="Ajuste dos", amount=200, occurred_on=date(2026, 11, 3)),
+            ProfitabilityAdjustment(installation_id=other_order.id, adjustment_type="return", description="Otro proyecto", amount=900, occurred_on=date(2026, 11, 3)),
+        ])
+        db.commit()
+
+        report = profitability_report(month="2026-11", project_id=project.id, db=db)
+        adjustments = list_profitability_adjustments(month="2026-11", project_id=project.id, db=db)
+
+    assert len(report["rows"]) == 1
+    assert report["rows"][0]["project_id"] == project.id
+    assert report["totals"]["returns_and_bonifications"] == Decimal("300.00")
+    assert len(adjustments) == 2
+    assert {row["description"] for row in adjustments} == {"Ajuste uno", "Ajuste dos"}
