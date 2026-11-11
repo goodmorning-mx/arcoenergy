@@ -1528,3 +1528,13 @@ También se revisaron US-5 y US-6 contra el requisito original. No hay plantilla
 | US-6 | Bloqueada por decisión legal y proveedor | Requiere confirmar validez, consentimiento, proveedor de firma/verificación y manejo de excepción física. |
 
 La migración `202611110115` añade versiones append-only para US-5, US-6 y US-19 sin alterar las fuentes originales. Las pruebas existentes de dashboard/API y la prueba nueva de migración validan criterios y conservación del texto literal.
+
+## Iteración 104 — compras, saldos y pagos a proveedores (2026-11-11)
+
+Se verificó US-31 en el flujo de compras CRM/API. Una compra a crédito guarda su proveedor, suma material al inventario y crea el saldo pendiente. Al pagar, el usuario elige fecha, importe y cuenta; el pago queda ligado a la compra y reduce la cuenta por pagar y el saldo de caja/banco. Los pagos parciales y las correcciones append-only conservan el historial.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-31 | Funcional básico | Las pruebas cubren compra a crédito, deuda con proveedor, pagos iniciales/parciales, saldos de cuenta y reversa trazable. La conciliación contra estados bancarios requiere reglas del contador. |
+
+La migración `202611110116` añade la revisión 2 de US-31 sin reescribir el texto fuente. La prueba de historia verifica la preservación del literal; `test_purchases_payables.py` cubre la lógica contable operativa.
