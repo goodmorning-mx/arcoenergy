@@ -1474,3 +1474,13 @@ Se cotejó US-4 con su fuente de Goito. El drawer CRM permite añadir nota a la 
 | US-4 | Funcional básico | Cubre presets, fecha libre, responsable, comentario y bitácora. Pruebas backend verifican creación, asignación y alcance por usuario; el CRM compila. Falta validar recepción del aviso con vendedores y dispositivos reales. |
 
 La migración `202611110110` agrega versión append-only de US-4 y conserva el texto fuente literal. La agenda, CRM y endpoints son anteriores; esta iteración registra la comprobación de criterios y añade prueba de integridad de la versión. 
+
+## Iteración 99 — consulta de caja y bancos (2026-11-11)
+
+Se contrastó US-18 con el CRM: la sección de cuentas carga caja y bancos autorizados con saldo; al seleccionar una cuenta abre su historial de movimientos. Administración puede dar de alta la cuenta y el saldo inicial para empezar el control. Los saldos salen de movimientos registrados y no se presentan como conciliación automática con el banco.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-18 | Funcional básico | La vista enumera cuentas y permite abrir el reporte de cada una. La API está protegida por permisos y sus operaciones de flujo se cubren en pruebas de backend; configuración de cuentas y saldos reales depende de administración. La conciliación bancaria no forma parte del criterio recibido. |
+
+La migración `202611110111` añade una versión append-only de US-18 conservando la fuente. Se agrega prueba de integridad y la cobertura existente de `/accounts`, movimientos y flujo de efectivo se ejecuta en la suite backend.
