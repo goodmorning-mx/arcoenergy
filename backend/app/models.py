@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from app.time_utils import business_today
 
 
 def new_id() -> str:
@@ -249,7 +250,7 @@ class ProjectExpense(Base):
     expense_type: Mapped[str] = mapped_column(String(20), default="unclassified", nullable=False)
     description: Mapped[str] = mapped_column(String(240), default="")
     amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
-    occurred_on: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
+    occurred_on: Mapped[date] = mapped_column(Date, default=business_today, nullable=False)
     receipt_url: Mapped[str] = mapped_column(Text, default="")
     receipt_drive_file_id: Mapped[str] = mapped_column(String(200), default="")
     receipt_filename: Mapped[str] = mapped_column(String(255), default="")
@@ -270,7 +271,7 @@ class ProfitabilityAdjustment(Base):
     adjustment_type: Mapped[str] = mapped_column(String(20), nullable=False)
     description: Mapped[str] = mapped_column(String(240), nullable=False)
     amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
-    occurred_on: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
+    occurred_on: Mapped[date] = mapped_column(Date, default=business_today, nullable=False)
     reversal_of_id: Mapped[str | None] = mapped_column(ForeignKey("ae_profitability_adjustments.id"), nullable=True, index=True)
     created_by: Mapped[str] = mapped_column(String(180), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
@@ -282,7 +283,7 @@ class FinancialAccount(Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     account_type: Mapped[str] = mapped_column(String(20), nullable=False)
     opening_balance: Mapped[float] = mapped_column(Numeric(14, 2), default=0, nullable=False)
-    opening_balance_date: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
+    opening_balance_date: Mapped[date] = mapped_column(Date, default=business_today, nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_by: Mapped[str] = mapped_column(String(180), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
@@ -297,7 +298,7 @@ class CashMovement(Base):
     amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     category: Mapped[str] = mapped_column(String(80), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
-    occurred_on: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
+    occurred_on: Mapped[date] = mapped_column(Date, default=business_today, nullable=False)
     source_type: Mapped[str] = mapped_column(String(40), default="manual", nullable=False)
     source_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     reversal_of_id: Mapped[str | None] = mapped_column(ForeignKey("ae_cash_movements.id"), nullable=True)
@@ -330,7 +331,7 @@ class Purchase(Base):
     invoice_content_type: Mapped[str] = mapped_column(String(100), default="")
     invoice_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     payment_terms: Mapped[str] = mapped_column(String(20), nullable=False)
-    purchase_date: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
+    purchase_date: Mapped[date] = mapped_column(Date, default=business_today, nullable=False)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     paid_amount: Mapped[float] = mapped_column(Numeric(14, 2), default=0, nullable=False)
@@ -371,7 +372,7 @@ class SupplierPayment(Base):
     account_id: Mapped[str] = mapped_column(ForeignKey("ae_financial_accounts.id"), nullable=False, index=True)
     cash_movement_id: Mapped[str] = mapped_column(ForeignKey("ae_cash_movements.id"), unique=True, nullable=False)
     amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
-    paid_on: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
+    paid_on: Mapped[date] = mapped_column(Date, default=business_today, nullable=False)
     reference: Mapped[str] = mapped_column(String(180), default="")
     reversal_of_id: Mapped[str | None] = mapped_column(ForeignKey("ae_supplier_payments.id", name="fk_ae_supplier_payment_reversal"), nullable=True)
     created_by: Mapped[str] = mapped_column(String(180), default="")
@@ -402,7 +403,7 @@ class CustomerPayment(Base):
     account_id: Mapped[str] = mapped_column(ForeignKey("ae_financial_accounts.id"), nullable=False, index=True)
     cash_movement_id: Mapped[str] = mapped_column(ForeignKey("ae_cash_movements.id"), unique=True, nullable=False)
     amount: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
-    paid_on: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
+    paid_on: Mapped[date] = mapped_column(Date, default=business_today, nullable=False)
     reference: Mapped[str] = mapped_column(String(180), default="")
     reversal_of_id: Mapped[str | None] = mapped_column(ForeignKey("ae_customer_payments.id", name="fk_ae_customer_payment_reversal"), nullable=True)
     created_by: Mapped[str] = mapped_column(String(180), default="")

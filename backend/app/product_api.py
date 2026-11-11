@@ -32,6 +32,7 @@ from app.drive_storage import download_private_file, folder_status, save_private
 from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, Project, ProjectExpense, ProfitabilityAdjustment, Purchase, PurchaseCorrection, PurchaseLine, PushSubscription, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
 from app.reminders import send_due_followup_pushes
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
+from app.time_utils import business_today
 from app.web_push import send_push, validate_push_endpoint, vapid_public_key
 
 settings = get_settings()
@@ -560,7 +561,7 @@ class ExpenseInput(BaseModel):
     description: str = Field(min_length=2, max_length=240)
     amount: Decimal = Field(gt=0)
     receipt_url: str = ""
-    occurred_on: date = Field(default_factory=date.today)
+    occurred_on: date = Field(default_factory=business_today)
     operation_id: str | None = Field(default=None, min_length=8, max_length=80)
 
 
@@ -596,7 +597,7 @@ class CashMovementInput(BaseModel):
     amount: Decimal = Field(gt=0)
     category: str = Field(min_length=2, max_length=80)
     description: str = Field(min_length=2, max_length=2000)
-    occurred_on: date = Field(default_factory=date.today)
+    occurred_on: date = Field(default_factory=business_today)
 
 
 class CashTransferInput(BaseModel):
@@ -604,7 +605,7 @@ class CashTransferInput(BaseModel):
     destination_account_id: str
     amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
     description: str = Field(min_length=2, max_length=2000)
-    occurred_on: date = Field(default_factory=date.today)
+    occurred_on: date = Field(default_factory=business_today)
 
 
 class SupplierInput(BaseModel):
@@ -633,7 +634,7 @@ class PurchaseInput(BaseModel):
     supplier_id: str
     invoice_number: str = Field(default="", max_length=100)
     payment_terms: Literal["cash", "credit"]
-    purchase_date: date = Field(default_factory=date.today)
+    purchase_date: date = Field(default_factory=business_today)
     due_date: date | None = None
     lines: list[PurchaseLineInput] = Field(min_length=1, max_length=100)
     initial_payment: Decimal = Field(default=Decimal("0"), ge=0)
@@ -655,7 +656,7 @@ class PurchaseInvoiceXmlInput(BaseModel):
 class SupplierPaymentInput(BaseModel):
     amount: Decimal = Field(gt=0)
     account_id: str
-    paid_on: date = Field(default_factory=date.today)
+    paid_on: date = Field(default_factory=business_today)
     reference: str = Field(default="", max_length=180)
 
 
@@ -676,7 +677,7 @@ class ProfitabilityAdjustmentInput(BaseModel):
     adjustment_type: Literal["return", "bonification"]
     description: str = Field(min_length=3, max_length=240)
     amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
-    occurred_on: date = Field(default_factory=date.today)
+    occurred_on: date = Field(default_factory=business_today)
 
     @field_validator("description")
     @classmethod
@@ -699,7 +700,7 @@ class ReceivableInput(BaseModel):
 class PaymentInput(BaseModel):
     amount: Decimal = Field(gt=0)
     account_id: str
-    paid_on: date = Field(default_factory=date.today)
+    paid_on: date = Field(default_factory=business_today)
     reference: str = Field(default="", max_length=180)
 
 
@@ -1470,7 +1471,7 @@ def reverse_sale(sale_id: str, data: PaymentCorrectionInput, identity: AuthIdent
         reversal = CashMovement(
             account_id=cash.account_id, direction="out", amount=cash.amount,
             category="Corrección de venta", description=f"Corrección de venta {sale.folio}: {data.reason}",
-            occurred_on=date.today(), source_type="sale_reversal", source_id=sale.id,
+            occurred_on=business_today(), source_type="sale_reversal", source_id=sale.id,
             reversal_of_id=cash.id, created_by=identity.email or "",
         )
         db.add(reversal); db.flush()
@@ -1591,7 +1592,7 @@ def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_depen
     if data.sale_type == "cash" and account is not None:
         db.add(CashMovement(account_id=account.id, direction="in", amount=quote.total,
             category="Venta de contado", description=f"{customer.name} · {sale_folio}",
-            occurred_on=date.today(), source_type="sale", source_id=sale.id, created_by=identity.email or ""))
+            occurred_on=business_today(), source_type="sale", source_id=sale.id, created_by=identity.email or ""))
     elif data.due_date is not None:
         total_due = Decimal(quote.total).quantize(Decimal("0.01"))
         regular_amount = (total_due / data.installment_count).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
@@ -1601,7 +1602,7 @@ def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_depen
             db.add(Receivable(
                 customer_id=customer.id, quote_id=quote.id, installment_number=installment_number,
                 due_date=due_date, amount=amount, paid_amount=Decimal("0"),
-                status="overdue" if due_date < date.today() else "pending",
+                status="overdue" if due_date < business_today() else "pending",
                 payment_method=quote.payment_method,
             ))
     db.commit(); db.refresh(sale)
@@ -2463,7 +2464,7 @@ def reverse_expense(expense_id: str, data: PaymentCorrectionInput, identity: Aut
         expense_type=original.expense_type,
         description=f"Corrección del gasto {original.id}: {data.reason}",
         amount=-Decimal(original.amount),
-        occurred_on=date.today(),
+        occurred_on=business_today(),
         receipt_url="",
         account_id=original.account_id,
         created_by=identity.email or "",
@@ -2479,7 +2480,7 @@ def reverse_expense(expense_id: str, data: PaymentCorrectionInput, identity: Aut
             amount=movement.amount,
             category="Corrección de gasto",
             description=f"Corrección del gasto {original.id}: {data.reason}",
-            occurred_on=date.today(),
+            occurred_on=business_today(),
             source_type="expense_reversal",
             source_id=original.id,
             reversal_of_id=movement.id,
@@ -2601,7 +2602,7 @@ def reverse_cash_movement(movement_id: str, data: PaymentCorrectionInput, identi
             amount=row.amount,
             category="Reversa de transferencia",
             description=f"Reversa de transferencia {original.source_id}: {data.reason}",
-            occurred_on=date.today(), source_type="transfer_reversal", source_id=original.source_id,
+            occurred_on=business_today(), source_type="transfer_reversal", source_id=original.source_id,
             reversal_of_id=row.id, created_by=identity.email or "",
         ) for row in pair]
         db.add_all(reversals); db.commit()
@@ -2616,7 +2617,7 @@ def reverse_cash_movement(movement_id: str, data: PaymentCorrectionInput, identi
         amount=original.amount,
         category="Corrección",
         description=f"Reversa del movimiento {original.id}: {data.reason}",
-        occurred_on=date.today(),
+        occurred_on=business_today(),
         source_type="reversal",
         source_id=original.id,
         reversal_of_id=original.id,
@@ -3054,14 +3055,14 @@ def reverse_supplier_payment(
     cash_reversal = CashMovement(
         account_id=cash_original.account_id, direction="in" if cash_original.direction == "out" else "out",
         amount=cash_original.amount, category="Corrección de pago a proveedor",
-        description=f"Reversa del pago {original.id} · {data.reason.strip()}", occurred_on=date.today(),
+        description=f"Reversa del pago {original.id} · {data.reason.strip()}", occurred_on=business_today(),
         source_type="supplier_payment_reversal", source_id=original.id, reversal_of_id=cash_original.id,
         created_by=identity.email or "",
     )
     db.add(cash_reversal); db.flush()
     correction = SupplierPayment(
         purchase_id=purchase.id, account_id=original.account_id, cash_movement_id=cash_reversal.id,
-        amount=original.amount, paid_on=date.today(), reference=f"Corrección de pago {original.id}: {data.reason}",
+        amount=original.amount, paid_on=business_today(), reference=f"Corrección de pago {original.id}: {data.reason}",
         reversal_of_id=original.id, created_by=identity.email or "",
     )
     db.add(correction); db.flush(); cash_reversal.source_id = correction.id
@@ -3161,7 +3162,7 @@ def reverse_purchase(
 @router.post("/receivables", status_code=201, dependencies=[Depends(require_permissions(auth_service, "receivables:write"))])
 def add_receivable(data: ReceivableInput, db: Session = Depends(get_db)):
     if not db.get(Customer, data.customer_id): raise HTTPException(404, "Cliente no encontrado.")
-    row = Receivable(**data.model_dump(), status="overdue" if data.due_date < date.today() else "pending"); db.add(row); db.commit(); db.refresh(row)
+    row = Receivable(**data.model_dump(), status="overdue" if data.due_date < business_today() else "pending"); db.add(row); db.commit(); db.refresh(row)
     return _receivable_result(db, row)
 
 
@@ -3179,7 +3180,7 @@ def _uncorrected_receivable_filter():
 
 def _receivable_result(db: Session, row: Receivable):
     balance = Decimal(row.amount) - Decimal(row.paid_amount)
-    status = "paid" if balance <= 0 else "overdue" if row.due_date < date.today() else "partial" if row.paid_amount > 0 else "pending"
+    status = "paid" if balance <= 0 else "overdue" if row.due_date < business_today() else "partial" if row.paid_amount > 0 else "pending"
     payments = db.scalars(select(CustomerPayment).where(CustomerPayment.receivable_id == row.id).order_by(CustomerPayment.paid_on.desc(), CustomerPayment.created_at.desc())).all()
     account_names = {account.id: account.name for account in db.scalars(select(FinancialAccount).where(FinancialAccount.id.in_([payment.account_id for payment in payments]))).all()} if payments else {}
     reversed_payment_ids = {entry[0] for entry in db.execute(select(CustomerPayment.reversal_of_id).where(CustomerPayment.reversal_of_id.is_not(None))).all()}
@@ -3243,19 +3244,19 @@ def reverse_customer_payment(
     cash_reversal = CashMovement(
         account_id=cash_original.account_id, direction="out" if cash_original.direction == "in" else "in",
         amount=cash_original.amount, category="Corrección de cobranza",
-        description=f"Reversa del pago {original.id} · {data.reason.strip()}", occurred_on=date.today(),
+        description=f"Reversa del pago {original.id} · {data.reason.strip()}", occurred_on=business_today(),
         source_type="customer_payment_reversal", source_id=original.id, reversal_of_id=cash_original.id,
         created_by=identity.email or "",
     )
     db.add(cash_reversal); db.flush()
     correction = CustomerPayment(
         receivable_id=receivable.id, account_id=original.account_id, cash_movement_id=cash_reversal.id,
-        amount=original.amount, paid_on=date.today(), reference=f"Corrección de pago {original.id}: {data.reason}",
+        amount=original.amount, paid_on=business_today(), reference=f"Corrección de pago {original.id}: {data.reason}",
         reversal_of_id=original.id, created_by=identity.email or "",
     )
     db.add(correction); db.flush(); cash_reversal.source_id = correction.id
     receivable.paid_amount = Decimal(receivable.paid_amount) - Decimal(original.amount)
-    receivable.status = "paid" if receivable.paid_amount >= receivable.amount else "partial" if receivable.paid_amount > 0 else "overdue" if receivable.due_date < date.today() else "pending"
+    receivable.status = "paid" if receivable.paid_amount >= receivable.amount else "partial" if receivable.paid_amount > 0 else "overdue" if receivable.due_date < business_today() else "pending"
     db.commit(); db.refresh(receivable)
     return _receivable_result(db, receivable)
 
@@ -3436,7 +3437,7 @@ def reverse_profitability_adjustment(
     reversal = ProfitabilityAdjustment(
         installation_id=original.installation_id, adjustment_type=original.adjustment_type,
         description=f"Corrección: {data.reason}", amount=-Decimal(original.amount),
-        occurred_on=date.today(), reversal_of_id=original.id, created_by=identity.email or "",
+        occurred_on=business_today(), reversal_of_id=original.id, created_by=identity.email or "",
     )
     db.add(reversal); db.commit(); db.refresh(reversal)
     return _profitability_adjustment_result(reversal, db)
@@ -3463,7 +3464,7 @@ def profitability_report(
         start_at = datetime.combine(period_start, datetime.min.time(), tzinfo=timezone.utc)
         end_at = datetime.combine(period_end, datetime.min.time(), tzinfo=timezone.utc)
     elif installation_id is None:
-        today = date.today()
+        today = business_today()
         period_start = date(today.year, today.month, 1)
         period_end = date(today.year + (today.month == 12), 1 if today.month == 12 else today.month + 1, 1)
         month = f"{today.year:04d}-{today.month:02d}"
@@ -3879,12 +3880,12 @@ def dashboard(identity: AuthIdentity = Depends(require_permissions(auth_service,
         overdue_count, overdue_amount = db.execute(select(
             func.count(Receivable.id),
             func.coalesce(func.sum(Receivable.amount - Receivable.paid_amount), 0),
-        ).where(Receivable.status != "paid", Receivable.due_date < date.today(), _uncorrected_receivable_filter())).one()
+        ).where(Receivable.status != "paid", Receivable.due_date < business_today(), _uncorrected_receivable_filter())).one()
         result["receivables_overdue"] = {"count": overdue_count or 0, "amount": float(overdue_amount or 0)}
         due_rows = db.execute(select(Receivable, Customer.name).join(Customer, Customer.id == Receivable.customer_id)
-            .where(Receivable.status != "paid", Receivable.due_date <= date.today() + timedelta(days=7), _uncorrected_receivable_filter())
+            .where(Receivable.status != "paid", Receivable.due_date <= business_today() + timedelta(days=7), _uncorrected_receivable_filter())
             .order_by(Receivable.due_date).limit(10)).all()
-        result["due_receivables"] = [{"id": row.id, "customer": name, "due_date": row.due_date, "balance": max(Decimal(row.amount) - Decimal(row.paid_amount), Decimal("0")), "status": "overdue" if row.due_date < date.today() else "due"} for row, name in due_rows]
+        result["due_receivables"] = [{"id": row.id, "customer": name, "due_date": row.due_date, "balance": max(Decimal(row.amount) - Decimal(row.paid_amount), Decimal("0")), "status": "overdue" if row.due_date < business_today() else "due"} for row, name in due_rows]
     if "inventory:read" in identity.permissions:
         reserved = {item_id: Decimal(quantity or 0) for item_id, quantity in db.execute(
             select(WorkOrderMaterial.item_id, func.sum(WorkOrderMaterial.requested_quantity - WorkOrderMaterial.preissued_quantity))
@@ -3907,7 +3908,7 @@ def dashboard(identity: AuthIdentity = Depends(require_permissions(auth_service,
                 low_stock_items.append({"id": item.id, "name": item.name, "unit": item.unit,
                     "available_quantity": available, "minimum_quantity": Decimal(item.minimum_quantity)})
         result["low_stock_items"] = low_stock_items[:10]
-        start_day = date.today() - timedelta(days=6)
+        start_day = business_today() - timedelta(days=6)
         start_at = datetime.combine(start_day, datetime.min.time(), tzinfo=timezone.utc)
         grouped_movements = db.execute(select(
             func.date(InventoryMovement.created_at), InventoryMovement.movement_type, func.count(InventoryMovement.id),

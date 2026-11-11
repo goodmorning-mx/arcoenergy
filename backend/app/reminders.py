@@ -5,12 +5,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import date, datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import or_, select, update
 
 from app.config import get_settings
 from app.models import FollowUp, PushSubscription
+from app.time_utils import business_today
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def send_due_followup_pushes(
         session_factory = session_factory or SessionLocal
         push_delivery = push_delivery or _deliver_push_payload
 
-    local_today = today or datetime.now(ZoneInfo("America/Cancun")).date()
+    local_today = today or business_today()
     timestamp = sent_at or datetime.now(timezone.utc)
     stale_claim_before = timestamp - timedelta(minutes=10)
     target_email = owner_email.strip().lower() if owner_email else None
