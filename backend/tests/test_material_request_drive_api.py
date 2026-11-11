@@ -5,6 +5,7 @@ import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
+from gm_auth.models import AuthIdentity
 from app import product_api
 from app.models import Installation
 
@@ -50,7 +51,7 @@ def test_material_request_is_uploaded_and_linked_to_installation(monkeypatch):
 
     monkeypatch.setattr(product_api, "save_private_file", save)
     result = asyncio.run(product_api.upload_material_request_file(
-        "install-1", request_for("application/pdf", "orden.pdf", b"%PDF-1.7 content"), object(), db,
+        "install-1", request_for("application/pdf", "orden.pdf", b"%PDF-1.7 content"), admin_identity(), db,
     ))
     assert result["saved"] is True
     assert saved["filename"] == "orden-AE-1-orden.pdf"
@@ -64,7 +65,7 @@ def test_material_request_requires_matching_file_signature(monkeypatch):
     monkeypatch.setattr(product_api, "save_private_file", lambda **kwargs: pytest.fail("must reject before upload"))
     with pytest.raises(HTTPException) as error:
         asyncio.run(product_api.upload_material_request_file(
-            "install-1", request_for("application/pdf", "orden.pdf", b"not a PDF"), object(), FakeDb(installation),
+            "install-1", request_for("application/pdf", "orden.pdf", b"not a PDF"), admin_identity(), FakeDb(installation),
         ))
     assert error.value.status_code == 415
 
@@ -75,7 +76,7 @@ def test_material_request_reports_drive_not_configured_without_claiming_archive(
     monkeypatch.setattr(product_api, "save_private_file", lambda **kwargs: (_ for _ in ()).throw(RuntimeError("not_configured")))
     with pytest.raises(HTTPException) as error:
         asyncio.run(product_api.upload_material_request_file(
-            "install-1", request_for("application/pdf", "orden.pdf", b"%PDF-1.7 content"), object(), db,
+            "install-1", request_for("application/pdf", "orden.pdf", b"%PDF-1.7 content"), admin_identity(), db,
         ))
     assert error.value.status_code == 503
     assert error.value.detail == "drive_not_configured"
@@ -88,8 +89,48 @@ def test_material_request_download_is_private_and_uses_safe_filename(monkeypatch
     installation.material_request_filename = "orden solar.pdf"
     installation.material_request_content_type = "application/pdf"
     monkeypatch.setattr(product_api, "download_private_file", lambda file_id: httpx.Response(200, content=b"%PDF"))
-    response = product_api.get_material_request_file("install-1", object(), FakeDb(installation))
+    response = product_api.get_material_request_file("install-1", admin_identity(), FakeDb(installation))
     assert response.body == b"%PDF"
     assert response.media_type == "application/pdf"
     assert response.headers["content-disposition"] == "attachment; filename*=UTF-8''orden%20solar.pdf"
+
+
+def admin_identity():
+    return AuthIdentity(
+        "admin-1", "arcoenergy", frozenset({"administrador"}),
+        frozenset({"inventory:issue"}), "admin@example.com", "Admin",
+    )
+
+
+def installer_identity():
+    return AuthIdentity(
+        "installer-1", "arcoenergy", frozenset({"instalador"}),
+        frozenset({"inventory:issue"}), "field@example.com", "Instalador",
+    )
+
+
+def test_installer_cannot_replace_material_request_for_unassigned_order(monkeypatch):
+    installation = Installation(id="install-1", folio="AE-1")
+    monkeypatch.setattr(product_api, "_installer_has_assignment", lambda *_args: False)
+    monkeypatch.setattr(product_api, "save_private_file", lambda **_kwargs: pytest.fail("must reject before upload"))
+
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(product_api.upload_material_request_file(
+            "install-1", request_for("application/pdf", "orden.pdf", b"%PDF-1.7 content"),
+            installer_identity(), FakeDb(installation),
+        ))
+
+    assert error.value.status_code == 403
+
+
+def test_installer_cannot_download_material_request_for_unassigned_order(monkeypatch):
+    installation = Installation(id="install-1", folio="AE-1")
+    installation.material_request_drive_file_id = "private-id"
+    monkeypatch.setattr(product_api, "_installer_has_assignment", lambda *_args: False)
+    monkeypatch.setattr(product_api, "download_private_file", lambda *_args: pytest.fail("must reject before download"))
+
+    with pytest.raises(HTTPException) as error:
+        product_api.get_material_request_file("install-1", installer_identity(), FakeDb(installation))
+
+    assert error.value.status_code == 403
 

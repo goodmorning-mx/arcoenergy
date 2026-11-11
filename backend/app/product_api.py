@@ -1702,6 +1702,8 @@ async def upload_material_request_file(
     installation = db.get(Installation, installation_id)
     if installation is None:
         raise HTTPException(404, "Orden de trabajo no encontrada.")
+    if "instalador" in identity.roles and not _installer_has_assignment(db, installation, identity.email or ""):
+        raise HTTPException(403, "Solo puedes adjuntar solicitudes de materiales a órdenes asignadas a tu cuenta.")
     content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
     file_type = _MATERIAL_REQUEST_TYPES.get(content_type)
     if file_type is None:
@@ -1763,6 +1765,8 @@ def get_material_request_file(
     installation = db.get(Installation, installation_id)
     if installation is None:
         raise HTTPException(404, "Orden de trabajo no encontrada.")
+    if "instalador" in identity.roles and not _installer_has_assignment(db, installation, identity.email or ""):
+        raise HTTPException(403, "Solo puedes descargar solicitudes de materiales de órdenes asignadas a tu cuenta.")
     if not installation.material_request_drive_file_id:
         raise HTTPException(404, "Esta orden no tiene una solicitud archivada.")
     try:

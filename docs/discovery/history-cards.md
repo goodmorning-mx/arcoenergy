@@ -1245,3 +1245,13 @@ La continuación de la auditoría encontró que el endpoint para actualizar el c
 | US-14 | Parcial funcional | La actualización del checklist ya oculta IDs privados de Drive. Sigue pendiente la revisión integral de campos y la comprobación con cuentas reales de los cinco roles. |
 
 La migración `202611100089` agrega una versión append-only de US-14 y conserva intacta su fuente literal. Producto integrado mediante el PR [#128](https://github.com/goodmorning-mx/arcoenergy/pull/128), merge commit `02f15124f07321ae9bec0865cf34a8255b8e6180`. Factory actualizó la revisión esperada mediante el PR [#434](https://github.com/goodmorning-mx/goodmorning-factory/pull/434), merge commit `792799450948406cded7c9e00ea6db464294dc37`; el run [#42876507125](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42876507125) completó despliegue, verificación del esquema vivo y reconciliación de respaldos externos. La API DEV reporta `ready`, commit `02f15124f07321ae9bec0865cf34a8255b8e6180` y esquema `202611100089`; `/`, `/crm/login`, `/app/login`, `/crm/` y `/app/` responden HTTP 200. Validación local: 4 pruebas dirigidas, suite backend completa (208 pruebas) y 34 pruebas de contrato de Factory aprobadas. Los jobs CI del PR de producto no iniciaron pasos por el bloqueo de facturación de GitHub; no se registran como pruebas aprobadas. No se cambiaron secretos ni configuración externa.
+
+## Iteración 78 — documentos de materiales limitados por asignación (2026-11-10)
+
+El endpoint de documentos de solicitud de materiales aceptaba cualquier orden para usuarios con permiso de inventario, sin comprobar asignación. Un instalador podía leer o reemplazar un documento ajeno si conocía el identificador de la orden. Ahora carga y descarga verifican que la orden esté asignada a la cuenta del instalador. Administración y contabilidad conservan el acceso operativo que da su permiso de inventario.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | La carga y descarga de solicitudes de materiales para instaladores requiere asignación a la orden. Sigue pendiente auditar todos los demás campos/acciones y validar la matriz con cuentas reales de los cinco roles. |
+
+La migración `202611100090` registra una nueva versión append-only de US-14 y conserva el relato literal. Validación e integración DEV pendientes.
