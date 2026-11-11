@@ -1504,3 +1504,13 @@ Se verificó US-16 en CRM/API. El contador puede registrar un abono parcial o pa
 | US-16 | Funcional básico | Las pruebas backend verifican pagos parciales/completos, actualización de saldo, flujo de efectivo, cuenta reportada y reversas append-only. La asignación de un pago entre múltiples deudas/cuotas, mora y cancelaciones todavía requiere reglas contables. |
 
 La migración `202611110113` añade la nueva versión de US-16 sin alterar su relato literal. La prueba de migración verifica la preservación de la fuente y los criterios nuevos. El endpoint existente requiere `receivables:write`; la vista se encuentra en la sección de cobranza del CRM.
+
+## Iteración 102 — directorio y saldos de proveedores (2026-11-11)
+
+Se cotejó US-30 con el directorio CRM y los datos de compras. El usuario autorizado puede registrar proveedor con nombre, datos de contacto, contado o crédito y días acordados. El listado muestra su condición y saldo por pagar derivado de compras/pagos; el detalle de compras conserva los movimientos ligados. Los proveedores no se eliminan en cascada.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-30 | Funcional básico | La API prueba alta/lista y la suite de compras verifica deuda y saldo tras abonos. El cliente debe confirmar campos adicionales y si quiere un estado explícito de proveedor inactivo/archivado. |
+
+La migración `202611110114` añade la versión 2 de US-30 sin reescribir la fuente. El endpoint exige permisos `suppliers:read` para consultar y `suppliers:manage` para alta. Los pagos a proveedor se registran desde la compra asociada, conservando el vínculo contable.
