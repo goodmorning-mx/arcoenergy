@@ -1484,3 +1484,13 @@ Se contrastó US-18 con el CRM: la sección de cuentas carga caja y bancos autor
 | US-18 | Funcional básico | La vista enumera cuentas y permite abrir el reporte de cada una. La API está protegida por permisos y sus operaciones de flujo se cubren en pruebas de backend; configuración de cuentas y saldos reales depende de administración. La conciliación bancaria no forma parte del criterio recibido. |
 
 La migración `202611110111` añade una versión append-only de US-18 conservando la fuente. Se agrega prueba de integridad y la cobertura existente de `/accounts`, movimientos y flujo de efectivo se ejecuta en la suite backend.
+
+## Iteración 100 — cobertura del registro de gastos (2026-11-11)
+
+El CRM y la PWA permiten capturar fecha, monto, descripción, categoría y tipo fijo/variable; seleccionar la cuenta que pagó; asociar proyecto/orden y adjuntar comprobante desde campo. Los gastos aparecen en reportes y el registro se vincula a los movimientos de cuenta. La captura cumple los campos y relaciones descritos en US-17.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-17 | Funcional básico | Captura administrativa y móvil cubre fecha, monto, descripción, categoría, cuenta y vínculo opcional de proyecto. Gastos de campo aceptan comprobantes y mantienen estado Drive; contabilidad debe revisar casos mixtos, recurrencias y política de aprobación. |
+
+La migración `202611110112` agrega una revisión append-only de US-17 sin editar la fuente. Pruebas actuales de backend verifican gastos, efectos en cuentas, correcciones y reportes; esta iteración agrega la prueba de integridad del registro de historia.
