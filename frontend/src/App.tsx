@@ -496,52 +496,38 @@ function App() {
   </div>
 }
 
-type BarcodeResult = { rawValue: string };
-type BarcodeDetectorLike = { detect: (source: HTMLVideoElement) => Promise<BarcodeResult[]> };
-type BarcodeDetectorCtor = new (options?: { formats?: string[] }) => BarcodeDetectorLike;
-type BarcodeDetectorApi = { BarcodeDetector?: BarcodeDetectorCtor; getSupportedFormats?: () => Promise<string[]> };
-
 function BarcodeScanner({ items, onMatch }: { items: StockItem[]; onMatch: (item: StockItem) => void }) {
   const [code, setCode] = useState('');
   const [scanning, setScanning] = useState(false);
   const [notice, setNotice] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
+  const stopScanRef = useRef<(() => void) | null>(null);
   const normalized = (value: string) => value.trim().toLocaleLowerCase();
 
   useEffect(() => {
     if (!scanning) return;
     let active = true;
-    let stream: MediaStream | undefined;
-    let frame = 0;
+    let stop: (() => void) | undefined;
     const start = async () => {
-      const api = window as Window & BarcodeDetectorApi;
-      if (!api.BarcodeDetector || !navigator.mediaDevices?.getUserMedia) {
-        setNotice('Este navegador no permite leer códigos con la cámara. Captura o escanea el código en el campo para identificar el artículo.');
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setNotice('Este navegador o conexión no permite usar la cámara. Captura o escanea el código en el campo para identificar el artículo.');
         setScanning(false);
         return;
       }
       try {
-        const supported = api.getSupportedFormats ? await api.getSupportedFormats() : [];
-        const requested = ['qr_code', 'ean_13', 'ean_8', 'code_128', 'upc_a', 'upc_e', 'itf', 'data_matrix'];
-        const formats = supported.length ? requested.filter(format => supported.includes(format)) : [];
-        const detector = new api.BarcodeDetector(formats.length ? { formats } : undefined);
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
-        if (!active || !videoRef.current) { stream.getTracks().forEach(track => track.stop()); return; }
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        const detect = async () => {
-          if (!active || !videoRef.current) return;
-          try {
-            const [result] = await detector.detect(videoRef.current);
-            if (result?.rawValue) {
-              setCode(result.rawValue);
-              identify(result.rawValue);
-              return;
-            }
-          } catch { /* Keep the camera active while a frame is not decodable. */ }
-          frame = window.requestAnimationFrame(() => void detect());
-        };
-        frame = window.requestAnimationFrame(() => void detect());
+        const { BrowserMultiFormatReader } = await import('@zxing/browser');
+        const reader = new BrowserMultiFormatReader();
+        const video = videoRef.current;
+        if (!video) return;
+        const controls = await reader.decodeFromConstraints({ video: { facingMode: { ideal: 'environment' } }, audio: false }, video, (result) => {
+          const value = result?.getText();
+          if (!active || !value) return;
+          setCode(value);
+          identify(value);
+        });
+        stop = () => controls.stop();
+        stopScanRef.current = stop;
+        if (!active) { controls.stop(); return; }
       } catch {
         setNotice('No se pudo iniciar la cámara. Revisa el permiso del navegador o captura el código manualmente.');
         setScanning(false);
@@ -550,9 +536,9 @@ function BarcodeScanner({ items, onMatch }: { items: StockItem[]; onMatch: (item
     void start();
     return () => {
       active = false;
-      window.cancelAnimationFrame(frame);
-      stream?.getTracks().forEach(track => track.stop());
-      if (videoRef.current) videoRef.current.srcObject = null;
+      stop?.();
+      stopScanRef.current?.();
+      stopScanRef.current = null;
     };
   }, [scanning]);
 
