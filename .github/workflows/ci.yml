@@ -101,7 +101,9 @@ jobs:
             log="$(mktemp)"
             profile="$(mktemp -d)"
             google-chrome --headless --no-sandbox --disable-dev-shm-usage --disable-extensions \
-              --user-data-dir="$profile" --virtual-time-budget=7000 --dump-dom \
+              --disable-background-timer-throttling --disable-renderer-backgrounding \
+              --disable-backgrounding-occluded-windows --user-data-dir="$profile" \
+              --timeout=20000 --virtual-time-budget=15000 --dump-dom \
               "http://127.0.0.1:18081${route}/" >"$output" 2>"$log"
             if grep -Eq 'Uncaught|SEVERE' "$log"; then
               cat "$log"
