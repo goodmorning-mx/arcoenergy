@@ -1701,3 +1701,13 @@ Se completó el mapa de procedencia de las 42 tarjetas. Las versiones nuevas de 
 | US-42 | Parcial funcional | La base de datos, API y CRM mantienen versiones append-only. Esta iteración agrega procedencia exacta para los relatos existentes; quedan pendientes la validación humana de las transcripciones ASR, el cotejo de interpretaciones y la política de almacenamiento/retención de fuentes sensibles. |
 
 La migración `202611110130` agrega 39 versiones con ubicación de fuente sin cambiar texto previo; US-33–35 ya cuentan con sus ubicaciones de audio/chat de la Iteración 115. Las pruebas cotejan los hashes de seis artefactos del repositorio y la preservación de las versiones literales.
+
+## Iteración 119 — continuidad del asistente CRM (2026-11-11)
+
+El panel del asistente CRM ahora se oculta sin desmontar el chat. Al cerrar y volver a abrir el panel durante la sesión, el hilo y el identificador de conversación permanecen disponibles. Esto evita reiniciar una consulta al alternar el panel. La conversación continúa siendo temporal en memoria del proceso; no se añade persistencia de mensajes sin acordar privacidad y retención.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-39 | Parcial funcional | La interfaz conserva el hilo al ocultar y reabrir el asistente durante la sesión. La continuidad no sobrevive a recargas o reinicios del API; retención durable requiere decisión de privacidad. |
+
+La migración `202611110131` añade una revisión append-only de US-39 y conserva su relato literal.
