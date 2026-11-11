@@ -24,22 +24,30 @@ def test_only_explicitly_public_product_routes_may_skip_bearer_auth() -> None:
     assert public_routes == PUBLIC_PRODUCT_ROUTES
 
     unprotected = []
+    missing_permission_guard = []
     for route in routes:
         for method in route.methods or ():
             if method in {"HEAD", "OPTIONS"} or (method, route.path) in PUBLIC_PRODUCT_ROUTES:
                 continue
             requirements = []
+            permission_guards = []
 
             def collect_security(dependant) -> None:
                 requirements.extend(dependant.security_requirements)
                 for dependency in dependant.dependencies:
+                    qualified_name = getattr(dependency.call, "__qualname__", "")
+                    if qualified_name.startswith(("require_permissions.", "require_any_permission.")):
+                        permission_guards.append(qualified_name)
                     collect_security(dependency)
 
             collect_security(route.dependant)
             if not requirements:
                 unprotected.append(f"{method} {route.path}")
+            if not permission_guards:
+                missing_permission_guard.append(f"{method} {route.path}")
 
     assert unprotected == []
+    assert missing_permission_guard == []
 
 
 def test_every_private_product_get_route_rejects_anonymous_requests() -> None:

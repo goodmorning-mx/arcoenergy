@@ -7,6 +7,7 @@ from sqlalchemy import create_engine
 
 from app.product_api import require_permissions
 from gm_auth.models import AuthIdentity, metadata, memberships, organizations, users
+from app.roles import ROLE_PERMISSIONS
 
 
 def _service_with_membership(*, role: str, permissions: set[str], active: bool = True):
@@ -48,3 +49,19 @@ def test_permission_dependency_rejects_inactive_member() -> None:
         require_permissions(service, "team:manage")(identity)
 
     assert result.value.status_code == 401
+
+
+@pytest.mark.parametrize("role", sorted(ROLE_PERMISSIONS))
+def test_current_membership_enforces_every_role_permission(role: str) -> None:
+    permissions = ROLE_PERMISSIONS[role]
+    service, identity = _service_with_membership(role=role, permissions=set(permissions))
+    all_permissions = set().union(*ROLE_PERMISSIONS.values())
+
+    for permission in sorted(all_permissions):
+        dependency = require_permissions(service, permission)
+        if permission in permissions:
+            assert dependency(identity) == identity
+        else:
+            with pytest.raises(HTTPException) as result:
+                dependency(identity)
+            assert result.value.status_code == 403, f"{role} unexpectedly received {permission}"
