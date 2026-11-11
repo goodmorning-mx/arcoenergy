@@ -1494,3 +1494,13 @@ El CRM y la PWA permiten capturar fecha, monto, descripción, categoría y tipo 
 | US-17 | Funcional básico | Captura administrativa y móvil cubre fecha, monto, descripción, categoría, cuenta y vínculo opcional de proyecto. Gastos de campo aceptan comprobantes y mantienen estado Drive; contabilidad debe revisar casos mixtos, recurrencias y política de aprobación. |
 
 La migración `202611110112` agrega una revisión append-only de US-17 sin editar la fuente. Pruebas actuales de backend verifican gastos, efectos en cuentas, correcciones y reportes; esta iteración agrega la prueba de integridad del registro de historia.
+
+## Iteración 101 — cobranza de clientes y flujo de efectivo (2026-11-11)
+
+Se verificó US-16 en CRM/API. El contador puede registrar un abono parcial o pago completo, su fecha, importe, cuenta de caja/banco y referencia opcional. El pago se enlaza con la deuda y crea el movimiento de entrada en la cuenta elegida; el saldo por cobrar se recalcula. El historial muestra cuenta, fecha, importe y referencia. Si un pago fue capturado por error, se corrige con una reversa trazable que conserva el original.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-16 | Funcional básico | Las pruebas backend verifican pagos parciales/completos, actualización de saldo, flujo de efectivo, cuenta reportada y reversas append-only. La asignación de un pago entre múltiples deudas/cuotas, mora y cancelaciones todavía requiere reglas contables. |
+
+La migración `202611110113` añade la nueva versión de US-16 sin alterar su relato literal. La prueba de migración verifica la preservación de la fuente y los criterios nuevos. El endpoint existente requiere `receivables:write`; la vista se encuentra en la sección de cobranza del CRM.
