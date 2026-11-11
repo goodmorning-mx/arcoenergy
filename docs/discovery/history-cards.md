@@ -1689,3 +1689,15 @@ Se descargó el OpenAPI publicado por DEV en el commit `df4043e782e4504c3fb29c8d
 | US-14 | Parcial funcional | Auditoría anónima viva: 34/34 GET de `/v1` devolvieron 401. Esto prueba requisito de sesión para lectura, no el alcance de datos por rol/organización/cliente/campo; faltan cuentas reales para validar esos permisos. |
 
 La migración `202611110129` añade una versión append-only de US-14 sin modificar su relato literal. Las pruebas verifican que el artefacto, su hash y el resultado de la revisión queden registrados en una versión nueva.
+
+
+## Iteración 118 — ubicaciones de fuente para las 42 history cards (2026-11-11)
+
+Se completó el mapa de procedencia de las 42 tarjetas. Las versiones nuevas de US-1–32 y US-36–42 enlazan las fuentes espejo con hashes SHA-256 y ubicaciones de mensaje, párrafo/página o texto; US-33–35 conservan los enlaces específicos añadidos en la Iteración 115. Para documentos del contador se guardan referencias al Word original, al PDF y a la extracción textual. US-21 usa el apartado completo corregido en su versión 2. No se cambia ningún `source_literal` anterior. La prueba de fidelidad verifica que cada literal coincide con su fuente o queda descrito como compuesto por segmentos específicos.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-1–US-42 | Procedencia de fuente trazable | Las 42 tarjetas tienen artefactos y ubicaciones consultables en sus versiones recientes; hash y coincidencia de texto comprueban procedencia, no aprobación de la interpretación por el stakeholder. Los ASR (US-33/34) siguen pendientes de validación humana y las tarjetas reconstruidas requieren cotejo con sus autores. |
+| US-42 | Parcial funcional | La base de datos, API y CRM mantienen versiones append-only. Esta iteración agrega procedencia exacta para los relatos existentes; quedan pendientes la validación humana de las transcripciones ASR, el cotejo de interpretaciones y la política de almacenamiento/retención de fuentes sensibles. |
+
+La migración `202611110130` agrega 39 versiones con ubicación de fuente sin cambiar texto previo; US-33–35 ya cuentan con sus ubicaciones de audio/chat de la Iteración 115. Las pruebas cotejan los hashes de seis artefactos del repositorio y la preservación de las versiones literales.
