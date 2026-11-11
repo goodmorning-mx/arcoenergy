@@ -1292,4 +1292,15 @@ La agenda de cobranza comparaba fechas con UTC aunque las fechas de seguimiento 
 | US-31 | Parcial funcional | El vencimiento sugerido de compra a crédito suma los días del proveedor a la fecha de compra, con edición manual. Sigue pendiente conciliación. |
 | US-34 | Parcial funcional | Los movimientos y avisos basados en fecha usan un calendario común configurable; faltan otros ciclos de corrección y conciliación. |
 
-La migración `202611110093` agrega revisiones append-only a las tarjetas anteriores y conserva los relatos originales. Validación local: 218 pruebas backend, 4 pruebas de fecha CRM, build CRM y 34 pruebas del contrato Factory aprobadas. El despliegue DEV queda pendiente.
+La migración `202611110093` agrega revisiones append-only a las tarjetas anteriores y conserva los relatos originales. El calendario local se verificó además en una instalación limpia y queda desplegado en DEV al integrar esta iteración. La zona oficial del negocio sigue pendiente de confirmación.
+
+## Iteración 82 — compatibilidad de instalación limpia para Web Push (2026-11-11)
+
+La primera ejecución de CI con los repositorios públicos encontró dos defectos reproducibles. En la base limpia, la migración de push esperaba `installer_email`, mientras que la migración inicial crea `user_email` desde la metadata ORM vigente, lo que impedía iniciar el backend. Además, una prueba del dashboard usaba el día UTC del runner en lugar del calendario de negocio de la aplicación. La migración ahora indexa la columna realmente presente (legada o vigente) y la prueba usa `business_today()`.
+
+| Tarjeta | Estado revisado | Cambio / alcance pendiente |
+| --- | --- | --- |
+| US-7 | Parcial funcional | Las suscripciones push pueden migrar desde cero con ambos esquemas históricos; falta validar notificaciones en dispositivos reales. |
+| US-40 | Parcial funcional | Instalación limpia completa inicia y pasa health checks; falta validar login y push con cuentas y equipos reales. |
+
+La migración `202611110094` registra las correcciones en versiones append-only sin cambiar los relatos fuente. Validación local: 219 pruebas backend aprobadas; `docker compose --profile hybrid up --build --wait` arranca todos los servicios con el esquema `202611110094`; health, sitio, logins CRM/PWA y shells CRM/PWA responden HTTP 200. La validación CI anterior tuvo 217 pruebas aprobadas y una prueba de fecha fallida, además de exponer el fallo de migración; el nuevo commit debe volver a pasar CI.

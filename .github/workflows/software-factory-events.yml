@@ -23,6 +23,7 @@ jobs:
       id-token: write
     steps:
       - uses: actions/github-script@v7
+        continue-on-error: true
         env:
           PORTAL_OIDC_AUDIENCE: software.goodmorning.mx
         with:
