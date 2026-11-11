@@ -1424,3 +1424,13 @@ En CRM, el selector de archivos nativo ahora se invoca desde una confirmación e
 
 La migración `202611110105` añade una versión append-only de US-3 y conserva el relato fuente.
 La implementación quedó integrada en el PR [#150](https://github.com/goodmorning-mx/arcoenergy/pull/150), merge commit `f413ea12dbdcf2d8b6e2594a7b03e1a9fb9f2b53`; la CI aprobó backend, CRM, frontend, Next.js y Docker/Chrome en [#43064448746](https://github.com/goodmorning-mx/arcoenergy/actions/runs/43064448746). Factory actualizó el esquema esperado mediante PR [#452](https://github.com/goodmorning-mx/goodmorning-factory/pull/452), merge commit `f2c73b4`; el run [#43064888923](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/43064888923) desplegó, verificó `202611110105` y confirmó el respaldo externo. DEV reporta API `ready`, commit `f413ea12dbdcf2d8b6e2594a7b03e1a9fb9f2b53` y revisión `202611110105`; `/`, logins y shells CRM/PWA responden HTTP 200. El bundle CRM servido contiene los controles del flujo de compartir.
+
+## Iteración 94 — lectura asistida de solicitud de materiales (2026-11-11)
+
+CRM permite adjuntar la foto o PDF de la orden de servicio al registrar una salida, pero no permitía leer el documento. Se agrega extracción transitoria de texto para formatos PDF/JPG/PNG/WebP desde el CRM. El texto aparece como referencia para la persona responsable; las cantidades se capturan y revisan manualmente antes de confirmar. Leer el archivo no lo guarda, no crea movimientos ni modifica el inventario; al confirmar la salida se conserva el flujo existente de archivado privado en Drive cuando esté configurado. La captura manual sigue disponible si la lectura falla o no reconoce la escritura.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-25 | Parcial funcional | La solicitud PDF/foto se puede leer y cotejar en CRM antes de capturar cantidades; el OCR es solo referencia, no registra salidas. Falta validar precisión con órdenes reales del almacén y la calidad de escritura manuscrita. |
+
+La migración `202611110106` agrega la revisión 2 de US-25 sin modificar su relato original. La nueva API requiere `inventory:issue`, limita el archivo a 12 MiB, valida su formato y no conserva el documento ni cambia existencias.

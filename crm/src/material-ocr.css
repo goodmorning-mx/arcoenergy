@@ -1,0 +1,6 @@
+.material-ocr-review{grid-column:1/-1;display:grid;gap:10px;padding:14px;border:1px solid #d9e4da;border-radius:9px;background:#f6faf6}
+.material-ocr-review>div{display:grid;gap:4px}
+.material-ocr-review b{font-size:11px;color:#254b38}
+.material-ocr-review small{font-size:10px;color:#6b796f;line-height:1.5}
+.material-ocr-review pre{max-height:260px;overflow:auto;margin:0;padding:12px;border:1px solid #e2e9e1;border-radius:7px;background:#fff;color:#34463a;font:11px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:720px){.material-ocr-review{grid-column:1}}

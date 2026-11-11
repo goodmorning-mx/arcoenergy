@@ -2958,6 +2958,39 @@ def _suggest_purchase_invoice_fields(text: str) -> dict[str, list[dict[str, str]
     return suggestions
 
 
+@router.post("/inventory/read-material-request", dependencies=[Depends(require_permissions(auth_service, "inventory:issue"))])
+async def read_material_request_document(request: Request):
+    """Read a service-order attachment transiently so staff can review it before issuing stock."""
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    expected = _PURCHASE_INVOICE_TYPES.get(content_type)
+    if expected is None:
+        raise HTTPException(415, "Selecciona un PDF o fotografía JPG, PNG o WebP.")
+    try:
+        declared_length = int(request.headers.get("content-length", "0"))
+    except ValueError:
+        raise HTTPException(400, "Tamaño de archivo no válido.") from None
+    if declared_length > _PURCHASE_INVOICE_MAX_BYTES:
+        raise HTTPException(413, "La solicitud debe pesar 12 MB o menos.")
+    content = bytearray()
+    async for chunk in request.stream():
+        if len(content) + len(chunk) > _PURCHASE_INVOICE_MAX_BYTES:
+            raise HTTPException(413, "La solicitud debe pesar 12 MB o menos.")
+        content.extend(chunk)
+    raw = bytes(content)
+    if not raw or not raw.startswith(expected[1]) or (content_type == "image/webp" and raw[8:12] != b"WEBP"):
+        raise HTTPException(415, "El contenido del archivo no coincide con su formato.")
+    extracted_text, extraction_method = await run_in_threadpool(_extract_purchase_invoice_text, raw, content_type)
+    raw_name = unquote(request.headers.get("x-document-name", "solicitud-materiales")).replace("\\", "/").split("/")[-1]
+    return {
+        "filename": re.sub(r"[^\w.() -]", "_", raw_name).strip(" .")[:220] or "solicitud-materiales",
+        "extraction_method": extraction_method,
+        "extracted_text": extracted_text[:40_000],
+        "review_only": True,
+        "source_stored": False,
+        "inventory_changed": False,
+    }
+
+
 @router.post("/purchases/read-invoice-document", dependencies=[Depends(require_permissions(auth_service, "purchases:write"))])
 async def read_purchase_invoice_document(request: Request):
     """Return a transient OCR/text proposal; never create a purchase or store the document."""
