@@ -394,7 +394,7 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 | US-4 | Funcional básico | Agregar alertas/notificaciones y responsable asignado. |
 | US-5–6 | Pendientes | Plantillas legales, carga segura de INE, consentimiento, firma y proveedor biométrico. |
 | US-7 | Parcial | Asignación y visibilidad para instalador; falta notificación push/SMS/WhatsApp. |
-| US-8 | Parcial | Consulta de existencias reales y reservas por orden; falta alerta por faltantes de materiales requeridos. |
+| US-8 | Funcional básico | PWA limita al instalador a sus órdenes asignadas y muestra materiales requeridos, disponibilidad para la orden y faltantes considerando reservas simultáneas. Falta validar cantidades con órdenes y existencias reales en campo. |
 | US-9–10 | Funcionales básicos | Consumo y gasto enlazados a orden; faltan evidencia/recibo, revisión y modo sin conexión. |
 | US-11 | Parcial | API de cuentas por cobrar y pagos; faltan agenda, avisos de pago y plantillas WhatsApp listas. |
 | US-12 | Parcial | Catálogo, existencia y costo unitario; falta costo real por movimiento/proyecto. |
@@ -1606,3 +1606,14 @@ Desde el kardex, Administración puede corregir una entrada manual errónea indi
 | US-36 | Parcial funcional con reversa de entrada manual | API, kardex y CRM admiten correcciones append-only. Las compras siguen usando su corrección de origen. Reversas con actividad posterior/costo promedio requieren conciliación contable; falta validar casos reales con el contador. |
 
 La migración `202611110122` guarda una nueva versión de la tarjeta US-36 sin sobrescribir sus relatos previos. Pruebas backend cubren el movimiento compensatorio, las entradas no elegibles y los bloqueos de conciliación.
+
+
+## Iteración 111 — disponibilidad por orden para instaladores (2026-11-11)
+
+La consulta de instalaciones de la PWA filtra por asignación y entrega, por cada material solicitado, el nombre, cantidad pendiente, disponibilidad para esa orden y faltante calculado con las reservas de otras órdenes abiertas. La prueba de permisos ahora verifica el cálculo con un instalador asignado y confirma que no recibe la orden ajena; una prueba de manager conserva la comparación de órdenes concurrentes.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-8 | Funcional básico | Prueba backend valida cantidad solicitada, disponibilidad 2 y faltante 6 en dos órdenes concurrentes; la identidad instaladora solo recibe la orden asignada. Falta validación con almacén real y en los teléfonos de campo. |
+
+La migración `202611110123` guarda una nueva versión append-only de US-8 y mantiene intacto el relato de Goito.
