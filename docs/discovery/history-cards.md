@@ -1303,4 +1303,14 @@ La primera ejecución de CI con los repositorios públicos encontró dos defecto
 | US-7 | Parcial funcional | Las suscripciones push pueden migrar desde cero con ambos esquemas históricos; falta validar notificaciones en dispositivos reales. |
 | US-40 | Parcial funcional | Instalación limpia completa inicia y pasa health checks; falta validar login y push con cuentas y equipos reales. |
 
-La migración `202611110094` registra las correcciones en versiones append-only sin cambiar los relatos fuente. Validación local: 219 pruebas backend aprobadas; `docker compose --profile hybrid up --build --wait` arranca todos los servicios con el esquema `202611110094`; health, sitio, logins CRM/PWA y shells CRM/PWA responden HTTP 200. La validación CI anterior tuvo 217 pruebas aprobadas y una prueba de fecha fallida, además de exponer el fallo de migración; el nuevo commit debe volver a pasar CI.
+La migración `202611110094` registra las correcciones en versiones append-only sin cambiar los relatos fuente. Validación local: 219 pruebas backend aprobadas; `docker compose --profile hybrid up --build --wait` arranca todos los servicios con el esquema `202611110094`; health, sitio, logins CRM/PWA y shells CRM/PWA responden HTTP 200. El cambio se integró en el PR [#136](https://github.com/goodmorning-mx/arcoenergy/pull/136), commit `ccb910eca7c4af91bf10d17ecc51223fec40c8ff`; la CI de producto pasó en el run [#42937022912](https://github.com/goodmorning-mx/arcoenergy/actions/runs/42937022912). Factory fijó la revisión esperada en el PR [#441](https://github.com/goodmorning-mx/goodmorning-factory/pull/441), commit `cd8c37b802ef8e0f32738662bf17d13754d6d48b`. La reconciliación [#42937273809](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42937273809) verificó el esquema vivo y un respaldo externo; DEV reporta el commit y la revisión esperados. La validación CI inicial tuvo 217 pruebas aprobadas y una prueba de fecha fallida, además de exponer el fallo de migración; los arreglos pasan ahora 219/219.
+
+## Iteración 83 — contrato de autenticación para todas las rutas privadas (2026-11-11)
+
+La auditoría de la tarjeta US-14 ya verificaba algunas colecciones anónimas en producción. Para que esa protección no dependa de una lista manual incompleta, se añade una prueba del router completo: cada endpoint de producto debe declarar autenticación HTTP Bearer; las únicas excepciones son recepción pública de prospectos y conversación pública del agente. La prueba no inventa usuarios y mantiene como pendiente la matriz de datos por campo con personas reales.
+
+| Tarjeta | Estado revisado | Cambio / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | La suite falla si se agrega una ruta de producto sin Bearer fuera de los dos endpoints públicos; la auditoría funcional de permisos por entidad/campo y usuarios reales sigue pendiente. |
+
+La revisión se registra en una nueva versión append-only de US-14; conserva relato y fuente originales.
