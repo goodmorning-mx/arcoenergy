@@ -1538,3 +1538,14 @@ Se verificó US-31 en el flujo de compras CRM/API. Una compra a crédito guarda 
 | US-31 | Funcional básico | Las pruebas cubren compra a crédito, deuda con proveedor, pagos iniciales/parciales, saldos de cuenta y reversa trazable. La conciliación contra estados bancarios requiere reglas del contador. |
 
 La migración `202611110116` añade la revisión 2 de US-31 sin reescribir el texto fuente. La prueba de historia verifica la preservación del literal; `test_purchases_payables.py` cubre la lógica contable operativa.
+
+## Iteración 105 — costos directos y resultado preliminar (2026-11-11)
+
+Se verificaron US-12 y US-38 contra CRM/API y las pruebas de reporte. El costo directo toma materiales consumidos confirmados por proyecto/orden; devoluciones reutilizables restan su costo. Si hay movimientos sin costo, el sistema indica el faltante y evita presentar un resultado total como si estuviera completo. El CRM reúne flujo de efectivo, cuentas por cobrar, valor/movimientos de almacén y gastos. El reporte preliminar por mes o proyecto aplica ventas − materiales − gastos + devoluciones/bonificaciones registradas y distingue el resultado de un estado financiero oficial.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-12 | Funcional básico | Pruebas de backend cubren costeo desde consumos, devoluciones y movimientos sin costo. El contador debe aprobar la valuación y el tratamiento de ajustes antes de cierre oficial. |
+| US-38 | Parcial funcional | El reporte preliminar cubre mes/proyecto y desglose fijo/variable, con flujo, cartera, existencias y gastos disponibles en CRM. Fechas de corte, reclasificaciones y tratamiento fiscal requieren aprobación de contabilidad. |
+
+La migración `202611110117` agrega versiones append-only para ambas tarjetas, preservando los textos fuente. `test_profitability_report.py`, `test_inventory_returns.py`, `test_accounts_cashflow.py` y `test_operations_report.py` ejercitan los componentes operativos; el cambio incluye una prueba de integridad de historia.
