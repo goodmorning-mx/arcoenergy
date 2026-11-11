@@ -14,6 +14,7 @@
     "@goodmorning/gm-auth": "https://github.com/goodmorning-mx/gm-auth/archive/138d66cb44a94781e0d38d8afd1be2dbf718c294.tar.gz",
     "@goodmorning/gm-pwa": "https://github.com/goodmorning-mx/gm-pwa/archive/67e08f85f8c12f5953ee819c391bec050e227a64.tar.gz",
     "@vitejs/plugin-react": "5.0.0",
+    "@zxing/browser": "0.2.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "typescript": "5.8.3",
