@@ -1381,3 +1381,13 @@ La web pública renderiza el asistente integrado con `gm-agent`; el backend cone
 | US-41 | Parcial funcional | Chat público agentico y herramientas están conectados; falta cargar/aprobar catálogo y validar el recorrido de venta con consentimiento. |
 
 La migración `202611110101` agrega revisiones append-only para US-1 y US-41, conserva las fuentes originales y no registra precios, mensajes, datos personales ni secretos.
+
+## Iteración 90 — fidelidad de la fuente original de US-21 (2026-11-11)
+
+Al contrastar las tarjetas con el Word original del contador se detectó que la primera versión de US-21 había guardado solo una parte del apartado “ENTRADAS (DE INVETARIO)”. La card inicial y su literal quedan intactos; esta iteración registra una nueva versión con el apartado completo, incluyendo lectura de factura/XML/fotografía, devolución de sobrantes y condición/medio de pago. El texto se compara automáticamente contra el DOCX fuente.
+
+| Tarjeta | Estado revisado | Cambio / alcance pendiente |
+| --- | --- | --- |
+| US-21 | Fuente corregida en nueva versión | La versión 2 conserva el apartado completo como texto literal; deben acordarse las reglas de reconocimiento documental y la vinculación contable de devoluciones. |
+
+La migración `202611110102` agrega la versión 2 de manera append-only. La prueba confirma que la fuente de la versión 1 no se altera y que el literal nuevo coincide con el apartado del Word.
