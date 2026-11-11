@@ -1326,3 +1326,13 @@ La prueba anterior aseguraba que cada ruta incluyera seguridad Bearer en el rout
 | US-14 | Parcial funcional | La protección anónima se verifica para las 34 rutas GET en DEV y se mantiene cubierta por una prueba automatizada local. Queda pendiente probar el acceso por rol, entidad y campo con usuarios reales de los cinco roles. |
 
 La migración `202611110096` añade una revisión append-only a US-14 y conserva la fuente original.
+
+## Iteración 85 — verificación de la matriz de permisos de roles (2026-11-11)
+
+Se amplía US-14 para comprobar el comportamiento de membresía vigente de los cinco roles. Para cada permiso del catálogo, la prueba confirma que el rol autorizado puede continuar y que cualquier permiso ausente se rechaza con 403. Otra regla recorre todas las rutas privadas del API y exige que además de Bearer dependan de `require_permissions` o `require_any_permission`; solo recepción de prospectos y chat público del agente quedan fuera.
+
+| Tarjeta | Estado revisado | Cambio / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | Las cinco matrices de permisos y la conexión de cada endpoint privado con un guard están automatizadas. Falta que responsables del negocio revisen el alcance funcional con cuentas reales, especialmente los datos visibles y asignaciones por proyecto. |
+
+La migración `202611110097` registra esta revisión append-only en US-14 sin alterar el relato fuente.
