@@ -1267,3 +1267,14 @@ Se comprobó la versión realmente servida en DEV. `/` presenta el sitio públic
 | US-40 | Parcial funcional | PWA y login móvil se publican en rutas propias, con API privada; falta validar login y operación con cuentas/dispositivos reales. |
 
 La migración `202611100091` agrega una versión append-only para US-14, US-39 y US-40 sin alterar relatos fuente ni fabricar usuarios. Producto integrado en el PR [#132](https://github.com/goodmorning-mx/arcoenergy/pull/132), merge commit `a69d07ff2c41db36f72708cb822e08bd0fd9d096`. Factory actualizó el esquema esperado a `202611100091` en el PR [#436](https://github.com/goodmorning-mx/goodmorning-factory/pull/436), merge commit `62d9371d553d2219845ec4319c60659cd3fe024f`; el run [#42931948424](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42931948424) terminó correctamente con despliegue, verificación del esquema y reconciliación de respaldos. DEV reporta API `ready`, commit `a69d07ff2c41db36f72708cb822e08bd0fd9d096` y esquema `202611100091`. Smoke check posterior: `/`, `/login`, `/crm/login`, `/app/login`, `/crm/` y `/app/` HTTP 200; cuatro colecciones API privadas HTTP 401 anónimas; los bundles servidos de CRM/PWA no contienen términos de trial/demo. La prueba de migración local pasó (1); 34 contratos de Factory pasaron. Los jobs CI de producto fallaron antes de ejecutar pasos, por lo que no se cuentan como aprobados. No se crearon cuentas ni se modificaron secretos.
+
+## Iteración 80 — resultado preliminar filtrable por proyecto (2026-11-10)
+
+El informe de CRM ya agrupaba costos por proyecto en la consulta mensual, pero no ofrecía una selección para aislar un proyecto ni mantenía sincronizada la lista de devoluciones/bonificaciones con ese filtro. Se agrega el selector proyecto + periodo. El API filtra el informe y sus ajustes por el mismo proyecto, agregando las órdenes de trabajo que pertenecen a él. La fórmula sigue mostrando ventas registradas menos costo del material consumido menos gastos capturados más devoluciones/bonificaciones. No se altera la base del costeo ni se presenta el resultado preliminar como estado contable formal.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-12 | Parcial funcional | El contador/administrador puede consultar costos materiales y gastos del proyecto; falta validar método de valuación y costo histórico con contabilidad. |
+| US-38 | Parcial funcional | El resultado preliminar mensual se puede filtrar por proyecto y agrupa varias órdenes; falta aprobación de fechas, fórmula fiscal/contable y cierre formal. |
+
+La migración `202611100092` añade versiones append-only a US-12 y US-38, conservando los relatos fuente. La implementación y su verificación local están en curso; despliegue DEV pendiente.
