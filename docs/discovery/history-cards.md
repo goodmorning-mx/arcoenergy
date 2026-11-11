@@ -1678,3 +1678,14 @@ Se abrió la URL pública de ArcoEnergy Inventario referida en el Word del conta
 | US-37 | Parcial funcional | Menú de referencia vigente cotejado con el PDF: 11 etiquetas y rutas confirmadas mediante bundle público con hash. Falta comparación visual y de comportamiento autenticada con César; la matriz CRM/PWA continúa separando implementado y pendiente. |
 
 La migración `202611110128` agrega una nueva versión append-only de US-37, conserva su relato literal y asocia el bundle público como evidencia de validación.
+
+
+## Iteración 117 — lecturas anónimas en API DEV para US-14 (2026-11-11)
+
+Se descargó el OpenAPI publicado por DEV en el commit `df4043e782e4504c3fb29c8dcd50e9cc125d0f4f`, esquema `202611110128`, y se consultaron sin credenciales las 34 operaciones GET declaradas bajo `/v1`. Las 34 devolvieron HTTP 401, incluyendo rutas con identificadores. El documento OpenAPI queda ligado a la tarjeta por su hash SHA-256 `8c73e79b4fc9c5fb1e71ec2017b1098789c4406ae41598ad9d85699dc4425589`.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | Auditoría anónima viva: 34/34 GET de `/v1` devolvieron 401. Esto prueba requisito de sesión para lectura, no el alcance de datos por rol/organización/cliente/campo; faltan cuentas reales para validar esos permisos. |
+
+La migración `202611110129` añade una versión append-only de US-14 sin modificar su relato literal. Las pruebas verifican que el artefacto, su hash y el resultado de la revisión queden registrados en una versión nueva.
