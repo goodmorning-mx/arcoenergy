@@ -1370,3 +1370,14 @@ La inspección de solo lectura al API y su base de datos DEV no mostró valores 
 | US-40 | Parcial funcional | La PWA funciona y exige autenticación, pero faltan cuentas de campo/cliente y pruebas en sus dispositivos. |
 
 La migración `202611110100` agrega versiones append-only y preserva los relatos originales. No incluye nombres, correos, contraseñas ni secretos. Para completar estos flujos se necesita que ArcoEnergy autorice y configure la carpeta de Drive y entregue las identidades autorizadas para los cuatro roles restantes.
+
+## Iteración 89 — disponibilidad comercial del cotizador agentico (2026-11-11)
+
+La web pública renderiza el asistente integrado con `gm-agent`; el backend conecta herramientas de catálogo mediante `gm-mcp` y solo permite leer tamaños/precios aprobados. La llave del proveedor está presente en el runtime, pero esta auditoría no envió una consulta facturable. La consulta agregada a DEV encontró cero paquetes activos y cero aprobados, por lo que el sitio puede explicar el proceso y captar prospectos, pero no producir un precio solar.
+
+| Tarjeta | Estado revisado | Cambio / alcance pendiente |
+| --- | --- | --- |
+| US-1 | Bloqueada por catálogo comercial | Hay cotizador manual en las interfaces; faltan datos y aprobación de los paquetes reales de 4 a 20 paneles. |
+| US-41 | Parcial funcional | Chat público agentico y herramientas están conectados; falta cargar/aprobar catálogo y validar el recorrido de venta con consentimiento. |
+
+La migración `202611110101` agrega revisiones append-only para US-1 y US-41, conserva las fuentes originales y no registra precios, mensajes, datos personales ni secretos.
