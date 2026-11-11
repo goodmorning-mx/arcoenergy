@@ -394,7 +394,7 @@ Las tarjetas US-35 a US-38 están descritas con mayor detalle en [la iteración 
 | US-4 | Funcional básico | Agregar alertas/notificaciones y responsable asignado. |
 | US-5–6 | Pendientes | Plantillas legales, carga segura de INE, consentimiento, firma y proveedor biométrico. |
 | US-7 | Parcial | Asignación y visibilidad para instalador; falta notificación push/SMS/WhatsApp. |
-| US-8 | Funcional básico | PWA limita al instalador a sus órdenes asignadas y muestra materiales requeridos, disponibilidad para la orden y faltantes considerando reservas simultáneas. Falta validar cantidades con órdenes y existencias reales en campo. |
+| US-8 | Parcial | Consulta de existencias reales y reservas por orden; falta alerta por faltantes de materiales requeridos. |
 | US-9–10 | Funcionales básicos | Consumo y gasto enlazados a orden; faltan evidencia/recibo, revisión y modo sin conexión. |
 | US-11 | Parcial | API de cuentas por cobrar y pagos; faltan agenda, avisos de pago y plantillas WhatsApp listas. |
 | US-12 | Parcial | Catálogo, existencia y costo unitario; falta costo real por movimiento/proyecto. |
@@ -1617,3 +1617,17 @@ La consulta de instalaciones de la PWA filtra por asignación y entrega, por cad
 | US-8 | Funcional básico | Prueba backend valida cantidad solicitada, disponibilidad 2 y faltante 6 en dos órdenes concurrentes; la identidad instaladora solo recibe la orden asignada. Falta validación con almacén real y en los teléfonos de campo. |
 
 La migración `202611110123` guarda una nueva versión append-only de US-8 y mantiene intacto el relato de Goito.
+
+
+## Iteración 112 — auditoría funcional de inventario (2026-11-11)
+
+Se cotejaron criterios fuente y pruebas actuales para catálogo, salida/consumo, bajo stock y kardex. La prueba de regresión seleccionada pasó 35 casos. La comprobación de UI visual en navegador no se pudo ejecutar en este entorno porque no hay navegador conectado; las builds y pruebas backend siguen siendo evidencia de funcionamiento, no sustituyen esa revisión ni la validación con dispositivos/datos reales.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-20 | Funcional básico | Catálogo conserva descripción, categoría/subcategoría, marca, modelo, proveedor, unidad y código; CRM imprime etiqueta QR y la PWA identifica por cámara/captura. Faltan validar unidades y etiquetas físicas con almacén. |
+| US-24 | Funcional básico | Orden distingue solicitud, reserva/salida física y consumo; devolución enlazada corrige saldo y costo sin doble descuento. Falta acordar autorización formal de variaciones y validar la rutina física. |
+| US-26 | Funcional básico | Mínimo y responsable de reposición se configuran por artículo; Web Push se entrega a sus dispositivos suscritos al activarse alerta. Falta validar la recepción en equipos reales. |
+| US-27 | Funcional básico | CRM filtra kardex por artículo/fecha, pagina resultados y descarga el intervalo completo; los costos solo aparecen/exportan con permiso. Falta validar volumen real y costo histórico incompleto. |
+
+La migración `202611110124` agrega versiones append-only para US-20, US-24, US-26 y US-27; conserva cada relato fuente y sus versiones anteriores.
