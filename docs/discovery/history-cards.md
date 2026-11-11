@@ -1653,3 +1653,17 @@ La prueba viva del endpoint `/v1/public/agent/chat` respondió HTTP 200; como el
 | US-41 | Parcial funcional | Agente público conectado a herramienta de catálogo de solo lectura; endpoint vivo respondió y respetó precios no aprobados. Contacto ahora pasa por formulario con privacidad/consentimiento. Faltan paquetes comerciales reales aprobados y validar el recorrido de cotización completo. |
 
 La migración `202611110126` agrega una versión append-only de US-41 sin alterar su fuente literal.
+
+
+## Iteración 115 — ubicaciones literales de fuentes de audio y WhatsApp (2026-11-11)
+
+Se cotejaron las 42 fuentes iniciales contra los artefactos disponibles. Las fuentes de US-1–20, US-22–33 y US-36–42 coinciden con sus extractos registrados después de normalizar formato; US-21 conserva su corrección completa en la versión 2. US-34 reúne dos clips ASR y US-35 selecciona mensajes literales no contiguos, por lo que esta iteración guarda ubicaciones específicas en lugar de tratarlos como un único pasaje continuo. Se registran los hashes de los audios originales y se mantiene visible que las transcripciones no han sido validadas por el remitente.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-33 | Procedencia ASR trazable | El relato literal se conserva; se enlaza al clip original 4:16:19 p.m., marcas 00:00–00:38, hash SHA-256 y transcripción. La frase «entradas alimentarios» permanece sin corregir hasta validación del stakeholder. |
+| US-34 | Procedencia ASR trazable | El relato literal se conserva y se enlaza por separado a los clips 4:15:39 p.m. y 4:16:19 p.m., con hashes y rangos de tiempo. El primer clip está incompleto y la atribución del remitente sigue sin confirmarse. |
+| US-35 | Extractos literales trazables | El relato literal se conserva como cinco segmentos y cada uno se enlaza a su mensaje y hora en el artefacto de Mario Groso; los segmentos seleccionados no representan mensajes omitidos. |
+| US-42 | Parcial funcional | La base append-only conserva las versiones y ahora registra ubicaciones de fuente para US-33–35. Sigue pendiente cotejar con stakeholders las tarjetas reconstruidas, validar los ASR y definir almacenamiento/retención de fuentes sensibles. |
+
+La migración `202611110127` agrega versiones nuevas sin sobrescribir el texto literal ni los metadatos históricos. Las pruebas verifican preservación de versiones, ubicaciones de los dos audios y correspondencia de sus hashes con el manifiesto de fuentes.
