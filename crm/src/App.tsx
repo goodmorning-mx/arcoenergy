@@ -37,9 +37,19 @@ type ProfitabilityRow = { project_id?:string|null; project_code?:string; install
 type ProfitabilityAdjustment = { id:string; installation_id:string|null; adjustment_type:'return'|'bonification'; description:string; amount:number; occurred_on:string; project:string; folio:string|null; can_reverse:boolean };
 type ProfitabilityReport = { period: string; basis: string; rows: ProfitabilityRow[]; totals: { sales: number; materials_cost: number | null; expenses: number; expenses_by_type: { fixed:number; variable:number; unclassified:number }; returns_and_bonifications:number; adjustments_by_type:{return:number;bonification:number}; preliminary_result: number | null; missing_cost_movements: number }; returns_and_bonifications: { recorded: boolean; included: boolean; total:number }; complete_financial_statement: boolean };
 type Notice = { type: 'success' | 'error' | 'info'; text: string };
+type PendingQuoteShare = { quote: Quote; file: File; message: string; driveStatus: string };
 
 const apiBase = '/api/v1';
 const money = (amount: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 2 }).format(amount || 0);
+function supportsPdfFileShare(file: File) {
+  try { return typeof navigator.share === 'function' && Boolean(navigator.canShare?.({ files: [file] })); }
+  catch { return false; }
+}
+function downloadPdfFile(file: File) {
+  const url = URL.createObjectURL(file);
+  const anchor = document.createElement('a'); anchor.href = url; anchor.download = file.name; anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
 const cancunDate = () => {
   const parts = new Intl.DateTimeFormat('en', { timeZone: 'America/Cancun', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
   const part = (type: string) => parts.find(item => item.type === type)?.value || '';
@@ -108,6 +118,9 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [customerOpen, setCustomerOpen] = useState(false);
   const [quoteOpen, setQuoteOpen] = useState(false);
+  const [pendingQuoteShare, setPendingQuoteShare] = useState<PendingQuoteShare|null>(null);
+  const [quoteShareBusyId, setQuoteShareBusyId] = useState('');
+  const [quoteShareError, setQuoteShareError] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [agentOpen, setAgentOpen] = useState(false);
@@ -472,26 +485,29 @@ export default function App() {
     if (!quote.pricing_approved) { announce('Aprueba el precio del paquete antes de compartir la propuesta.', 'error'); return; }
     const phone = quote.customer?.phone?.replace(/\D/g, '') || '';
     const message = `Hola ${quote.customer?.name || ''}, te comparto la propuesta ${quote.folio} de Arco Energy por ${money(quote.total)}. Adjunto el PDF en esta conversación.`;
+    setQuoteShareBusyId(quote.id); setQuoteShareError('');
     try {
       const response = await fetch(`${apiBase}/quotes/${quote.id}/pdf`, { headers: { Authorization: `Bearer ${accessToken}` } });
       if (!response.ok) throw new Error('No se pudo preparar el PDF para compartir.');
       const file = new File([await response.blob()], `${quote.folio}.pdf`, { type: 'application/pdf' });
-      if (navigator.share && navigator.canShare?.({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: `Cotización ${quote.folio}`, text: message });
-          announce('PDF compartido. Elige WhatsApp y la conversación abierta con el cliente.', 'success');
-          return;
-        } catch (error) {
-          if (error instanceof DOMException && error.name === 'AbortError') return;
-          // Lost user activation or platform share failure; continue with download + WhatsApp.
-        }
-      }
-      const url = URL.createObjectURL(file); const anchor = document.createElement('a'); anchor.href = url; anchor.download = file.name; anchor.click(); URL.revokeObjectURL(url);
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
-      announce('PDF descargado y WhatsApp abierto. Adjunta el archivo descargado en la conversación.', 'info');
+      setPendingQuoteShare({ quote, file, message: phone ? message : `${message} Agrega el número o elige la conversación del cliente en WhatsApp.`, driveStatus: response.headers.get('X-Drive-Status') || 'unknown' });
+      const driveNote = response.headers.get('X-Drive-Status') === 'saved' ? ' También quedó archivado en Drive.' : response.headers.get('X-Drive-Status') === 'upload-failed' ? ' Drive informó que no pudo archivar el archivo.' : ' Drive no está confirmado para este archivo.';
+      announce(`PDF ${quote.folio} preparado. Elige cómo compartirlo.${driveNote}`, response.headers.get('X-Drive-Status') === 'upload-failed' ? 'info' : 'success');
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return;
       announce(error instanceof Error ? error.message : 'No se pudo compartir la cotización.', 'error');
+    } finally { setQuoteShareBusyId(''); }
+  }
+
+  async function sharePreparedQuote() {
+    if (!pendingQuoteShare) return;
+    const { quote, file, message } = pendingQuoteShare;
+    if (!supportsPdfFileShare(file)) { setQuoteShareError('Este navegador no comparte archivos directamente. Usa la opción de descarga y WhatsApp.'); return; }
+    try {
+      await navigator.share({ files: [file], title: `Cotización ${quote.folio}`, text: message });
+      setPendingQuoteShare(null); setQuoteShareError(''); announce('PDF compartido. Elige WhatsApp y la conversación abierta con el cliente.', 'success');
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') { setQuoteShareError('Compartir se canceló. Puedes intentar de nuevo o descargar el PDF y abrir WhatsApp.'); return; }
+      setQuoteShareError('No se pudo abrir el selector de archivos compartidos. Prueba la opción de descarga y WhatsApp.');
     }
   }
 
@@ -577,7 +593,7 @@ export default function App() {
 
         {view === 'inicio' && <DashboardView data={dashboard} customers={customers} quotes={quotes} followups={followups} can={can} onCustomer={setSelectedCustomer} onView={setView} onComplete={completeFollowup} />}
         {view === 'clientes' && <CustomersView customers={visibleCustomers} search={search} onSearch={setSearch} onCreate={() => setCustomerOpen(true)} canCreate={can('customers:write')} onSelect={setSelectedCustomer} />}
-        {view === 'cotizaciones' && <QuotesView quotes={quotes} onCreate={() => setQuoteOpen(true)} onDownload={downloadQuote} onShare={shareQuote} onMarkSent={markQuoteSent} onAccept={acceptQuote} canWrite={can('quotes:write')} />}
+        {view === 'cotizaciones' && <QuotesView quotes={quotes} onCreate={() => setQuoteOpen(true)} onDownload={downloadQuote} onShare={shareQuote} shareBusyId={quoteShareBusyId} onMarkSent={markQuoteSent} onAccept={acceptQuote} canWrite={can('quotes:write')} />}
         {view === 'ventas' && <SalesView items={sales} quotes={quotes} inventory={inventory} installers={installers} accounts={accounts} canWrite={can('sales:write')} token={accessToken || ''} onItems={setSales} onAccounts={setAccounts} onInventory={setInventory} onRefresh={refresh} announce={announce} />}
         {view === 'seguimientos' && <FollowupsView items={followups} onComplete={completeFollowup} onCustomer={setSelectedCustomer} pushActive={followupPushActive} onTogglePush={()=>void toggleFollowupPush()} pushSupported={'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window} />}
         {view === 'proyectos' && <ProjectsView items={projects} customers={customers} canWrite={can('installations:write')} token={accessToken || ''} onRefresh={refresh} announce={announce} />}
@@ -602,6 +618,7 @@ export default function App() {
 
     {customerOpen && <Modal title="Agregar cliente" subtitle="Guarda los datos de contacto y ubicación del prospecto." onClose={() => setCustomerOpen(false)}><form className="form-grid" onSubmit={createCustomer}><Field label="Nombre completo" name="name" required placeholder="Ej. Andrea García"/><Field label="Teléfono / WhatsApp" name="phone" placeholder="833 000 0000"/><Field label="Correo" name="email" type="email" placeholder="nombre@empresa.com"/><Field label="Ciudad" name="city" required placeholder="Tampico"/><Field label="Domicilio de instalación" name="address" className="span-two" placeholder="Calle, colonia y referencias"/><div className="modal-actions span-two"><button type="button" className="button button-outline" onClick={() => setCustomerOpen(false)}>Cancelar</button><button className="button button-primary">Guardar cliente</button></div></form></Modal>}
     {quoteOpen && <QuoteComposer packages={catalog?.packages.filter(item => item.enabled) || []} customers={customers} onClose={() => setQuoteOpen(false)} onSubmit={createQuote} onNewCustomer={() => { setQuoteOpen(false); setCustomerOpen(true); }} />}
+    {pendingQuoteShare && <Modal title={`Compartir cotización ${pendingQuoteShare.quote.folio}`} subtitle="Elige cómo enviar el PDF al cliente." onClose={() => { setPendingQuoteShare(null); setQuoteShareError(''); }}><div className="quote-share-dialog"><p><b>{pendingQuoteShare.quote.customer?.name || 'Cliente'}</b> · {pendingQuoteShare.quote.customer?.phone || 'WhatsApp permite elegir conversación'}</p><p>El PDF foliado ya está preparado. Selecciona WhatsApp en el menú de compartir o descarga el archivo y adjúntalo en la conversación abierta.</p>{supportsPdfFileShare(pendingQuoteShare.file) && <button type="button" className="button button-primary" onClick={() => void sharePreparedQuote()}>Compartir PDF…</button>}<a className="button button-outline" href={`https://wa.me/${pendingQuoteShare.quote.customer?.phone?.replace(/\D/g, '') || ''}?text=${encodeURIComponent(pendingQuoteShare.message)}`} target="_blank" rel="noopener noreferrer" onClick={() => downloadPdfFile(pendingQuoteShare.file)}>Descargar PDF y abrir WhatsApp ↗</a>{quoteShareError && <p className="cfdi-warning" role="status">{quoteShareError}</p>}<small>El botón de WhatsApp descarga el PDF y abre el chat con el mensaje preparado; adjunta el archivo descargado antes de enviarlo.</small></div></Modal>}
     {selectedCustomer && <CustomerDrawer customer={selectedCustomer} quotes={quotes.filter(item => item.customer_id === selectedCustomer.id)} followups={followups.filter(item => item.customer_id === selectedCustomer.id)} activities={activities} canWrite={can('customers:write')} canAssign={can('team:manage')} team={team.filter(member => member.permissions.includes('customers:write'))} currentEmail={identity?.email || ''} onClose={() => setSelectedCustomer(null)} onAddActivity={addActivity} onSchedule={scheduleFollowup} onDownload={downloadQuote} />}
     {notice && <div className={`toast toast-${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>{notice.type === 'success' ? '✓' : notice.type === 'error' ? '!' : 'ⓘ'} &nbsp;{notice.text}</div>}
     {printQuote && <div className="print-layer"><div className="print-document"><header><b>arco<span>energy</span></b><span>{printQuote.folio}</span></header><h1>Propuesta de sistema solar</h1><p>Cliente: {printQuote.customer?.name || 'Cliente'}</p><p>Instalación: {printQuote.installation_address}, {printQuote.installation_city}</p><div className="print-summary"><b>{printQuote.panel_count} paneles {printQuote.panel_brand} · {printQuote.panel_watts} W</b><span>Inversor: {printQuote.inverter}</span><span>Forma de pago: {printQuote.payment_method}</span><strong>Inversión estimada: {money(printQuote.total)}</strong></div>{!printQuote.pricing_approved && <p className="print-disclaimer">Paquete pendiente de aprobación comercial.</p>}<button className="button button-primary no-print" onClick={() => window.print()}>Imprimir / Guardar como PDF</button><button className="text-button no-print" onClick={() => setPrintQuote(null)}>Cerrar</button></div></div>}
@@ -666,8 +683,8 @@ function CustomersView({ customers, search, onSearch, canCreate, onCreate, onSel
   return <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">CARTERA COMERCIAL</span><h2>{customers.length} contactos</h2></div><div className="toolbar-actions"><input className="search-input" value={search} onChange={event => onSearch(event.target.value)} placeholder="Buscar por nombre, ciudad o contacto"/>{canCreate && <button className="button button-primary" onClick={onCreate}>＋ Agregar cliente</button>}</div></div>{customers.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>CLIENTE</th><th>UBICACIÓN</th><th>CONTACTO</th><th>ESTADO</th><th>ORIGEN</th><th/></tr></thead><tbody>{customers.map(item => <tr key={item.id} onClick={() => onSelect(item)}><td><span className="table-person"><i>{initials(item.name)}</i><b>{item.name}<small>{item.email || 'Sin correo registrado'}</small></b></span></td><td>{item.city || '—'}<small className="sub-cell">{item.address || 'Domicilio pendiente'}</small></td><td>{item.phone || '—'}</td><td><span className="status-chip status-draft">{labelCustomerStatus(item.status)}</span></td><td>{item.source === 'public_web' ? 'Web pública' : 'Equipo'}</td><td><button className="icon-button" aria-label={`Ver ${item.name}`}>→</button></td></tr>)}</tbody></table></div> : <EmptyState title="No encontramos contactos" body="Cambia la búsqueda o agrega un nuevo prospecto." action={canCreate ? 'Agregar cliente' : undefined} onClick={onCreate}/>}</section>;
 }
 
-function QuotesView({ quotes, onCreate, onDownload, onShare, onMarkSent, onAccept, canWrite }: { quotes: Quote[]; onCreate: () => void; onDownload: (q: Quote) => void; onShare: (q: Quote) => void; onMarkSent: (q: Quote) => void; onAccept: (q: Quote) => void; canWrite: boolean }) {
-  return <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">PROPUESTAS SOLARES</span><h2>{quotes.length} cotizaciones</h2></div>{canWrite && <button className="button button-primary" onClick={onCreate}>＋ Nueva cotización</button>}</div>{quotes.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>FOLIO / CLIENTE</th><th>SISTEMA</th><th>INSTALACIÓN</th><th>INVERSIÓN</th><th>ESTADO</th><th>ACCIONES</th></tr></thead><tbody>{quotes.map(item => <tr key={item.id}><td><b>{item.folio}</b><small className="sub-cell">{item.customer?.name || 'Cliente'}</small></td><td>{item.panel_count} paneles · {((item.panel_count * item.panel_watts) / 1000).toFixed(1)} kWp<small className="sub-cell">{item.inverter}</small></td><td>{item.installation_city || item.customer?.city || '—'}<small className="sub-cell">{item.installation_address || item.customer?.address || 'Domicilio pendiente'}</small></td><td><b>{money(item.total)}</b>{!item.pricing_approved && <small className="price-review-note">Paquete pendiente de aprobación</small>}</td><td><span className={`status-chip status-${item.status}`}>{labelStatus(item.status)}</span></td><td><div className="row-actions"><button title="Descargar PDF" onClick={() => onDownload(item)}>PDF</button><button title="Abrir WhatsApp" onClick={() => onShare(item)}>WhatsApp</button>{item.status === 'draft' && canWrite && <button title="Marcar como enviada" onClick={() => onMarkSent(item)}>Marcar enviada</button>}{item.status === 'sent' && canWrite && <button title="Registrar que el cliente aceptó" onClick={() => onAccept(item)}>Registrar aceptación</button>}</div></td></tr>)}</tbody></table></div> : <EmptyState title="Crea tu primera cotización" body="Elige un cliente y un paquete de paneles para generar el PDF foliado." action={canWrite ? 'Nueva cotización' : undefined} onClick={onCreate}/>}</section>;
+function QuotesView({ quotes, onCreate, onDownload, onShare, shareBusyId, onMarkSent, onAccept, canWrite }: { quotes: Quote[]; onCreate: () => void; onDownload: (q: Quote) => void; onShare: (q: Quote) => void; shareBusyId: string; onMarkSent: (q: Quote) => void; onAccept: (q: Quote) => void; canWrite: boolean }) {
+  return <section className="surface-card table-surface"><div className="table-toolbar"><div><span className="eyebrow">PROPUESTAS SOLARES</span><h2>{quotes.length} cotizaciones</h2></div>{canWrite && <button className="button button-primary" onClick={onCreate}>＋ Nueva cotización</button>}</div>{quotes.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>FOLIO / CLIENTE</th><th>SISTEMA</th><th>INSTALACIÓN</th><th>INVERSIÓN</th><th>ESTADO</th><th>ACCIONES</th></tr></thead><tbody>{quotes.map(item => <tr key={item.id}><td><b>{item.folio}</b><small className="sub-cell">{item.customer?.name || 'Cliente'}</small></td><td>{item.panel_count} paneles · {((item.panel_count * item.panel_watts) / 1000).toFixed(1)} kWp<small className="sub-cell">{item.inverter}</small></td><td>{item.installation_city || item.customer?.city || '—'}<small className="sub-cell">{item.installation_address || item.customer?.address || 'Domicilio pendiente'}</small></td><td><b>{money(item.total)}</b>{!item.pricing_approved && <small className="price-review-note">Paquete pendiente de aprobación</small>}</td><td><span className={`status-chip status-${item.status}`}>{labelStatus(item.status)}</span></td><td><div className="row-actions"><button title="Descargar PDF" onClick={() => onDownload(item)}>PDF</button><button title="Preparar y compartir PDF por WhatsApp" disabled={shareBusyId===item.id} onClick={() => onShare(item)}>{shareBusyId===item.id?'Preparando…':'WhatsApp'}</button>{item.status === 'draft' && canWrite && <button title="Marcar como enviada" onClick={() => onMarkSent(item)}>Marcar enviada</button>}{item.status === 'sent' && canWrite && <button title="Registrar que el cliente aceptó" onClick={() => onAccept(item)}>Registrar aceptación</button>}</div></td></tr>)}</tbody></table></div> : <EmptyState title="Crea tu primera cotización" body="Elige un cliente y un paquete de paneles para generar el PDF foliado." action={canWrite ? 'Nueva cotización' : undefined} onClick={onCreate}/>}</section>;
 }
 
 function FollowupsView({ items, onComplete, onCustomer, pushActive, onTogglePush, pushSupported }: { items: FollowUp[]; onComplete: (f: FollowUp) => void; onCustomer: (c: Customer) => void; pushActive: boolean; onTogglePush: () => void; pushSupported: boolean }) {
