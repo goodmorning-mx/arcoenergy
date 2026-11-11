@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@goodmorning/gm-auth';
 import { PwaStatus } from '@goodmorning/gm-pwa';
-import { cacheInstallations, cacheInventory, cacheMovements, checklistQueueKey, clearCachedFieldSnapshots, queueChecklistChange, queueFieldAction, readCachedInstallations, readCachedInventory, readCachedMovements, readChecklistQueue, readFieldActionQueue, removeChecklistChange, removeChecklistChangeIfCurrent, removeFieldAction, updateFieldAction, type ChecklistQueueItem, type FieldActionQueueItem, type Installation } from './offlineChecklist';
+import { cacheInstallations, cacheInventory, cacheMovements, checklistQueueKey, clearCachedFieldSnapshots, isRetryableFieldActionStatus, queueChecklistChange, queueFieldAction, readCachedInstallations, readCachedInventory, readCachedMovements, readChecklistQueue, readFieldActionQueue, removeChecklistChange, removeChecklistChangeIfCurrent, removeFieldAction, updateFieldAction, type ChecklistQueueItem, type FieldActionQueueItem, type Installation } from './offlineChecklist';
 import './styles.css';
 import './barcode.css';
 import './offline.css';
@@ -176,8 +176,12 @@ function App() {
             body: JSON.stringify({ ...action.payload, operation_id: action.operation_id }),
           });
           if (!response.ok) {
-            if (response.status >= 500) {
-              setActionMessage('El servidor no confirmó una operación pendiente. Se conserva para reintentar.');
+            if (isRetryableFieldActionStatus(response.status)) {
+              setActionMessage(response.status === 401
+                ? 'La sesión ya no está vigente. La operación se conserva; inicia sesión de nuevo y reintenta la sincronización.'
+                : response.status === 429
+                  ? 'El servidor pidió esperar antes de sincronizar. La operación se conserva para reintentar.'
+                  : 'El servidor no confirmó una operación pendiente. Se conserva para reintentar.');
             } else {
               let detail = `El servidor rechazó la operación (${response.status}).`;
               try {

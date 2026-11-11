@@ -34,6 +34,10 @@ export type FieldActionQueueItem = {
   last_error_status?: number;
 };
 
+export function isRetryableFieldActionStatus(status: number): boolean {
+  return status >= 500 || [401, 408, 425, 429].includes(status);
+}
+
 const DATABASE = 'arcoenergy-field-cache';
 const VERSION = 2;
 const INSTALLATIONS = 'installations';
