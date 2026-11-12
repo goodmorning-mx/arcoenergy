@@ -1834,3 +1834,15 @@ Factory ahora admite secretos gestionados opcionales por producto. El manifiesto
 | US-13 | Parcial funcional | El manifiesto de DEV ya expone el punto de configuración privada sin exponer la credencial. Faltan valores autorizados, carga del archivo empresarial, retención y restauración. |
 
 La migración `202611120142` agrega versiones append-only para US-3, US-10 y US-13, manteniendo intactas sus fuentes literales. El secreto de servicio y el ID de carpeta siguen sin estar configurados; por eso el producto debe seguir reportando Drive como desconectado.
+
+## Iteración 131 — verificación del esquema de DEV desplegado (2026-11-12)
+
+Tras publicar el repositorio, el push de Factory commit `fa20b0258879cae68ed1b4cbdf479934f9fc6a1f` ejecutó la reconciliación `resources-v3`: los pasos **Apply and deploy selected products** y **Verify live database schema revisions** terminaron correctamente en [workflow run 43262729763](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/43262729763). El manifiesto de ArcoEnergy fija la revisión esperada en `202611120142`; la migración correspondiente queda verificada en la base de datos viva de DEV según ese workflow. Esta evidencia confirma la migración desplegada, pero no prueba carga a Drive ni disponibilidad HTTP desde este entorno: la credencial y la carpeta siguen pendientes y los portales respondieron `EHOSTUNREACH` desde el entorno de verificación.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-3 | Parcial funcional | La revisión de esquema `202611120142` quedó aplicada en DEV; Factory mantiene la configuración de Drive opcional. Faltan carpeta y credencial aprobadas y probar carga, lectura y compartir un PDF real. |
+| US-10 | Parcial funcional | La revisión de esquema de DEV quedó aplicada; el archivo privado sigue dependiendo de Drive. Faltan la configuración autorizada y una carga/reintento real desde PWA. |
+| US-13 | Parcial funcional | Se confirmó la revisión esperada en la base de datos viva; no se ha comprobado exportación empresarial en Drive, retención ni restauración. |
+
+La verificación es automatizada por Factory y no sustituye la prueba funcional de Drive ni una revisión desde una red externa de las rutas públicas.
