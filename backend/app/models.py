@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from app.time_utils import business_today
 
@@ -418,6 +418,19 @@ class IntegrationStatus(Base):
     connected: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(80), default="pending_configuration")
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class BusinessSnapshotRun(Base):
+    __tablename__ = "ae_business_snapshot_runs"
+    __table_args__ = (Index("ix_ae_business_snapshot_runs_status_started", "status", "started_at"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=now_utc)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    filename: Mapped[str] = mapped_column(String(255), default="")
+    file_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    record_count: Mapped[int] = mapped_column(Integer, default=0)
+    error_code: Mapped[str] = mapped_column(String(80), default="")
 
 
 class HistoryCard(Base):
