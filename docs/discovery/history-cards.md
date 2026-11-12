@@ -898,6 +898,9 @@ La iteración quedó integrada mediante el PR [#72](https://github.com/goodmorni
 | --- | --- | --- |
 | US-36 | Parcial funcional | Reversa manual con motivo, enlace al original y corrección pareada de transferencias; pagos de proveedores/clientes ya usan origen. Pendientes reversas integrales de ventas, gastos e inventario. |
 | US-18 | Funcional básico | Las correcciones directas de caja se limitan a movimientos manuales y transferencias; operaciones comerciales se corrigen desde su origen. Pendientes conciliación y comisiones. |
+Warning: truncated output (original token count: 13592)
+Total output lines: 300
+
 | US-35 | Parcial funcional | Se evita desincronizar caja de gastos, ventas y pagos por una reversa genérica. Falta el ciclo de corrección de origen para todas las operaciones relacionadas. |
 
 ## Iteración 49 — corrección de gastos desde su origen (2026-11-07)
@@ -1042,41 +1045,7 @@ La PWA de campo ahora permite adjuntar al gasto un comprobante opcional PDF/JPG/
 | --- | --- | --- |
 | US-10 | Parcial funcional | CRM y PWA admiten comprobantes privados; la PWA los mantiene offline y reintenta el archivado sin duplicar gastos. Pendientes política de aprobación/revisión y configuración autorizada de Drive en DEV. |
 | US-13 | Parcial funcional | Los comprobantes de campo ahora llegan a Drive desde móvil incluso tras captura sin conexión. Sigue pendiente sincronización general de datos, documentos legales, permisos/carpetas y retención/restauración. |
-| US-17 | Parcial funcional | El gasto de campo acepta archivo en la PWA y conserva el archivo pendiente hasta confirmación de Drive. La política contable de comprobación y aprobación requiere validación. |
-
-La migración `202611080071` registra nuevas versiones append-only para US-10, US-13 y US-17; conserva intactos los relatos originales.
-
-La implementación se integró mediante el PR [#93](https://github.com/goodmorning-mx/arcoenergy/pull/93), merge commit `6c8712c3d8b943b856232b1013e014b56675e912`. Factory completó el despliegue DEV y la verificación de esquema/respaldo en el run [#42447576484](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42447576484). API, CRM y PWA reportan el mismo SHA; PostgreSQL informa `202611080071` y las versiones activas de US-10, US-13 y US-17 corresponden a Iteración 59. Chrome headless renderizó el acceso en `/login`, `/crm/login` y `/app/login`; la PWA desplegada incluye el control de comprobante. `/`, las rutas de acceso y `/api/health/ready` respondieron HTTP 200. Pasaron CI Backend, CRM, Frontend, Next.js y Docker; 161 pruebas backend locales. El job auxiliar `report` falló sin afectar la integración ni el despliegue.
-
-## Iteración 60 — datos de contacto en órdenes asignadas (2026-11-08)
-
-La PWA muestra al instalador asignado el domicilio del proyecto y acciones para llamar al cliente o redactar un correo desde el teléfono. La respuesta del endpoint de instalaciones limita el objeto de contacto a nombre, ciudad, domicilio, teléfono y correo; ya no devuelve estado/procedencia del registro CRM. Las órdenes visibles para el rol instalador siguen filtradas a las que están asignadas a su cuenta. El aviso cuando la aplicación está cerrada sigue pendiente de canal push/mensajería configurado, y la experiencia debe probarse con el personal real.
-
-| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
-| --- | --- | --- |
-| US-7 | Parcial funcional | El instalador de una orden asignada puede ver ubicación y medios de contacto del cliente y usar enlaces `tel:`/`mailto:`. Falta un canal de notificación en segundo plano y validación con instaladores reales. |
-| US-14 | Parcial funcional | La lista limita instalaciones del instalador a sus asignaciones y ofrece un resumen mínimo de cliente. Falta validar toda la matriz de acceso por entidad/campo con responsables y cuentas reales. |
-
-La migración `202611080072` registra nuevas versiones append-only de US-7 y US-14 y conserva intactas las fuentes literales.
-
-La implementación se integró mediante el PR [#95](https://github.com/goodmorning-mx/arcoenergy/pull/95), merge commit `08fc60d0eae19512368dfd9134f437c275a9e1ef`. Factory completó DEV y la verificación de esquema/respaldo en el run [#42448484925](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42448484925). API, CRM y PWA reportan el mismo SHA y PostgreSQL informa `202611080072`; las versiones activas de US-7 y US-14 quedaron en Iteración 60. `/`, `/api/health/ready`, `/login`, `/crm/login`, `/app/login` y las rutas de versión respondieron HTTP 200. Chrome headless renderizó los tres accesos; el bundle PWA desplegado contiene los enlaces de llamada y correo. CI Backend, CRM, Frontend, Next.js y Docker pasó; Backend: 163 pruebas locales. El job auxiliar `report` falló sin afectar la integración ni el despliegue.
-
-## Iteración 61 — avisos push de asignación a instaladores (2026-11-08)
-
-La PWA permite al instalador activar o desactivar Web Push desde la vista de instalaciones. La suscripción queda vinculada al correo autenticado, puede existir en varios dispositivos y el API limita altas/bajas a la cuenta con rol `instalador`. Al crear una orden o aceptar una venta que crea una orden, el API programa un aviso a cada instalador suscrito y asignado; el payload incluye únicamente el folio y una ruta interna, sin datos personales del cliente. El service worker presenta el aviso aun con la PWA cerrada y abre `/app/` al tocarlo. Los endpoints de suscripción aceptan solo servicios push conocidos por HTTPS; la clave VAPID se deriva de un secreto persistente administrado por Factory.
-
-| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
-| --- | --- | --- |
-| US-7 | Parcial funcional | La asignación incluye aviso push opcional con la app cerrada y conserva el detalle de contacto dentro de la PWA. Falta validar recepción/desactivación en los dispositivos reales del equipo. |
-| US-40 | Parcial funcional | La PWA registra suscripciones Web Push y el service worker recibe avisos en segundo plano. Falta validar instalación y entrega en los teléfonos y sistemas operativos usados por campo. |
-
-La migración `202611080073` agrega el almacenamiento de suscripciones y registra versiones nuevas de US-7/US-40 sin modificar los relatos literales. La clave `WEB_PUSH_VAPID_SECRET` se configura como secreto generado y persistido en el manifiesto de DEV de Factory; el API no habilita registro push si falta esa variable.
-
-La rama `feature/installer-webpush` se integró en DEV mediante PR [#97](https://github.com/goodmorning-mx/arcoenergy/pull/97), merge commit `dd748fc9c5e2fb6553c3fc5e3233384fc5476c56`. Factory completó el reconciliador resources-v3 en el run [#42541277575](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42541277575): aplicación/despliegue, verificación de revisión de esquema y reconciliación de respaldos terminaron correctamente. El API vivo informa el SHA del merge y estado `ready`; la especificación OpenAPI publicada contiene las rutas de VAPID y suscripción. El sitio, CRM, PWA y `/login`, `/crm/login`, `/app/login` responden HTTP 200. La lectura anónima de la clave VAPID devuelve 401 porque requiere sesión y rol instalador; no hay cuentas/dispositivos reales de instalador disponibles para confirmar recepción push, que permanece pendiente. El CI de la rama del PR aprobó Backend, CRM, Frontend, Next.js y Docker/Chrome.
-
-## Iteración 62 — responsables y avisos de reabasto (2026-11-09)
-
-Administración puede asignar un instalador activo a la reposición de cada artículo junto con su mínimo. El responsable debe activar Web Push en la PWA. El API calcula disponibilidad incluyendo reservas de órdenes y emite un aviso cuando cae al mínimo; evita repetirlo mientras permanece bajo el umbral y rearma la alerta cuando se recupera. Considera las reservas al vender, las salidas/consumos, devoluciones, compras, correcciones de compras/ventas y cambios del umbral. Si el instalador se suscribe cuando el artículo ya está bajo, se le informa al registrar el dispositivo. El payload solo incluye nombre del material, existencia, mínimo y ruta interna.
+| US-17 | Parcial funcional | El gasto de campo acepta archivo en la PWA y conserva el archivo pendiente hasta confirmación de Drive. La política contable de c…1592 tokens truncated…s del umbral. Si el instalador se suscribe cuando el artículo ya está bajo, se le informa al registrar el dispositivo. El payload solo incluye nombre del material, existencia, mínimo y ruta interna.
 
 | Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
 | --- | --- | --- |
@@ -1198,6 +1167,9 @@ La revisión posterior de US-14 encontró que la lista PWA de órdenes serializa
 
 La migración `202611100084` agrega esta nueva versión a US-14 sin modificar la fuente literal. Producto integrado mediante PR [#118](https://github.com/goodmorning-mx/arcoenergy/pull/118), merge commit `ef24521a45e09b7641c3859cd0a233e420aaed7e`. Factory actualizó el contrato de esquema mediante PR [#428](https://github.com/goodmorning-mx/goodmorning-factory/pull/428), merge commit `a60720d8de939c38d3e38dbd4e3d73db896a41ef`; el run [#42867339105](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42867339105) terminó correctamente tras desplegar, verificar `202611100084` y reconciliar respaldos externos. DEV reporta API `ready`, commit `ef24521a45e09b7641c3859cd0a233e420aaed7e` y esquema `202611100084`; `/api/health/ready`, `/api/version`, `/`, `/crm/login`, `/app/login`, `/crm/` y `/app/` respondieron HTTP 200. Validación local: 202 pruebas backend aprobadas. No se añadieron secretos ni variables de configuración.
 
+Warning: truncated output (original token count: 12075)
+Total output lines: 300
+
 ## Iteración 73 — fechas locales de seguimiento (2026-11-10)
 
 El CRM ofrecía las opciones de 3, 7, 15 y 30 días, pero calculaba la fecha con milisegundos UTC. Cerca de la medianoche local eso podía desplazar el contacto un día, y la fecha mínima del control también usaba UTC. El cálculo ahora avanza días de calendario en la zona horaria del navegador, incluyendo el inicio/fin de mes y cambios de horario estacional. Se conservan la fecha abierta, el comentario de bitácora y la asignación de responsable.
@@ -1317,11 +1289,7 @@ La auditoría de la tarjeta US-14 ya verificaba algunas colecciones anónimas en
 
 La revisión se registra en una nueva versión append-only de US-14; conserva relato y fuente originales.
 
-La migración `202611110095` se integró mediante el PR [#137](https://github.com/goodmorning-mx/arcoenergy/pull/137), commit `1a91baac55cd6158d34debca4b9a1eaaea926ba2`; su CI pasó en [#42938073821](https://github.com/goodmorning-mx/arcoenergy/actions/runs/42938073821). Factory actualizó el contrato de DEV en el PR [#442](https://github.com/goodmorning-mx/goodmorning-factory/pull/442), commit `2122af4c1d3e2558e1e28146dd3615e74046835c`; la reconciliación [#42938540397](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42938540397) confirmó la revisión viva `202611110095` y un respaldo externo verificado. La API DEV reporta el commit integrado y esquema `202611110095`; `/`, `/login`, `/crm/login`, `/app/login`, `/crm/` y `/app/` responden HTTP 200; clientes, cotizaciones, instalaciones, portal de cliente y equipo devuelven HTTP 401 sin sesión. La validación local completó 221 pruebas backend y una instalación híbrida limpia con todos los servicios saludables.
-
-## Iteración 84 — auditoría anónima de las rutas de lectura (2026-11-11)
-
-La prueba anterior aseguraba que cada ruta incluyera seguridad Bearer en el router, pero no llamaba al handler completo. Se añade una comprobación de integración local que recorre todas las rutas GET privadas del API y comprueba que un cliente sin sesión reciba 401/403. En DEV se recorrieron las 34 rutas GET privadas publicadas por OpenAPI: todas respondieron 401 y ninguna devolvió información.
+La migración `202611110095` se integró mediante el PR [#137](https://github.com/goodmorning-mx/arcoenergy/pull/137), commit `1a91baac55cd6158d34debca4b9a1eaaea926ba2`; su CI pasó en [#42938073821](https://github.com/goodmorning-mx/arcoenergy/actions/runs/42938073821). Factory actualizó el contrato de DEV en el PR [#442](https://github.com/goodmorning-mx/goodmorning-factory/pull/442), commit `2122af4c1d3e2558e1e28146dd3615e74046835c`; la reconciliación [#42938540397](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42938540397) confirmó la revisión viva `202611110095` y un respaldo externo verificado. La API DEV reporta el commit integrado y esquema `202611110095`; `/`, `/login`, `/crm/login`, `/app/login`, `/crm/` y `/app/` responden HTTP 200; clientes, cotizaciones, instalaciones, portal de cliente y equipo devuelven HTTP 401 sin sesión. La validación local completó 221 pruebas backend y una instalación híbrida limpia con todo…75 tokens truncated…as rutas GET privadas del API y comprueba que un cliente sin sesión reciba 401/403. En DEV se recorrieron las 34 rutas GET privadas publicadas por OpenAPI: todas respondieron 401 y ninguna devolvió información.
 
 | Tarjeta | Estado revisado | Cambio / alcance pendiente |
 | --- | --- | --- |
@@ -1721,3 +1689,13 @@ El CRM añade una vista de integraciones solo para administración. Si la carpet
 | US-13 | Parcial funcional | Se agrega exportación manual y privada del conjunto de datos empresariales desde el CRM; faltan credenciales/carpeta real en DEV, calendario automático, restauración y política de retención aprobada. |
 
 La migración `202611110132` agrega una versión append-only de US-13 y conserva intacta su fuente literal.
+
+## Iteración 121 — redirección de superficies protegidas al login (2026-11-11)
+
+La prueba de Chrome del contenedor ahora inicia también en las raíces protegidas `/app/` y `/crm/` sin sesión. Exige que cada aplicación termine renderizando su formulario de inicio de sesión, además de revisar `/app/login`, `/crm/login` y el alias `/login`. No se agregan usuarios ficticios; DEV provisiona únicamente la cuenta bootstrap de administración definida por Factory, y el resto del equipo debe registrarse con identidades reales.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | CI valida en Chrome los accesos directos a las raíces de PWA y CRM sin sesión, además de las tres rutas explícitas de login. Sigue pendiente verificar privilegios y aislamiento con cuentas reales de cada rol y de clientes/instaladores asignados. |
+
+La migración `202611110133` agrega la verificación a una versión nueva de US-14 sin sobrescribir el relato literal.
