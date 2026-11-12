@@ -1721,3 +1721,13 @@ El CRM añade una vista de integraciones solo para administración. Si la carpet
 | US-13 | Parcial funcional | Se agrega exportación manual y privada del conjunto de datos empresariales desde el CRM; faltan credenciales/carpeta real en DEV, calendario automático, restauración y política de retención aprobada. |
 
 La migración `202611110132` agrega una versión append-only de US-13 y conserva intacta su fuente literal.
+
+## Iteración 121 — redirección de superficies protegidas al login (2026-11-11)
+
+La prueba de Chrome del contenedor ahora inicia también en las raíces protegidas `/app/` y `/crm/` sin sesión. Exige que cada aplicación termine renderizando su formulario de inicio de sesión, además de revisar `/app/login`, `/crm/login` y el alias `/login`. No se agregan usuarios ficticios; DEV provisiona únicamente la cuenta bootstrap de administración definida por Factory, y el resto del equipo debe registrarse con identidades reales.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | CI valida en Chrome los accesos directos a las raíces de PWA y CRM sin sesión, además de las tres rutas explícitas de login. Sigue pendiente verificar privilegios y aislamiento con cuentas reales de cada rol y de clientes/instaladores asignados. |
+
+La migración `202611110133` agrega la verificación a una versión nueva de US-14 sin sobrescribir el relato literal.
