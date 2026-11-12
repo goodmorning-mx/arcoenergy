@@ -6,17 +6,17 @@ Fecha de corte: 2026-11-12. Esta matriz resume el último registro encontrado po
 | --- | --- | --- |
 | US-1 | 127 · despliegue DEV del cotizador PWA | Parcial. Falta recorrido autenticado con usuarios comerciales y catálogo aprobado. |
 | US-2 | 2 · producto autenticado y operación de campo | Pendiente/diferida: análisis automático del recibo de luz, fórmula y aprobación. El cliente indicó que es fase avanzada posterior. |
-| US-3 | 130 · preparación segura de credenciales Drive en Factory | Parcial. Factory ya tiene los campos y secreto opcional; faltan carpeta/credencial aprobadas y una carga/lectura/compartición real. |
+| US-3 | 131 · verificación del esquema de DEV desplegado | Parcial. Factory confirmó la revisión 202611120142 en la base de datos viva; Drive aún requiere carpeta/credencial aprobadas y prueba real de carga/lectura/compartición. |
 | US-4 | 98 · cobertura del seguimiento comercial | Funcional básico: presets, fecha libre, responsable, comentarios y bitácora. Falta validar avisos con vendedores/dispositivos reales. |
 | US-5 | 103 · dashboard y dependencias legales | Bloqueada por plantillas contractuales aprobadas y política de privacidad/consentimiento para INE. |
 | US-6 | 103 · dashboard y dependencias legales | Bloqueada por decisión legal, consentimiento, proveedor de firma/verificación y excepción en papel. |
 | US-7 | 82 · compatibilidad de instalación limpia para Web Push | Parcial: asignación y push implementados; falta validar recepción en dispositivos reales. |
 | US-8 | 111 · disponibilidad por orden para instaladores | Funcional básico: faltantes por orden/reservas y permisos probados. Falta validación con almacén y teléfonos reales. |
 | US-9 | 109 · reintentos de sincronización temporal | Funcional básico: cola offline idempotente y recuperación de fallos. Falta validar sesiones vencidas, límites de API y reconexión en campo. |
-| US-10 | 130 · preparación segura de credenciales Drive en Factory | Parcial: captura/cola offline y archivo privado usan la integración Drive. Falta configurar el secreto/carpeta y confirmar carga real; falta política de aprobación de comprobantes. |
+| US-10 | 131 · verificación del esquema de DEV desplegado | Parcial: captura/cola offline y archivo privado usan Drive y la revisión 202611120142 quedó desplegada. Falta configurar secreto/carpeta y confirmar carga real; falta política de aprobación de comprobantes. |
 | US-11 | 81 · calendario de cobranza y caja | Parcial: agenda y textos para pago próximo/hoy/vencido. Falta confirmar planes, intereses y zona horaria de negocio. |
 | US-12 | 105 · costos directos y resultado preliminar | Funcional básico: costo por consumos/devoluciones y faltantes de costo visibles. Falta aprobación contable de valuación y ajustes. |
-| US-13 | 130 · preparación segura de credenciales Drive en Factory | Parcial: Factory expone configuración opcional segura. Falta secreto/carpeta aprobados y confirmar exportación empresarial, retención y restauración en Drive. |
+| US-13 | 131 · verificación del esquema de DEV desplegado | Parcial: Factory expone configuración opcional segura y DEV verificó esquema 202611120142. Falta secreto/carpeta aprobados y confirmar exportación, retención y restauración en Drive. |
 | US-14 | 128 · verificación Chrome del acceso protegido | Parcial: login separado y rutas protegidas verificadas. Falta probar acceso y aislamiento con cuentas reales de los cinco roles. |
 | US-15 | 108 · resguardo de ventas Plan 24 | Parcial/bloqueada para Plan 24: el sistema impide crear efectos sin reglas. Contabilidad debe definir anticipo, calendario, incumplimiento y efectos. |
 | US-16 | 101 · cobranza de clientes y flujo de efectivo | Funcional básico: pagos parciales/completos, caja y reversas. Falta definir distribución entre deudas, mora y cancelaciones. |
