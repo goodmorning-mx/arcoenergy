@@ -2317,7 +2317,13 @@ def list_inventory_movements(
         later_rows.created_at > InventoryMovement.created_at,
         later_rows.reason != "existencia inicial",
     ).correlate(InventoryMovement).exists()
-    query = select(InventoryMovement, InventoryItem.name, InventoryItem.unit, returned_total.label("returned_quantity")).join(
+    query = select(
+        InventoryMovement,
+        InventoryItem.name,
+        InventoryItem.unit,
+        returned_total.label("returned_quantity"),
+        InventoryItem.quantity.label("current_quantity"),
+    ).join(
         InventoryItem, InventoryItem.id == InventoryMovement.item_id
     )
     if item_id:
@@ -2337,10 +2343,28 @@ def list_inventory_movements(
     query = query.order_by(InventoryMovement.created_at.desc(), InventoryMovement.id.desc()).limit(limit).offset(offset)
     rows = db.execute(query).all()
     result = []
-    for movement, item_name, unit, returned_quantity in rows:
+    for movement, item_name, unit, returned_quantity, current_quantity in rows:
         line = _serialize(movement)
         line.update({"item_name": item_name, "unit": unit, "signed_quantity": -float(movement.quantity) if movement.movement_type in {"out", "waste", "purchase_reversal", "receipt_reversal"} else (0.0 if movement.movement_type in {"consumption", "consumption_return", "damage"} else float(movement.quantity))})
-        line["can_reverse"] = bool(movement.movement_type == "in" and not movement.installation_id and not movement.purchase_line_id and movement.reason.strip().lower() != "existencia inicial" and not db.scalar(select(has_reversal).where(InventoryMovement.id == movement.id)) and not db.scalar(select(has_later_movement).where(InventoryMovement.id == movement.id)))
+        is_manual_receipt = bool(
+            movement.movement_type == "in"
+            and not movement.installation_id
+            and not movement.purchase_line_id
+            and movement.reason.strip().lower() != "existencia inicial"
+        )
+        if is_manual_receipt:
+            already_reversed = bool(db.scalar(select(has_reversal).where(InventoryMovement.id == movement.id)))
+            has_later_activity = bool(db.scalar(select(has_later_movement).where(InventoryMovement.id == movement.id)))
+            enough_stock = Decimal(str(current_quantity or 0)) >= Decimal(str(movement.quantity))
+            line["can_reverse"] = not already_reversed and not has_later_activity and enough_stock
+            if already_reversed:
+                line["correction_note"] = "Esta entrada ya tiene una corrección enlazada en el kardex."
+            elif has_later_activity:
+                line["correction_note"] = "Hay movimientos posteriores; requiere conciliación de existencia y costeo antes de corregir."
+            elif not enough_stock:
+                line["correction_note"] = "La existencia actual es menor que esta entrada; requiere conteo y conciliación antes de corregir."
+        else:
+            line["can_reverse"] = False
         if movement.movement_type == "out":
             line["returnable_quantity"] = max(0.0, float(movement.quantity) - float(returned_quantity or 0))
         if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
