@@ -1783,3 +1783,16 @@ El cotizador de campo permite buscar y seleccionar una ficha existente antes de 
 | US-3 | Parcial funcional | La propuesta se asocia a la ficha elegida y se limpia el PDF/folio al cambiar de cliente. El guardado empresarial en Drive sigue pendiente de configurar y comprobar credenciales privadas. |
 
 La migración `202611120138` agrega nuevas versiones append-only de US-1 y US-3, conservando intactos sus relatos literales.
+
+
+## Iteración 127 — despliegue DEV de cotizador PWA y esquema (2026-11-12)
+
+Factory run [#43146112522](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/43146112522) terminó correctamente. Sus logs registran que los cinco servicios de ArcoEnergy DEV terminaron, que la revisión viva de base de datos `202611120138` quedó verificada y que el respaldo externo de PostgreSQL se validó en Object Storage. Esto demuestra la aplicación del despliegue y su respaldo de infraestructura. No demuestra el acceso autenticado con vendedores/instaladores reales ni que el exportador empresarial haya escrito un JSON en Google Drive.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-1 | Parcial funcional | El código del cotizador PWA está en la versión de DEV desplegada. Falta recorrer selección y generación autenticada con cuentas comerciales reales y catálogo aprobado. |
+| US-3 | Parcial funcional | El despliegue de los cinco servicios quedó verificado; la carga del PDF a Drive y el envío en contexto real de WhatsApp no se verificaron. |
+| US-13 | Parcial funcional | Factory verificó esquema vivo `202611120138` y respaldo externo de PostgreSQL. La integración privada de Drive, su retención y restauración permanecen pendientes. |
+
+La migración `202611120139` agrega evidencia append-only a US-1, US-3 y US-13 sin cambiar sus relatos originales.
