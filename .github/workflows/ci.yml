@@ -171,6 +171,8 @@ jobs:
           manifest_type="$(curl --fail --silent --show-error --output /tmp/arcoenergy-manifest.json --write-out '%{content_type}' http://127.0.0.1:18081/app/manifest.webmanifest)"
           [[ "$manifest_type" == application/manifest+json ]]
           python -c 'import json; m=json.load(open("/tmp/arcoenergy-manifest.json")); assert m["start_url"] == "/app/" and m["scope"] == "/app/"'
+      - name: Verify PWA login works offline after first visit
+        run: node frontend/scripts/verify-pwa-offline.mjs
       - run: curl --fail http://127.0.0.1:18081/app/version.json | grep -F '"commit_sha":"unknown"'
       - run: curl --fail http://127.0.0.1:18081/crm/version.json | grep -F '"commit_sha":"unknown"'
       - if: always()
