@@ -324,8 +324,14 @@ function App() {
   }, [isOnline, accessToken, identity?.email, identity?.permissions.join(','), identity?.roles.join(',')]);
 
   if (!authResolved) return <div className="login-page"><p>Cargando sesión…</p></div>;
-  if (['/login', '/app/login'].includes(window.location.pathname.replace(/\/$/, ''))) { if (identity) { window.location.replace('/app/'); return null; } return <div className="login-page"><section className="login-sheet"><div className="eyebrow">ARCOENERGY · CAMPO</div><h1>Iniciar sesión</h1><p>Acceso para personal y clientes autorizados.</p><form onSubmit={async event => {event.preventDefault(); const form=new FormData(event.currentTarget); setLoginError(''); try {await login(String(form.get('email')),String(form.get('password')),true); window.location.replace('/app/');} catch(err) {setLoginError(err instanceof Error?err.message:authError||'No se pudo iniciar sesión.');}}}><label>Correo electrónico<input name="email" type="email" autoComplete="username" required /></label><label>Contraseña<input name="password" type="password" autoComplete="current-password" required /></label>{loginError&&<p role="alert">{loginError}</p>}<button className="button dark full" disabled={authLoading}>{authLoading?'Iniciando…':'Entrar'}</button></form><a href="/crm/login">Acceso de administración</a></section></div>; }
-  if (!identity || !accessToken) { window.location.replace('/app/login'); return null; }
+  const routePath = window.location.pathname.replace(/\/$/, '');
+  const isLoginRoute = ['/login', '/app/login'].includes(routePath);
+  if (isLoginRoute && identity && accessToken) { window.location.replace('/app/'); return null; }
+  if (!identity || !accessToken) {
+    if (!isLoginRoute) window.history.replaceState(null, '', '/app/login');
+    return <div className="login-page"><section className="login-sheet"><div className="eyebrow">ARCOENERGY · CAMPO</div><h1>Iniciar sesión</h1><p>Acceso para personal y clientes autorizados.</p><form onSubmit={async event => {event.preventDefault(); const form=new FormData(event.currentTarget); setLoginError(''); try {await login(String(form.get('email')),String(form.get('password')),true); window.location.replace('/app/');} catch(err) {setLoginError(err instanceof Error?err.message:authError||'No se pudo iniciar sesión.');}}}><label>Correo electrónico<input name="email" type="email" autoComplete="username" required /></label><label>Contraseña<input name="password" type="password" autoComplete="current-password" required /></label>{loginError&&<p role="alert">{loginError}</p>}<button className="button dark full" disabled={authLoading}>{authLoading?'Iniciando…':'Entrar'}</button></form><a href="/crm/login">Acceso de administración</a></section></div>;
+  }
+  if (isLoginRoute) { window.location.replace('/app/'); return null; }
   if (identity?.roles.includes('cliente')) return <ClientPortal accessToken={accessToken||''} onLogout={()=>void logoutFieldUser()}/>;
 
   const selectedWorkOrder = (liveInstallations || []).find(item => item.id === workInstallId);
