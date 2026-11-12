@@ -1761,3 +1761,13 @@ Cuando Factory configura la carpeta privada y las credenciales de servicio de Go
 | US-13 | Parcial funcional | Se añade programación durable y estado visible de respaldos privados. Falta configurar y verificar Drive en DEV; retención, restauración y recuperación ante corrupción requieren política acordada. |
 
 La migración `202611110136` agrega una versión append-only de US-13 y conserva intacta su fuente literal. Las pruebas enfocadas cubren el primer respaldo, intervalo, falta de configuración, error de carga y preservación de la tarjeta.
+
+## Iteración 125 — verificación del despliegue DEV del respaldo (2026-11-12)
+
+Factory reconcilió los cinco servicios de ArcoEnergy DEV, terminó sus despliegues, verificó el esquema vivo `202611110136` y confirmó un respaldo externo de la base PostgreSQL. La evidencia pertenece al flujo de despliegue de Factory; no prueba que la nueva tarea haya escrito un archivo empresarial en Google Drive. La carpeta de Drive y la cuenta de servicio siguen sin configurarse, por lo que el programador informa espera y no afirma un respaldo empresarial.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-13 | Parcial funcional | Despliegue DEV y esquema `202611110136` verificados por [Factory run #384](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/43139093999); producto integrado en [PR #184](https://github.com/goodmorning-mx/arcoenergy/pull/184). Falta autorizar/configurar Drive y comprobar una carga real, retención y restauración. |
+
+La migración `202611120137` agrega una nueva versión append-only de US-13 y conserva intacta su fuente literal.
