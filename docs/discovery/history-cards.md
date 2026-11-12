@@ -1810,3 +1810,14 @@ Después de corregir el render del login en las raíces protegidas, CI run [#432
 | US-40 | Parcial funcional | Chrome verifica el formulario de acceso en la PWA desde la raíz y la ruta explícita. Falta validar teléfonos y flujos autenticados de campo. |
 
 La migración `202611120140` agrega esta evidencia a US-14 y US-40 sin sobrescribir sus fuentes.
+
+
+## Iteración 129 — búsqueda y vínculos visibles en history cards (2026-11-12)
+
+La vista administrativa del historial permite localizar versiones por ID, relato literal, historia normalizada, stakeholder o iteración. En el detalle de cada versión se distinguen las tarjetas relacionadas de los enlaces que justifican la interpretación desde sus fuentes. Esto facilita revisar la evolución sin ocultar versiones anteriores.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-42 | Parcial funcional | CRM busca dentro de las versiones y muestra vínculos entre tarjetas y fuentes; el historial sigue append-only. El cotejo de las reconstrucciones, transcripciones ASR y la política de retención privada siguen pendientes. |
+
+La migración `202611120141` agrega la evidencia a US-42 y conserva intacto el relato literal.
