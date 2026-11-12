@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 56751)
-Total output lines: 1763
-
 # Arco Energy — Registro de history user story cards
 
 - **Propósito:** conservar los hallazgos por stakeholder, fuente e iteración para poder revisar cómo evolucionan sin borrar lo que se dijo antes.
@@ -930,7 +927,171 @@ La implementación se integró mediante el PR [#75](https://github.com/goodmorni
 | US-32 | Parcial funcional | Folio y orden originales se conservan y se marcan cancelados; sigue pendiente la entidad de proyecto independiente. |
 | US-35 | Parcial funcional | Caja, orden y reserva se actualizan en conjunto al corregir una venta elegible. Crédito sin cobros netos se añade en Iteración 51; inventario emitido, reglas fiscales y doble partida siguen pendientes. |
 | US-36 | Parcial funcional | Reversa integral disponible para gastos y ventas elegibles, además de correcciones de caja/transferencias/pagos existentes. Falta venta a crédito con pagos activos, compras y movimientos físicos de inventario. |
-| US-38 | Parcial funcional | El reporte incorpora la corrección de venta en el periodo de…6751 tokens truncated…autorizados, con actualización periódica y deduplicación local; faltan avisos con CRM cerrado y validación con vendedores reales. |
+| US-38 | Parcial funcional | El reporte incorpora la corrección de venta en el periodo de registro. El resultado todavía es operativo y preliminar. |
+
+## Iteración 51 — corrección de venta financiada sin cobranza neta (2026-11-08)
+
+La corrección de una venta financiada requiere que la orden siga sin actividad de campo y que no haya saldo pagado neto ni cobros sin reversa. Si hubo cobros, primero se corrigen desde el historial de cada cuota. La operación conserva venta, cuotas, orden y folio originales; agrega una corrección enlazada sin movimiento de caja, cancela la orden y libera la reserva. Las cuotas corregidas dejan de aparecer en cartera, panel, y portal de cliente, y se rechazan intentos de cobro tardíos. El reporte de rentabilidad ya resta la corrección en su fecha. Los datos originales permanecen disponibles para auditoría.
+
+Implementación integrada mediante PR [#77](https://github.com/goodmorning-mx/arcoenergy/pull/77), merge SHA `783a03ea5de3e09b8952da3064ebcefafb3eb0e6`. Factory desplegó DEV en el run [#42436672678](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42436672678), con revisión de esquema y respaldo confirmados. `/api/health`, `/api/version`, `/login`, `/crm/login`, `/app/login` y `/` respondieron HTTP 200; API, CRM y PWA reportan el mismo SHA. Backend: 144 pruebas; CI de Backend, CRM, Frontend, Next.js y Docker/Chrome aprobadas. El reporte de evento externo de CI falló por su notificador ajeno a la funcionalidad.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-11 | Parcial funcional | Se ofrece corrección de financiamiento sin cobranza neta y desaparecen cuotas anuladas de cartera; fórmulas/intereses y avisos automáticos siguen pendientes. |
+| US-15 | Parcial funcional | Ventas de contado y crédito pueden corregirse antes de actividad de campo; ventas con pagos netos activos requieren reversas previas y órdenes iniciadas siguen bloqueadas. |
+| US-16 | Parcial funcional | Cuotas corregidas dejan de presentarse y no admiten nuevos cobros; pagos distribuidos, reglas definitivas del financiamiento y notificaciones siguen pendientes. |
+| US-35 | Parcial funcional | La corrección enlaza venta, cartera, orden y reserva de inventario antes de campo; siguen pendientes otras operaciones relacionadas, doble partida y reglas fiscales. |
+| US-36 | Parcial funcional | Se agrega reversa de crédito sin cobro neto; falta cerrar corrección de ventas con actividad, compras y movimientos físicos de inventario. |
+| US-38 | Parcial funcional | Rentabilidad compensa la venta en la fecha de corrección; estados financieros formales, impuestos, intereses y validación del contador siguen pendientes. |
+
+## Iteración 52 — avisos locales de inventario bajo en la PWA (2026-11-08)
+
+La PWA permite al usuario autorizar avisos del dispositivo desde Inventario. Con permiso concedido, la aplicación revisa el stock disponible contra el mínimo configurado por artículo y agrupa los artículos nuevos bajo mínimo en un solo aviso. La lista de artículos ya avisados se conserva por sesión para evitar repetir notificaciones; se vuelve a avisar si el artículo recupera stock y luego vuelve a caer. Mientras la PWA está abierta y conectada, consulta el inventario cada minuto. El aviso local no es una notificación push: para detectar cambios con la aplicación cerrada hace falta definir un servicio push y los destinatarios centrales.
+
+Implementación integrada mediante PR [#79](https://github.com/goodmorning-mx/arcoenergy/pull/79), merge SHA `252eff7fbe9b54f972bdde68070759a7924c1414`. Factory desplegó DEV en el run [#42438040513](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42438040513); la ejecución verificó revisión de esquema y respaldo. `/api/health`, `/api/version`, las rutas de login y las páginas CRM/PWA respondieron HTTP 200; API, CRM y PWA reportan el mismo SHA. Backend: 145 pruebas aprobadas; CI de Frontend, CRM, Next.js y Docker/Chrome aprobado. El reporte externo `report` falló por el notificador de eventos ajeno al producto.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-26 | Parcial funcional | Aviso local agrupado según el mínimo por artículo con permiso explícito; falta push en segundo plano y acordar destinatarios. |
+
+## Iteración 53 — corregir compras desde su origen (2026-11-08)
+
+Administración o contabilidad puede corregir una compra solo cuando no tiene pagos activos y ninguno de sus materiales presenta movimientos de almacén posteriores. Primero se revierten los pagos desde su historial; sus movimientos compensatorios se conservan. La corrección agrega una fila enlazada y movimientos de salida de almacén relacionados con las entradas originales, repone al proveedor su saldo previo a la compra, conserva factura y renglones, y restaura el costo unitario previo que quedó guardado al registrar la compra. Compras antiguas sin el costo previo registrado requieren conciliación manual; movimientos de inventario posteriores requieren un flujo aparte de devolución. No se borran registros.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-21 | Parcial funcional | La compra conserva sus renglones/factura y ahora se puede compensar antes de uso posterior; impuestos, fletes y descuentos siguen sin regla contable aprobada. |
+| US-31 | Parcial funcional | Reversa de compra y pagos enlazados actualiza saldo proveedor, caja y almacén; conciliación sigue pendiente. |
+| US-35 | Parcial funcional | Compras previas a movimientos posteriores pueden corregirse con enlaces entre cuenta por pagar e inventario; falta cierre contable de doble partida. |
+| US-36 | Parcial funcional | Gastos, ventas elegibles y compras elegibles tienen corrección append-only desde origen. Faltan devoluciones/mermas comerciales con actividad de campo y ajustes complejos de inventario. |
+| US-38 | Parcial funcional | El inventario disponible y su costo unitario se restauran en la corrección; estados de resultados formales y validación contable siguen pendientes. |
+
+La primera aplicación de Iteración 53 en DEV falló al detectar que la tabla nueva no existía en una base ya inicializada y Coolify revirtió el contenedor. El PR correctivo [#82](https://github.com/goodmorning-mx/arcoenergy/pull/82) agregó la creación explícita e idempotente de esa tabla; el despliegue final terminó correctamente en Factory run [#42439887917](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42439887917), con la revisión de esquema 064 y el respaldo verificados. API, CRM y PWA reportan el mismo commit `292446d530187f4ec08770a16dd74c238ea48dfd`. `/`, `/api/health`, `/api/version`, `/login`, `/crm/login` y `/app/login` respondieron HTTP 200; Chrome headless renderizó el texto «Iniciar sesión» en las tres rutas de acceso. Backend: 148 pruebas aprobadas; CI de Backend, CRM, Frontend, Next.js y Docker/Chrome aprobado. El chequeo externo `report` continúa fallando por el notificador de eventos del repositorio, separado del despliegue del producto.
+
+## Iteración 54 — verificación del agente público y catálogo comercial (2026-11-08)
+
+Se verificó en DEV el asistente público con dos consultas reales, sin crear prospectos ni cotizaciones. La consulta sobre tamaños devolvió HTTP 200 en español. Al pedir una propuesta de 8 paneles, el agente explicó que el catálogo no ofrece un paquete activo y aprobado para esa cantidad, y no inventó un precio. La clave administrada del modelo está configurada y operativa; la falta de cotización se debe al catálogo comercial pendiente, no a un error del asistente. El resultado quedó agregado como versión nueva, sin cambiar el relato literal de US-41.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-41 | Parcial funcional | El agente web está operativo y se niega a inventar un precio ante un paquete no aprobado. Administración debe cargar/aprobar los paquetes reales; falta probar el formulario con consentimiento y cotejar el catálogo con ventas. |
+
+El asistente se verificó mediante `POST /api/v1/public/agent/chat` (HTTP 200) con consultas de tamaños y cotización de 8 paneles. La primera respuesta fue “Manejamos sistemas que van desde un mínimo de 4 paneles hasta un máximo de 20 paneles”; la segunda indicó que no había paquete activo aprobado para 8 paneles. No se enviaron datos personales. La migración 065 conserva la fuente original y agrega la verificación como una nueva versión de US-41.
+
+Implementación integrada mediante PR [#84](https://github.com/goodmorning-mx/arcoenergy/pull/84). Factory desplegó DEV en el run [#42441554812](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42441554812), con revisión 065 y respaldo confirmados. API, CRM y PWA reportan el mismo commit `c4d240f96773e2f0a6b97482e583e77829e5c0be`; `/`, `/api/health`, `/api/version`, `/login`, `/crm/login` y `/app/login` respondieron HTTP 200. Backend: 149 pruebas; CI de Backend, CRM, Frontend, Next.js y Docker/Chrome aprobado. El notificador externo `report` sigue fallando sin afectar este despliegue.
+
+## Iteración 55 — trazabilidad precisa de history cards (2026-11-08)
+
+Se agregan versiones nuevas de US-39, US-40 y US-41 para que cada interpretación identifique el fragmento literal de la fuente del dueño del producto que la sustenta. El texto completo original de cada tarjeta permanece intacto. US-42 registra el estado implementado del historial append-only en base de datos, API y CRM, y conserva como pendientes el cotejo de historias reconstruidas y la política de almacenamiento privado para artefactos sensibles. Esto mejora la procedencia; no equivale a que los stakeholders hayan validado sus interpretaciones.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-39 | Parcial funcional | Se enlaza el fragmento literal sobre el CRM. La cobertura empresarial completa y las cuentas de equipo reales siguen pendientes de los flujos y datos correspondientes. |
+| US-40 | Parcial funcional | Se enlaza el fragmento literal sobre la PWA móvil operativa. Falta validar tareas, permisos y dispositivos con el personal real. |
+| US-41 | Parcial funcional | Se enlaza el fragmento literal sobre cotización web mediante agente y módulos. El catálogo comercial aprobado y la validación del flujo de venta siguen pendientes. |
+| US-42 | Funcional para registro/versiones | DB, API y CRM ya conservan versiones append-only. El cotejo de tarjetas reconstruidas y la política de conservación privada de fuentes sensibles siguen pendientes. |
+
+La migración `202611080066` (revision 066) no actualiza ni elimina filas previas. La prueba de migración comprueba que el literal se conserva en las versiones anterior y nueva y que se añaden vínculos de fuente específicos.
+
+La implementación quedó integrada en el PR [#86](https://github.com/goodmorning-mx/arcoenergy/pull/86), commit de merge `0659cc199bf5976cbbb1cc4334a6a7dfb55f47ff`. Factory terminó la reconciliación DEV en el run [#42442879877](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42442879877); la base informa revisión 066 y el respaldo externo quedó verificado. La consulta de solo lectura confirmó versiones nuevas y ubicaciones específicas para US-39 a US-42. API, CRM y PWA reportan el mismo commit; `/`, `/login`, `/crm/login`, `/app/login`, `/api/health` y `/api/health/ready` respondieron HTTP 200. CI del PR aprobó Backend, CRM, Frontend, Next.js y Docker/Chrome; backend: 150 pruebas aprobadas. El job externo `report` falló, sin afectar la integración ni el despliegue.
+
+## Iteración 56 — paginación y exportación completa del kardex (2026-11-08)
+
+El reporte operativo ahora pagina el kardex por bloques de hasta 500 movimientos para el intervalo solicitado. CRM muestra el total, permite cargar páginas adicionales y descarga el intervalo completo a CSV, solicitando las páginas restantes antes de generar el archivo. El API mantiene visibles los costos solo para los roles con permiso. El filtro se conserva en todas las páginas y las consultas rechazan límites inválidos o desplazamientos negativos.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-27 | Parcial funcional | Filtro por fechas y artículo, paginación y exportación CSV completa del intervalo; falta validar rendimiento con el histórico real del almacén. |
+| US-29 | Parcial funcional | El kardex de reportes supera el límite de 500 mediante paginación y CSV completo. Falta acordar y validar los reportes financieros y sus fórmulas con contabilidad. |
+
+La API responde `total`, `offset`, `limit` y `has_more` para el kardex, conservando `truncated` por compatibilidad. La migración `202611080067` agrega versiones de US-27 y US-29 sin alterar los relatos fuente ni las revisiones previas.
+
+La implementación se integró mediante el PR [#88](https://github.com/goodmorning-mx/arcoenergy/pull/88), merge commit `26ce89aa59c0155a5086e674e98b395253ae3eda`. Factory terminó DEV en el run [#42444210651](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42444210651); PostgreSQL informa la revisión 067 y las versiones nuevas de US-27/US-29 están registradas. API, CRM y PWA reportan el mismo SHA; `/api/health`, `/api/health/ready`, `/crm/login` y `/app/login` respondieron HTTP 200. CI en PR y push aprobó Backend, CRM, Frontend, Next.js y Docker/Chrome; Backend: 152 pruebas aprobadas. El job externo `report` volvió a fallar sin afectar el despliegue.
+
+## Iteración 57 — detalle de reportes operativos (2026-11-08)
+
+El reporte operativo agrega listados de clientes, proveedores y órdenes, y un detalle de gastos con categoría, proyecto, cuenta, fecha y responsable. Clientes, proveedores y órdenes se presentan como fotografía actual; el gasto conserva el intervalo de fechas elegido. Se excluyen teléfono, domicilio, RFC, correo y enlaces de comprobantes de estos listados. Las correcciones de gasto permanecen identificadas y sus importes compensatorios no se ocultan.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-29 | Parcial funcional | Incluye detalles operativos para clientes, proveedores, órdenes y gastos. Falta que contabilidad valide los campos requeridos, defina fórmulas/estados financieros y confirme los criterios de fecha para sus reportes finales. |
+
+La migración `202611080068` agrega una nueva versión de US-29 sin editar la fuente literal ni las revisiones existentes. El reporte no se presenta como cierre contable y las fórmulas financieras permanecen sujetas a validación del contador.
+
+La implementación quedó integrada mediante el PR [#90](https://github.com/goodmorning-mx/arcoenergy/pull/90), merge commit `dea2802cd126a90e3c32ce39e673ba82ba51f054`. En DEV, `/api/version` informa ese mismo SHA; `/api/health/ready`, `/`, `/crm/login` y `/app/login` respondieron HTTP 200. El CRM desplegado incluye las tablas de detalle y PostgreSQL informa la revisión `202611080068`; la base registra US-29 versión 5 para esta iteración. Pasaron Backend (153 pruebas), CRM typecheck/build y los checks CI de Backend, CRM, Frontend, Next.js y Docker. El job auxiliar `report` del PR falló, mientras todos los checks de producto terminaron correctamente. El plan de Factory confirmó los cinco recursos de aplicación y PostgreSQL existentes; la evidencia de runtime y revisión de base confirma el despliegue efectivo en DEV.
+
+## Iteración 58 — comprobantes privados de gastos en Drive (2026-11-08)
+
+CRM permite adjuntar un comprobante PDF/JPG/PNG/WebP de hasta 12 MiB a un gasto y descargarlo con autenticación. El archivo se guarda en la carpeta privada de Drive mediante la integración existente; los IDs privados no se devuelven al navegador. La captura de un gasto sigue siendo exitosa aunque Drive no esté configurado, pero la interfaz declara el archivo pendiente y permite reintentar la carga. Se conserva el campo previo de enlace externo.
+
+La carga requiere `expenses:write`, la descarga requiere `expenses:read`; los instaladores solo pueden asociar archivos a gastos de órdenes asignadas. La PWA todavía no adjunta comprobantes y el archivo no se pone en cola offline. No se amplía el alcance a INE/contratos ni a sincronización de todos los datos empresariales.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-10 | Parcial funcional | El registro de gastos de campo y la captura contable se mantienen; CRM admite comprobante privado. La PWA aún no adjunta archivos y la política de revisión de gastos sigue pendiente. |
+| US-13 | Parcial funcional | Drive cubre cotizaciones, solicitudes de materiales, facturas de compra y ahora comprobantes de gastos. Faltan documentos legales/INE, política de carpetas, retención, restauración y sincronización general. |
+| US-17 | Parcial funcional | CRM puede archivar y descargar el comprobante de un gasto en Drive; pendientes la política de comprobación, aprobación y el flujo móvil. |
+
+La migración `202611080069` añade metadatos de archivo a gastos sin reemplazar sus enlaces previos; `202611080070` agrega versiones append-only de las tarjetas relacionadas.
+
+## Iteración 59 — comprobantes de gastos desde la PWA (2026-11-08)
+
+La PWA de campo ahora permite adjuntar al gasto un comprobante opcional PDF/JPG/PNG/WebP de hasta 12 MiB, usando la cámara trasera cuando el navegador móvil lo ofrece. Si no hay conexión, IndexedDB conserva el gasto idempotente y el archivo como `Blob`, vinculados a la identidad autenticada. Al regresar la conexión, primero se confirma el gasto y después se sube el archivo a Drive; la operación local solo se elimina tras ambas confirmaciones. Si Drive no está configurado o falla, el archivo permanece en cola y se puede reintentar sin duplicar el gasto. Descartar explícitamente operaciones pendientes advierte que también eliminará comprobantes locales.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-10 | Parcial funcional | CRM y PWA admiten comprobantes privados; la PWA los mantiene offline y reintenta el archivado sin duplicar gastos. Pendientes política de aprobación/revisión y configuración autorizada de Drive en DEV. |
+| US-13 | Parcial funcional | Los comprobantes de campo ahora llegan a Drive desde móvil incluso tras captura sin conexión. Sigue pendiente sincronización general de datos, documentos legales, permisos/carpetas y retención/restauración. |
+| US-17 | Parcial funcional | El gasto de campo acepta archivo en la PWA y conserva el archivo pendiente hasta confirmación de Drive. La política contable de comprobación y aprobación requiere validación. |
+
+La migración `202611080071` registra nuevas versiones append-only para US-10, US-13 y US-17; conserva intactos los relatos originales.
+
+La implementación se integró mediante el PR [#93](https://github.com/goodmorning-mx/arcoenergy/pull/93), merge commit `6c8712c3d8b943b856232b1013e014b56675e912`. Factory completó el despliegue DEV y la verificación de esquema/respaldo en el run [#42447576484](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42447576484). API, CRM y PWA reportan el mismo SHA; PostgreSQL informa `202611080071` y las versiones activas de US-10, US-13 y US-17 corresponden a Iteración 59. Chrome headless renderizó el acceso en `/login`, `/crm/login` y `/app/login`; la PWA desplegada incluye el control de comprobante. `/`, las rutas de acceso y `/api/health/ready` respondieron HTTP 200. Pasaron CI Backend, CRM, Frontend, Next.js y Docker; 161 pruebas backend locales. El job auxiliar `report` falló sin afectar la integración ni el despliegue.
+
+## Iteración 60 — datos de contacto en órdenes asignadas (2026-11-08)
+
+La PWA muestra al instalador asignado el domicilio del proyecto y acciones para llamar al cliente o redactar un correo desde el teléfono. La respuesta del endpoint de instalaciones limita el objeto de contacto a nombre, ciudad, domicilio, teléfono y correo; ya no devuelve estado/procedencia del registro CRM. Las órdenes visibles para el rol instalador siguen filtradas a las que están asignadas a su cuenta. El aviso cuando la aplicación está cerrada sigue pendiente de canal push/mensajería configurado, y la experiencia debe probarse con el personal real.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-7 | Parcial funcional | El instalador de una orden asignada puede ver ubicación y medios de contacto del cliente y usar enlaces `tel:`/`mailto:`. Falta un canal de notificación en segundo plano y validación con instaladores reales. |
+| US-14 | Parcial funcional | La lista limita instalaciones del instalador a sus asignaciones y ofrece un resumen mínimo de cliente. Falta validar toda la matriz de acceso por entidad/campo con responsables y cuentas reales. |
+
+La migración `202611080072` registra nuevas versiones append-only de US-7 y US-14 y conserva intactas las fuentes literales.
+
+La implementación se integró mediante el PR [#95](https://github.com/goodmorning-mx/arcoenergy/pull/95), merge commit `08fc60d0eae19512368dfd9134f437c275a9e1ef`. Factory completó DEV y la verificación de esquema/respaldo en el run [#42448484925](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42448484925). API, CRM y PWA reportan el mismo SHA y PostgreSQL informa `202611080072`; las versiones activas de US-7 y US-14 quedaron en Iteración 60. `/`, `/api/health/ready`, `/login`, `/crm/login`, `/app/login` y las rutas de versión respondieron HTTP 200. Chrome headless renderizó los tres accesos; el bundle PWA desplegado contiene los enlaces de llamada y correo. CI Backend, CRM, Frontend, Next.js y Docker pasó; Backend: 163 pruebas locales. El job auxiliar `report` falló sin afectar la integración ni el despliegue.
+
+## Iteración 61 — avisos push de asignación a instaladores (2026-11-08)
+
+La PWA permite al instalador activar o desactivar Web Push desde la vista de instalaciones. La suscripción queda vinculada al correo autenticado, puede existir en varios dispositivos y el API limita altas/bajas a la cuenta con rol `instalador`. Al crear una orden o aceptar una venta que crea una orden, el API programa un aviso a cada instalador suscrito y asignado; el payload incluye únicamente el folio y una ruta interna, sin datos personales del cliente. El service worker presenta el aviso aun con la PWA cerrada y abre `/app/` al tocarlo. Los endpoints de suscripción aceptan solo servicios push conocidos por HTTPS; la clave VAPID se deriva de un secreto persistente administrado por Factory.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-7 | Parcial funcional | La asignación incluye aviso push opcional con la app cerrada y conserva el detalle de contacto dentro de la PWA. Falta validar recepción/desactivación en los dispositivos reales del equipo. |
+| US-40 | Parcial funcional | La PWA registra suscripciones Web Push y el service worker recibe avisos en segundo plano. Falta validar instalación y entrega en los teléfonos y sistemas operativos usados por campo. |
+
+La migración `202611080073` agrega el almacenamiento de suscripciones y registra versiones nuevas de US-7/US-40 sin modificar los relatos literales. La clave `WEB_PUSH_VAPID_SECRET` se configura como secreto generado y persistido en el manifiesto de DEV de Factory; el API no habilita registro push si falta esa variable.
+
+La rama `feature/installer-webpush` se integró en DEV mediante PR [#97](https://github.com/goodmorning-mx/arcoenergy/pull/97), merge commit `dd748fc9c5e2fb6553c3fc5e3233384fc5476c56`. Factory completó el reconciliador resources-v3 en el run [#42541277575](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/42541277575): aplicación/despliegue, verificación de revisión de esquema y reconciliación de respaldos terminaron correctamente. El API vivo informa el SHA del merge y estado `ready`; la especificación OpenAPI publicada contiene las rutas de VAPID y suscripción. El sitio, CRM, PWA y `/login`, `/crm/login`, `/app/login` responden HTTP 200. La lectura anónima de la clave VAPID devuelve 401 porque requiere sesión y rol instalador; no hay cuentas/dispositivos reales de instalador disponibles para confirmar recepción push, que permanece pendiente. El CI de la rama del PR aprobó Backend, CRM, Frontend, Next.js y Docker/Chrome.
+
+## Iteración 62 — responsables y avisos de reabasto (2026-11-09)
+
+Administración puede asignar un instalador activo a la reposición de cada artículo junto con su mínimo. El responsable debe activar Web Push en la PWA. El API calcula disponibilidad incluyendo reservas de órdenes y emite un aviso cuando cae al mínimo; evita repetirlo mientras permanece bajo el umbral y rearma la alerta cuando se recupera. Considera las reservas al vender, las salidas/consumos, devoluciones, compras, correcciones de compras/ventas y cambios del umbral. Si el instalador se suscribe cuando el artículo ya está bajo, se le informa al registrar el dispositivo. El payload solo incluye nombre del material, existencia, mínimo y ruta interna.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-26 | Parcial funcional | Administración asigna un instalador activo como responsable; Web Push se envía al cruzar el mínimo y se rearma al reponerse. Falta validar la entrega en teléfonos reales y confirmar si almacén requiere otro rol. |
+| US-40 | Parcial funcional | La PWA recibe push de reabasto en segundo plano y evita duplicar el aviso local cuando existe una suscripción. Falta validar instalación y recepción en dispositivos reales. |
+
+La migración `202611090074` agrega responsable y estado de alerta al inventario y versiona US-26/US-40 sin editar su fuente original. `/version` ahora informa también la revisión Alembic para que Factory pueda verificar esquema vivo.
+
+## Iteración 63 — avisos de seguimiento en CRM (2026-11-09)
+
+El CRM permite a cada usuario activar avisos del navegador con permiso explícito. Mientras el CRM está abierto, actualiza la agenda cada minuto y muestra un aviso genérico para seguimientos vencidos o con fecha de hoy, sin exponer el nombre ni la nota del cliente en la pantalla de notificaciones. Cada seguimiento se avisa una vez por cuenta y navegador. La bandeja del CRM sigue mostrando el detalle y permite completar el contacto. El aviso no funciona cuando se cierra el CRM; push, correo o WhatsApp en segundo plano requieren definir y configurar el canal, y probarlo con el equipo real.
+
+| Tarjeta | Estado revisado | Cambio entregado / alcance pendiente |
+| --- | --- | --- |
+| US-4 | Parcial funcional | Se agregan avisos del navegador autorizados, con actualización periódica y deduplicación local; faltan avisos con CRM cerrado y validación con vendedores reales. |
 | US-39 | Parcial funcional | El CRM presenta notificaciones genéricas de seguimientos dentro de una sesión abierta; faltan canal de fondo y cuentas reales para validar. |
 
 La migración `202611090075` agrega versiones append-only para US-4 y US-39; conserva intactos los relatos originales. La alerta consulta los seguimientos que ya pertenecen al usuario autenticado y no crea ni reasigna tareas.
