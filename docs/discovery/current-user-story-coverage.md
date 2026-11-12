@@ -17,7 +17,7 @@ Fecha de corte: 2026-11-12. Esta matriz resume el último registro encontrado po
 | US-11 | 81 · calendario de cobranza y caja | Parcial: agenda y textos para pago próximo/hoy/vencido. Falta confirmar planes, intereses y zona horaria de negocio. |
 | US-12 | 105 · costos directos y resultado preliminar | Funcional básico: costo por consumos/devoluciones y faltantes de costo visibles. Falta aprobación contable de valuación y ajustes. |
 | US-13 | 131 · verificación del esquema de DEV desplegado | Parcial: Factory expone configuración opcional segura y DEV verificó esquema 202611120142. Falta secreto/carpeta aprobados y confirmar exportación, retención y restauración en Drive. |
-| US-14 | 128 · verificación Chrome del acceso protegido | Parcial: login separado y rutas protegidas verificadas. Falta probar acceso y aislamiento con cuentas reales de los cinco roles. |
+| US-14 | 132 · verificación externa de API, PWA y CRM en DEV | Parcial: versiones desplegadas coinciden con el commit y las rutas renderizan en CI. Falta probar autorización y aislamiento con cuentas reales de los cinco roles. |
 | US-15 | 108 · resguardo de ventas Plan 24 | Parcial/bloqueada para Plan 24: el sistema impide crear efectos sin reglas. Contabilidad debe definir anticipo, calendario, incumplimiento y efectos. |
 | US-16 | 101 · cobranza de clientes y flujo de efectivo | Funcional básico: pagos parciales/completos, caja y reversas. Falta definir distribución entre deudas, mora y cancelaciones. |
 | US-17 | 100 · cobertura del registro de gastos | Funcional básico: gastos por fecha, cuenta y proyecto, incluida captura móvil. Falta política contable de casos mixtos, recurrencia y aprobación. |
@@ -43,7 +43,7 @@ Fecha de corte: 2026-11-12. Esta matriz resume el último registro encontrado po
 | US-37 | 116 · cotejo del menú público Base44 | Parcial: menú público y rutas cotejados. Falta comparación autenticada visual/funcional con el sistema de César. |
 | US-38 | 105 · costos directos y resultado preliminar | Parcial: fórmula preliminar mensual/por proyecto, gastos y ajustes. Cierre oficial, fechas, impuestos y reclasificaciones requieren aprobación contable. |
 | US-39 | 119 · continuidad del asistente CRM | Parcial: el hilo se conserva mientras la sesión está activa. Persistencia tras recarga exige decisión de privacidad/retención. |
-| US-40 | 128 · verificación Chrome del acceso protegido | Parcial: login PWA verificado en rutas raíz y explícita. Faltan usuarios y teléfonos reales para probar operación autenticada. |
+| US-40 | 132 · verificación externa de API, PWA y CRM en DEV | Parcial: PWA y CRM reportan el commit desplegado y renderizan en CI. Falta probar operación autenticada en teléfonos reales. |
 | US-41 | 114 · consentimiento y contacto del agente público | Parcial: agente de solo lectura y flujo de contacto con consentimiento. Faltan catálogo/precios aprobados y validación comercial de punta a punta. |
 | US-42 | 129 · búsqueda y vínculos visibles en history cards | Registro append-only y búsqueda CRM implementados. Falta cotejo humano de reconstrucciones/transcripciones y política de fuentes sensibles. |
 
