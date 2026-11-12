@@ -1731,3 +1731,13 @@ La prueba de Chrome del contenedor ahora inicia también en las raíces protegid
 | US-14 | Parcial funcional | CI valida en Chrome los accesos directos a las raíces de PWA y CRM sin sesión, además de las tres rutas explícitas de login. Sigue pendiente verificar privilegios y aislamiento con cuentas reales de cada rol y de clientes/instaladores asignados. |
 
 La migración `202611110133` agrega la verificación a una versión nueva de US-14 sin sobrescribir el relato literal.
+
+## Iteración 122 — captura asistida de CFDI XML para compras (2026-11-11)
+
+El flujo de compras acepta CFDI XML 3.3 y 4.0 de ingreso en MXN, extrae proveedor, UUID/referencia, fecha, conceptos y montos, y prepara el formulario para revisión. Puede proponer proveedor por RFC y artículo por código exacto del catálogo. El XML se procesa en memoria y no crea una compra ni altera almacén por sí solo. Si el total difiere del neto de conceptos —por impuestos, descuentos globales u otros ajustes— el CRM exige revisión; no distribuye esos importes automáticamente.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-22 | Parcial funcional | Pruebas verifican CFDI 3.3/4.0, conceptos y el rechazo de DTD/entidades, monedas, tipos de comprobante y cantidades incompatibles. La captura requiere revisión antes de registrar. Falta validar con facturas reales y que Contabilidad defina impuestos, fletes y descuentos. |
+
+La migración `202611110134` agrega una nueva versión append-only de US-22 y conserva su fuente literal.
