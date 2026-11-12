@@ -1878,3 +1878,13 @@ Se integró una prueba Chrome DevTools sin dependencias adicionales en [PR #197]
 | US-28 | Parcial funcional | Chrome carga login y bundle PWA desde caché tras perder red. Falta ejecutar el escáner lazy con rol instalador autenticado, flujo completo sin señal y etiquetas físicas en teléfonos reales. |
 
 La prueba automatizada cubre el gateway de integración y no sustituye la verificación de campo.
+
+## Iteración 135 — explicación visible de conciliación en el kardex (2026-11-12)
+
+La [PR #199](https://github.com/goodmorning-mx/arcoenergy/pull/199) agregó un motivo de corrección en la API y en el CRM para entradas manuales que no se pueden revertir directamente: ya fueron corregidas, tienen movimientos posteriores o la existencia actual es menor que la entrada. La explicación aparece a usuarios con permiso de administrar inventario. No se elimina el movimiento ni se agrega un efecto contable alterno. Se conservan las guardas de stock y costeo hasta que contabilidad defina cómo conciliar entradas con actividad posterior. El test enfocado de backend pasó (4 casos) y el build CRM/typecheck local pasó; CI completo pasó en PR. El push de DEV [run 43281965683](https://github.com/goodmorning-mx/arcoenergy/actions/runs/43281965683) confirmó la SHA integrada en API, PWA y CRM.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-36 | Parcial funcional | El kardex muestra por qué una reversa append-only requiere conciliación cuando hay movimientos posteriores o saldo insuficiente. Sigue pendiente implementar la conciliación con la regla contable de valuación aprobada y probar ciclos reales. |
+
+La mejora hace visible el límite y evita que la ausencia de acción parezca un error; no completa la corrección de movimientos con efectos posteriores.

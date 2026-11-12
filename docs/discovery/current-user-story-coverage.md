@@ -39,7 +39,7 @@ Fecha de corte: 2026-11-12. Esta matriz resume el último registro encontrado po
 | US-33 | 115 · ubicaciones literales de fuentes de audio y WhatsApp | Procedencia ASR trazable; la transcripción sigue sin validar por su autor. |
 | US-34 | 115 · ubicaciones literales de fuentes de audio y WhatsApp | Procedencia ASR trazable; falta validar transcripción, integridad del clip y atribución del remitente. |
 | US-35 | 115 · ubicaciones literales de fuentes de audio y WhatsApp | Extractos literales ligados a mensajes/horas; requieren cotejo de stakeholder para confirmar interpretación. |
-| US-36 | 110 · corrección de entradas manuales de inventario | Parcial: reversas append-only para varios orígenes; faltan ciclos con actividad posterior/costo promedio y validación contable. |
+| US-36 | 135 · explicación visible de conciliación en el kardex | Parcial: la UI muestra por qué no se permite revertir una entrada con movimientos posteriores o existencia insuficiente. Falta implementar conciliación según la valuación contable aprobada y probar ciclos reales. |
 | US-37 | 116 · cotejo del menú público Base44 | Parcial: menú público y rutas cotejados. Falta comparación autenticada visual/funcional con el sistema de César. |
 | US-38 | 105 · costos directos y resultado preliminar | Parcial: fórmula preliminar mensual/por proyecto, gastos y ajustes. Cierre oficial, fechas, impuestos y reclasificaciones requieren aprobación contable. |
 | US-39 | 119 · continuidad del asistente CRM | Parcial: el hilo se conserva mientras la sesión está activa. Persistencia tras recarga exige decisión de privacidad/retención. |
