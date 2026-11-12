@@ -1846,3 +1846,14 @@ Tras publicar el repositorio, el push de Factory commit `fa20b0258879cae68ed1b4c
 | US-13 | Parcial funcional | Se confirmó la revisión esperada en la base de datos viva; no se ha comprobado exportación empresarial en Drive, retención ni restauración. |
 
 La verificación es automatizada por Factory y no sustituye la prueba funcional de Drive ni una revisión desde una red externa de las rutas públicas.
+
+## Iteración 132 — verificación externa de API, PWA y CRM en DEV (2026-11-12)
+
+Después de integrar el verificador de CRM en PR [#194](https://github.com/goodmorning-mx/arcoenergy/pull/194), el workflow de push [43267461835](https://github.com/goodmorning-mx/arcoenergy/actions/runs/43267461835) terminó correctamente. Desde GitHub Actions, fuera de la red local de esta sesión, el verificador esperó y confirmó que API, PWA y CRM reportaran exactamente la SHA `04eadc7c915bb6becde4022e2605ef3e77f5b8dc`. CI [43267461892](https://github.com/goodmorning-mx/arcoenergy/actions/runs/43267461892) también pasó la construcción integrada, Chrome verificó que PWA y CRM renderizan, y las rutas `/app/version.json` y `/crm/version.json` fueron servidas. Esto confirma versiones y renderizado del entorno DEV; no valida sesiones con las cuentas reales de los cinco roles ni recorrido en teléfonos de los usuarios.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | La versión desplegada de API, PWA y CRM coincide con el commit de DEV y las rutas privadas pasan las verificaciones automatizadas. Falta probar autorización y aislamiento con cuentas reales de los cinco roles. |
+| US-40 | Parcial funcional | La PWA y el CRM reportan el commit desplegado; ambos renderizan en la prueba Chrome de CI. Falta probar acceso autenticado y operación en teléfonos reales. |
+
+La evidencia se limita al despliegue DEV automatizado y no acredita validación de negocio o dispositivos de campo.
