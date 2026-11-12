@@ -566,8 +566,14 @@ export default function App() {
   }
 
   if (!authResolved) return <div className="login-screen"><section className="login-card">Cargando sesión…</section></div>;
-  if (['/login', '/crm/login'].includes(window.location.pathname.replace(/\/$/, ''))) { if (identity) { window.location.replace(clientAccount ? '/app/' : '/crm/'); return null; } return <LoginScreen />; }
-  if (!identity || !accessToken) { window.location.replace('/crm/login'); return null; }
+  const routePath = window.location.pathname.replace(/\/$/, '');
+  const isLoginRoute = ['/login', '/crm/login'].includes(routePath);
+  if (isLoginRoute && identity && accessToken) { window.location.replace(clientAccount ? '/app/' : '/crm/'); return null; }
+  if (!identity || !accessToken) {
+    if (!isLoginRoute) window.history.replaceState(null, '', '/crm/login');
+    return <LoginScreen />;
+  }
+  if (isLoginRoute) { window.location.replace(clientAccount ? '/app/' : '/crm/'); return null; }
   if (clientAccount) { window.location.replace('/app/'); return null; }
 
   const nav: Array<[View, string, string]> = [['inicio', '◫', 'Resumen'], ['clientes', '♙', 'Clientes'], ['cotizaciones', '▤', 'Cotizaciones'], ...(can('sales:read') ? [['ventas', '▣', 'Ventas / OT']] as Array<[View, string, string]> : []), ['seguimientos', '◷', 'Seguimientos'], ...(can('installations:read') ? [['proyectos','▧','Proyectos'], ['instalaciones', '⌂', 'Instalaciones']] as Array<[View, string, string]> : []), ...(can('inventory:read') ? [['inventario', '▦', 'Inventario']] as Array<[View, string, string]> : []), ...(can('expenses:read') ? [['gastos', '$', 'Gastos']] as Array<[View, string, string]> : []), ...(can('receivables:read') ? [['cobranza', '↙', 'Cobranza']] as Array<[View, string, string]> : []), ...(can('accounts:read') ? [['cuentas', '▤', 'Caja / bancos']] as Array<[View, string, string]> : []), ...(can('suppliers:read') ? [['proveedores', '♧', 'Proveedores']] as Array<[View, string, string]> : []), ...(can('purchases:read') ? [['compras', '▤', 'Compras / CxP']] as Array<[View, string, string]> : []), ...(can('reports:read') ? [['reportes', '▥', 'Reportes']] as Array<[View, string, string]> : []), ...(can('team:manage') ? [['catalogo', '⊞', 'Catálogo'], ['equipo', '♧', 'Equipo'], ['integraciones', '☁', 'Drive / integraciones'], ['historial', '↺', 'History cards']] as Array<[View, string, string]> : [])];
