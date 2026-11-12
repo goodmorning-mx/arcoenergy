@@ -32,7 +32,7 @@ from app.config import get_settings
 from app.database import create_database_engine
 from app.drive_storage import download_private_file, folder_status, save_private_file, save_quote_pdf
 from app.drive_archive import archive_business_snapshot
-from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, Project, ProjectExpense, ProfitabilityAdjustment, Purchase, PurchaseCorrection, PurchaseLine, PushSubscription, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
+from app.models import Activity, BusinessSnapshotRun, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, Project, ProjectExpense, ProfitabilityAdjustment, Purchase, PurchaseCorrection, PurchaseLine, PushSubscription, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
 from app.reminders import send_due_followup_pushes
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 from app.time_utils import business_today
@@ -3523,8 +3523,14 @@ def reverse_customer_payment(
 
 
 @router.get("/integrations", dependencies=[Depends(require_permissions(auth_service, "team:manage"))])
-def integration_status():
+def integration_status(db: Session = Depends(get_db)):
     drive = folder_status(settings)
+    latest_snapshot = db.scalar(select(BusinessSnapshotRun).order_by(BusinessSnapshotRun.started_at.desc()).limit(1))
+    last_success = db.scalar(select(BusinessSnapshotRun).where(BusinessSnapshotRun.status == "succeeded").order_by(BusinessSnapshotRun.completed_at.desc()).limit(1))
+    snapshot_configured = bool(settings.google_drive_folder_id and settings.google_drive_service_account_json)
+    snapshot_status = "waiting_for_drive_configuration" if not snapshot_configured else (
+        latest_snapshot.status if latest_snapshot else "waiting_for_first_snapshot"
+    )
     return {
         "google_drive": {
             **drive,
@@ -3534,6 +3540,16 @@ def integration_status():
             "planned_file_types": ["contracts", "identity_documents"],
             "business_snapshot_available": bool(drive.get("connected")),
             "business_snapshot_limit_mb": 64,
+            "business_snapshot_schedule": {
+                "enabled": snapshot_configured,
+                "interval_hours": settings.business_snapshot_interval_hours,
+                "status": snapshot_status,
+                "last_attempt_at": latest_snapshot.started_at.isoformat() if latest_snapshot else None,
+                "last_success_at": last_success.completed_at.isoformat() if last_success and last_success.completed_at else None,
+                "next_due_at": (last_success.completed_at + timedelta(hours=settings.business_snapshot_interval_hours)).isoformat() if last_success and last_success.completed_at else None,
+                "last_filename": last_success.filename if last_success else None,
+                "last_error_code": latest_snapshot.error_code if latest_snapshot and latest_snapshot.status == "failed" else None,
+            },
         },
         "whatsapp": {
             "connected": False,

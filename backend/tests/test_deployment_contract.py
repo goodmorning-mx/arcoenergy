@@ -104,7 +104,7 @@ def test_alembic_infrastructure_and_safe_database_url_handling() -> None:
     assert versions
     combined = "\n".join(path.read_text(encoding="utf-8") for path in versions)
     created_tables = re.findall(r'op\.create_table\(\s*[\"\']([^\"\']+)', combined)
-    assert sorted(created_tables) == ["ae_profitability_adjustments", "ae_projects", "ae_purchase_corrections", "ae_push_subscriptions"]
+    assert sorted(created_tables) == ["ae_business_snapshot_runs", "ae_profitability_adjustments", "ae_projects", "ae_purchase_corrections", "ae_push_subscriptions"]
 
 
 def test_template_reports_github_product_events_with_repository_oidc() -> None:

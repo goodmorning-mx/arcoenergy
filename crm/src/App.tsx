@@ -1265,7 +1265,7 @@ function ProfitabilityView({ token, installations, projects, canManageAdjustment
 }
 
 function IntegrationsView({ token }: { token: string }) {
-  const [drive, setDrive] = useState<{ connected: boolean; status: string; folder_name?: string; business_snapshot_available?: boolean } | null>(null);
+  const [drive, setDrive] = useState<{ connected: boolean; status: string; folder_name?: string; business_snapshot_available?: boolean; business_snapshot_schedule?: { enabled: boolean; interval_hours: number; status: string; last_attempt_at?: string | null; last_success_at?: string | null; next_due_at?: string | null; last_filename?: string | null; last_error_code?: string | null } } | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
@@ -1305,12 +1305,12 @@ function IntegrationsView({ token }: { token: string }) {
         : 'Sin conexión · revisa carpeta y permisos de Drive';
 
   return <div className="page-content">
-    <div className="page-heading"><div><span className="eyebrow">ADMINISTRACIÓN / DATOS</span><h1>Integraciones y respaldo</h1><p>Revisa las conexiones externas y guarda una exportación privada de los datos empresariales.</p></div><button className="button button-outline" onClick={() => void load()} disabled={loading}>{loading ? 'Consultando…' : 'Actualizar estado'}</button></div>
+    <div className="page-heading"><div><span className="eyebrow">ADMINISTRACIÓN / DATOS</span><h1>Integraciones y respaldo</h1><p>Revisa las conexiones externas y la copia periódica de los datos empresariales.</p></div><button className="button button-outline" onClick={() => void load()} disabled={loading}>{loading ? 'Consultando…' : 'Actualizar estado'}</button></div>
     <div className="dashboard-grid">
       <section className="surface-card table-surface">
         <div className="section-title"><div><span className="eyebrow">ALMACENAMIENTO PRIVADO</span><h2>Google Drive</h2></div><span className={`status-chip ${connected ? 'status-approved' : 'status-overdue'}`}>{connected ? 'Conectado' : 'Pendiente'}</span></div>
         <p className="muted-copy">{connectionLabel}</p>
-        <div className="integration-data-list"><p><b>Archivos incluidos:</b> PDFs de cotización, solicitudes de materiales, comprobantes y exportación de datos del negocio.</p><p><b>Exportación:</b> JSON descargable, máximo 64 MB; se genera al solicitarla y se guarda en la carpeta privada configurada.</p><p><b>Historial incluido:</b> clientes, cotizaciones, proyectos, órdenes, inventario, movimientos, compras, pagos, cuentas, gastos, ajustes, history cards y perfiles/roles del equipo.</p><p><b>Datos excluidos:</b> hashes de contraseña, tokens de sesión, credenciales y metadatos de integración, claves/endpoints push y recibos técnicos de sincronización offline.</p></div>
+        <div className="integration-data-list"><p><b>Respaldo automático:</b> {drive?.business_snapshot_schedule?.enabled ? `cada ${drive.business_snapshot_schedule.interval_hours} h. ` : 'Pendiente de configurar Drive. '}{drive?.business_snapshot_schedule?.last_success_at ? `Último respaldo correcto: ${new Date(drive.business_snapshot_schedule.last_success_at).toLocaleString('es-MX')}.` : 'Aún no hay un respaldo automático confirmado.'}{drive?.business_snapshot_schedule?.status === 'failed' && ' El último intento falló; el sistema reintentará automáticamente.'}</p><p><b>Exportación manual:</b> JSON descargable, máximo 64 MB; se genera al solicitarla y se guarda en la carpeta privada configurada.</p><p><b>Historial incluido:</b> clientes, cotizaciones, proyectos, órdenes, inventario, movimientos, compras, pagos, cuentas, gastos, ajustes, history cards y perfiles/roles del equipo.</p><p><b>Datos excluidos:</b> hashes de contraseña, tokens de sesión, credenciales y metadatos de integración, claves/endpoints push y recibos técnicos de sincronización offline.</p></div>
         <div className="notice warning"><b>Datos sensibles</b><span>La exportación contiene información de contacto y financiera. Mantén la carpeta de Drive compartida solo con personal autorizado.</span></div>
         {savedFile && <p className="notice success" role="status">Archivo guardado en Drive: <b>{savedFile.filename}</b> · {savedFile.record_count.toLocaleString('es-MX')} registros · {(savedFile.bytes / 1024 / 1024).toFixed(2)} MB.</p>}
         {error && <p className="error-message" role="alert">{error}</p>}

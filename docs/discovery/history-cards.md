@@ -1751,3 +1751,13 @@ El administrador puede crear una identidad con rol `cliente` desde Equipo despu�
 | US-14 | Parcial funcional | El alta de cliente requiere coincidencia de correo con su ficha y la prueba de alcance confirma que no se mezclan datos de otro correo. Falta validar el flujo con una cuenta real creada por administración y completar las pruebas de permisos en los dispositivos del equipo. |
 
 La migración `202611110135` registra una versión nueva de US-14 y preserva su fuente original.
+
+## Iteración 124 — respaldos empresariales periódicos y privados en Drive (2026-11-11)
+
+Cuando Factory configura la carpeta privada y las credenciales de servicio de Google Drive, el backend genera un respaldo JSON empresarial inicial y luego lo repite cada 24 horas por defecto (intervalo ajustable entre 1 y 168 horas). El estado de cada ejecución queda registrado y la vista de integraciones en CRM muestra configuración, último intento, último éxito y errores seguros. La exportación manual existente permanece disponible. El trabajo usa un bloqueo de PostgreSQL para evitar ejecuciones duplicadas entre réplicas y no inicia ni afirma respaldos si Drive no está configurado.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-13 | Parcial funcional | Se añade programación durable y estado visible de respaldos privados. Falta configurar y verificar Drive en DEV; retención, restauración y recuperación ante corrupción requieren política acordada. |
+
+La migración `202611110136` agrega una versión append-only de US-13 y conserva intacta su fuente literal. Las pruebas enfocadas cubren el primer respaldo, intervalo, falta de configuración, error de carga y preservación de la tarjeta.
