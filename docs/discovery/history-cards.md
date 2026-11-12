@@ -1711,3 +1711,13 @@ El panel del asistente CRM ahora se oculta sin desmontar el chat. Al cerrar y vo
 | US-39 | Parcial funcional | La interfaz conserva el hilo al ocultar y reabrir el asistente durante la sesión. La continuidad no sobrevive a recargas o reinicios del API; retención durable requiere decisión de privacidad. |
 
 La migración `202611110131` añade una revisión append-only de US-39 y conserva su relato literal.
+
+## Iteración 120 — exportación privada de datos empresariales a Drive (2026-11-11)
+
+El CRM añade una vista de integraciones solo para administración. Si la carpeta y la cuenta de servicio están conectadas, puede generar manualmente un JSON privado con una lectura consistente de las tablas de negocio, history cards y perfiles/roles de equipo. El archivo tiene un límite de 64 MB. Omite hashes de contraseña, sesiones, credenciales de notificación y registros técnicos de reintentos offline. Si Drive no está conectado o falla la carga, el CRM muestra el error y no informa que guardó el archivo. No hay programación automática ni restauración de la base de datos.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-13 | Parcial funcional | Se agrega exportación manual y privada del conjunto de datos empresariales desde el CRM; faltan credenciales/carpeta real en DEV, calendario automático, restauración y política de retención aprobada. |
+
+La migración `202611110132` agrega una versión append-only de US-13 y conserva intacta su fuente literal.

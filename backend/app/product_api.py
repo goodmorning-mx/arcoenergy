@@ -31,6 +31,7 @@ from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
 from app.drive_storage import download_private_file, folder_status, save_private_file, save_quote_pdf
+from app.drive_archive import archive_business_snapshot
 from app.models import Activity, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, Project, ProjectExpense, ProfitabilityAdjustment, Purchase, PurchaseCorrection, PurchaseLine, PushSubscription, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
 from app.reminders import send_due_followup_pushes
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
@@ -3529,8 +3530,10 @@ def integration_status():
             **drive,
             "folder_configured": bool(settings.google_drive_folder_id),
             "service_account_configured": bool(getattr(settings, "google_drive_service_account_json", "")),
-            "stored_file_types": ["quotes"],
-            "planned_file_types": ["contracts", "receipts"],
+            "stored_file_types": ["quotes", "service_order_requests", "purchase_invoices", "expense_receipts", "business_data_snapshot"],
+            "planned_file_types": ["contracts", "identity_documents"],
+            "business_snapshot_available": bool(drive.get("connected")),
+            "business_snapshot_limit_mb": 64,
         },
         "whatsapp": {
             "connected": False,
@@ -3540,6 +3543,29 @@ def integration_status():
         },
         "contract_signing": {"connected": False, "status": "provider_and_legal_review_required"},
         "electric_bill_analysis": {"connected": False, "status": "future_phase"},
+    }
+
+
+@router.post("/integrations/google-drive/business-snapshot", status_code=201,
+             dependencies=[Depends(require_permissions(auth_service, "team:manage"))])
+def export_business_snapshot(identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    if not ({"administrador", "admin"} & set(identity.roles)):
+        raise HTTPException(403, "Solo administración puede exportar el archivo empresarial a Drive.")
+    status = folder_status(settings)
+    if not status.get("connected"):
+        raise HTTPException(503, "Google Drive no está conectado; configura la carpeta privada y las credenciales de servicio.")
+    try:
+        result = archive_business_snapshot(db)
+    except ValueError as exc:
+        raise HTTPException(413, str(exc)) from None
+    except Exception:
+        raise HTTPException(502, "No se pudo guardar el archivo empresarial en Drive. No se confirmó la exportación.") from None
+    return {
+        "saved": True,
+        "filename": result["filename"],
+        "bytes": result["bytes"],
+        "record_count": result["record_count"],
+        "storage": "private_google_drive",
     }
 
 
