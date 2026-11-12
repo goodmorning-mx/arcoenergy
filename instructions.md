@@ -45,7 +45,7 @@ GoodMorning Factory administra este producto. El repositorio del producto es la 
 - En hybrid, Factory compone el gateway público y mantiene React/Next como upstreams internos; no se crea un subdominio `app`.
 
 - `api` · rol `api` · puerto `8000` · healthcheck `/health` · dominio `https://api.dev.arcoenergy.goodmorning.mx` · auto-deploy `True`
-  - Variables declaradas (sin valores): `APP_NAME` [literal], `APP_ENV` [literal], `ORGANIZATION_ID` [literal], `CORS_ORIGINS` [literal], `AUTH_JWT_SECRET` [generated_secret], `ADMIN_BOOTSTRAP_EMAIL` [literal], `ADMIN_BOOTSTRAP_PASSWORD` [generated_secret], `SITE_URL` [literal], `OPENAI_API_KEY` [managed_secret, binding=goodmorning/openai-default], `WEB_PUSH_VAPID_SECRET` [generated_secret], `WEB_PUSH_SUBJECT` [literal]
+  - Variables declaradas (sin valores): `APP_NAME` [literal], `APP_ENV` [literal], `ORGANIZATION_ID` [literal], `CORS_ORIGINS` [literal], `AUTH_JWT_SECRET` [generated_secret], `ADMIN_BOOTSTRAP_EMAIL` [literal], `ADMIN_BOOTSTRAP_PASSWORD` [generated_secret], `SITE_URL` [literal], `GOOGLE_DRIVE_FOLDER_ID` [literal], `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` [managed_secret, binding=GOODMORNING_MANAGED_ARCOENERGY_DRIVE_SERVICE_ACCOUNT_JSON], `OPENAI_API_KEY` [managed_secret, binding=goodmorning/openai-default], `WEB_PUSH_VAPID_SECRET` [generated_secret], `WEB_PUSH_SUBJECT` [literal]
 - `frontend` · rol `frontend` · puerto `80` · healthcheck `/` · dominio `privado` · auto-deploy `True`
   - Variables declaradas (sin valores): `VITE_API_URL` [literal], `VITE_BASE_PATH` [literal]
 - `seo` · rol `frontend` · puerto `3000` · healthcheck `/health` · dominio `privado` · auto-deploy `True`
