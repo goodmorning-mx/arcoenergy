@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     organization_id: str = Field(default="arcoenergy", alias="ORGANIZATION_ID")
     google_drive_folder_id: str = Field(default="", alias="GOOGLE_DRIVE_FOLDER_ID")
     google_drive_service_account_json: str = Field(default="", alias="GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON")
+    business_snapshot_interval_hours: int = Field(default=24, ge=1, le=168, alias="BUSINESS_SNAPSHOT_INTERVAL_HOURS")
     whatsapp_phone: str = Field(default="", alias="WHATSAPP_PHONE")
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     web_push_vapid_secret: str = Field(default="", alias="WEB_PUSH_VAPID_SECRET")
