@@ -1771,3 +1771,15 @@ Factory reconcilió los cinco servicios de ArcoEnergy DEV, terminó sus desplieg
 | US-13 | Parcial funcional | Despliegue DEV y esquema `202611110136` verificados por [Factory run #384](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/43139093999); producto integrado en [PR #184](https://github.com/goodmorning-mx/arcoenergy/pull/184). Falta autorizar/configurar Drive y comprobar una carga real, retención y restauración. |
 
 La migración `202611120137` agrega una nueva versión append-only de US-13 y conserva intacta su fuente literal.
+
+
+## Iteración 126 — reutilización de clientes en cotizador PWA (2026-11-12)
+
+El cotizador de campo permite buscar y seleccionar una ficha existente antes de emitir una propuesta. Al seleccionarla, los datos de identidad quedan ligados a esa ficha y el vendedor todavía puede indicar el lugar específico de instalación. Cuando se crea un cliente nuevo, su ID se conserva en el formulario aunque falle el paso posterior de cotización o PDF, de modo que reintentar no duplica la ficha. Cambiar la selección limpia el folio y el PDF de la propuesta anterior.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-1 | Parcial funcional | PWA reutiliza clientes existentes y evita duplicar el recién creado en un reintento. Falta validar con cartera y cuentas comerciales reales en DEV; no se carga precio no aprobado. |
+| US-3 | Parcial funcional | La propuesta se asocia a la ficha elegida y se limpia el PDF/folio al cambiar de cliente. El guardado empresarial en Drive sigue pendiente de configurar y comprobar credenciales privadas. |
+
+La migración `202611120138` agrega nuevas versiones append-only de US-1 y US-3, conservando intactos sus relatos literales.
