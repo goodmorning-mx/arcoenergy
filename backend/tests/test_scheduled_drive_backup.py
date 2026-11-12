@@ -7,7 +7,7 @@ from unittest.mock import Mock
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.orm import Session
 
 from app import drive_backup
@@ -127,3 +127,19 @@ def test_us13_scheduled_snapshot_migration_adds_table_and_appends_story() -> Non
     assert rows[0]["source_literal"] == rows[1]["source_literal"] == source["source_literal"]
     assert rows[-1]["iteration"] == migration.ITERATION
     assert any("cada intervalo configurado" in item for item in rows[-1]["acceptance_criteria"])
+
+
+def test_us13_migration_accepts_snapshot_table_precreated_by_initial_metadata() -> None:
+    path = Path(__file__).parents[1] / "alembic" / "versions" / "202611110136_us13_scheduled_private_drive_snapshots.py"
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    assert spec and spec.loader
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    with engine.begin() as connection:
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+        indexes = {index["name"] for index in inspect(connection).get_indexes("ae_business_snapshot_runs")}
+
+    assert "ix_ae_business_snapshot_runs_status_started" in indexes
