@@ -1867,3 +1867,14 @@ Se ejecutó el extractor actual de `backend/app/product_api.py` sobre una orden 
 | US-25 | Parcial funcional | El endpoint actual procesa la foto y mantiene la propuesta sin mutar inventario; el cotejo con una orden real mostró reconocimiento insuficiente de las filas manuscritas. Se requiere una solución aprobada para manuscritos o continuar la captura humana antes de permitir uso operativo. |
 
 La validación fue local y aislada; no demuestra precisión suficiente para operación ni aprobación para enviar documentos a un tercero.
+
+## Iteración 134 — verificación de shell PWA y API network-only sin conexión (2026-11-12)
+
+Se integró una prueba Chrome DevTools sin dependencias adicionales en [PR #197](https://github.com/goodmorning-mx/arcoenergy/pull/197). El job Docker levantó el gateway híbrido completo y pasó la verificación **Verify PWA login works offline after first visit** en [CI run 43276840870](https://github.com/goodmorning-mx/arcoenergy/actions/runs/43276840870): visitó la PWA en línea, comprobó controlador del service worker y bundle JS en caché, simuló pérdida de red, volvió a abrir la pantalla de acceso desde el shell cacheado y comprobó que `/api/health` no sirve respuestas cacheadas offline. La misma prueba pasó localmente con Chrome contra el build bajo `/app/`. No usó credenciales ni modificó datos. Esto valida la carcasa de la PWA y el aislamiento network-only; no prueba el escáner autenticado, las operaciones IndexedDB, sesión expirada ni teléfono/etiqueta de campo.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-9 | Funcional básico | La CI comprueba navegación de acceso offline y que la API no responde desde caché; la cola de acciones idempotente ya tiene cobertura. Falta recorrido de sesión vencida, límites reales de API y reconexión autenticada en campo. |
+| US-28 | Parcial funcional | Chrome carga login y bundle PWA desde caché tras perder red. Falta ejecutar el escáner lazy con rol instalador autenticado, flujo completo sin señal y etiquetas físicas en teléfonos reales. |
+
+La prueba automatizada cubre el gateway de integración y no sustituye la verificación de campo.
