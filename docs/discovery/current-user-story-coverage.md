@@ -28,7 +28,7 @@ Fecha de corte: 2026-11-12. Esta matriz resume el último registro encontrado po
 | US-22 | 122 · captura asistida de CFDI XML para compras | Parcial: CFDI XML 3.3/4.0 validado y revisable. Faltan facturas reales y reglas contables de impuestos, fletes y descuentos. |
 | US-23 | 19 · devolución reutilizable y merma de obra | Funcional básico: retorno reutilizable repone stock; merma dañada conserva costo sin reingreso. Falta política de inspección/reparación. |
 | US-24 | 112 · auditoría funcional de inventario | Funcional básico: solicitud, reserva/salida, consumo y devolución diferenciados. Falta autorizar variaciones y validar el proceso físico. |
-| US-25 | 94 · lectura asistida de solicitud de materiales | Parcial: OCR de referencia para cotejo, sin registrar salida automáticamente. Falta medir precisión con órdenes reales manuscritas. |
+| US-25 | 133 · cotejo de OCR con orden manuscrita real | Parcial: la prueba aislada no leyó confiablemente cantidades/filas; sigue siendo revisión manual y no muta inventario. Hace falta OCR manuscrito aprobado o captura humana. |
 | US-26 | 112 · auditoría funcional de inventario | Funcional básico: mínimos, responsable y Web Push implementados. Falta recepción en los equipos reales. |
 | US-27 | 112 · auditoría funcional de inventario | Funcional básico: kardex con filtros, paginación y CSV; costos protegidos. Falta validar volúmenes y movimientos históricos sin costo. |
 | US-28 | 97 · preparación offline del escáner | Parcial: lector de cámara precargable y alternativas manual/teclado. Falta recorrido completo offline con teléfonos y etiquetas reales. |
