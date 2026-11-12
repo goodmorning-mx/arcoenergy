@@ -19,24 +19,27 @@ ITERATION = "Iteración 124 · respaldo periódico privado en Drive · 2026-11-1
 
 
 def upgrade() -> None:
-    op.create_table(
-        "ae_business_snapshot_runs",
-        sa.Column("id", sa.String(length=36), nullable=False),
-        sa.Column("status", sa.String(length=20), nullable=False),
-        sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("filename", sa.String(length=255), nullable=False),
-        sa.Column("file_bytes", sa.Integer(), nullable=False),
-        sa.Column("record_count", sa.Integer(), nullable=False),
-        sa.Column("error_code", sa.String(length=80), nullable=False),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(
-        "ix_ae_business_snapshot_runs_status_started",
-        "ae_business_snapshot_runs", ["status", "started_at"],
-    )
-
     bind = op.get_bind()
+    if not sa.inspect(bind).has_table("ae_business_snapshot_runs"):
+        op.create_table(
+            "ae_business_snapshot_runs",
+            sa.Column("id", sa.String(length=36), nullable=False),
+            sa.Column("status", sa.String(length=20), nullable=False),
+            sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
+            sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+            sa.Column("filename", sa.String(length=255), nullable=False),
+            sa.Column("file_bytes", sa.Integer(), nullable=False),
+            sa.Column("record_count", sa.Integer(), nullable=False),
+            sa.Column("error_code", sa.String(length=80), nullable=False),
+            sa.PrimaryKeyConstraint("id"),
+        )
+    indexes = {index["name"] for index in sa.inspect(bind).get_indexes("ae_business_snapshot_runs")}
+    if "ix_ae_business_snapshot_runs_status_started" not in indexes:
+        op.create_index(
+            "ix_ae_business_snapshot_runs_status_started",
+            "ae_business_snapshot_runs", ["status", "started_at"],
+        )
+
     if not sa.inspect(bind).has_table("ae_history_cards"):
         return
     history = sa.Table("ae_history_cards", sa.MetaData(), autoload_with=bind)
