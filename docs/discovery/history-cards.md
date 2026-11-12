@@ -1741,3 +1741,13 @@ El flujo de compras acepta CFDI XML 3.3 y 4.0 de ingreso en MXN, extrae proveedo
 | US-22 | Parcial funcional | Pruebas verifican CFDI 3.3/4.0, conceptos y el rechazo de DTD/entidades, monedas, tipos de comprobante y cantidades incompatibles. La captura requiere revisión antes de registrar. Falta validar con facturas reales y que Contabilidad defina impuestos, fletes y descuentos. |
 
 La migración `202611110134` agrega una nueva versión append-only de US-22 y conserva su fuente literal.
+
+## Iteración 123 — alta de cuentas cliente vinculadas a cartera (2026-11-11)
+
+El administrador puede crear una identidad con rol `cliente` desde Equipo después de registrar su ficha en la cartera. La API valida el mismo correo antes de crear o asignar ese rol; el portal filtra propuestas, instalaciones y pagos por esa dirección y devuelve una proyección sin notas internas, correos de instaladores ni IDs privados de Drive. El CRM explica este requisito al seleccionar el rol.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | El alta de cliente requiere coincidencia de correo con su ficha y la prueba de alcance confirma que no se mezclan datos de otro correo. Falta validar el flujo con una cuenta real creada por administración y completar las pruebas de permisos en los dispositivos del equipo. |
+
+La migración `202611110135` registra una versión nueva de US-14 y preserva su fuente original.
