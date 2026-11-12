@@ -1821,3 +1821,16 @@ La vista administrativa del historial permite localizar versiones por ID, relato
 | US-42 | Parcial funcional | CRM busca dentro de las versiones y muestra vínculos entre tarjetas y fuentes; el historial sigue append-only. El cotejo de las reconstrucciones, transcripciones ASR y la política de retención privada siguen pendientes. |
 
 La migración `202611120141` agrega la evidencia a US-42 y conserva intacto el relato literal.
+
+
+## Iteración 130 — preparación segura de credenciales Drive en Factory (2026-11-12)
+
+Factory ahora admite secretos gestionados opcionales por producto. El manifiesto de ArcoEnergy declara la variable vacía `GOOGLE_DRIVE_FOLDER_ID` hasta que administración defina la carpeta privada, y referencia `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` mediante un secreto opcional que solo se pasa al reconciliador de desarrollo. Los archivos de credenciales no se agregan al repositorio. Factory PR [#493](https://github.com/goodmorning-mx/goodmorning-factory/pull/493) integró la capacidad y su redacción segura; PR [#494](https://github.com/goodmorning-mx/goodmorning-factory/pull/494) conectó las variables del producto. Los checks CI de ambos PR pasaron. Esto prepara el camino de configuración; no significa que Google Drive esté conectado ni que haya recibido archivos.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-3 | Parcial funcional | Factory dispone el ID de carpeta y el secreto opcional para el archivo de cotizaciones. Faltan la carpeta/credencial autorizadas y validar carga, lectura y compartir el PDF real. |
+| US-10 | Parcial funcional | El API puede recibir el mismo secreto opcional para archivar comprobantes. Falta configurar Drive y comprobar una carga/reintento real desde PWA. |
+| US-13 | Parcial funcional | El manifiesto de DEV ya expone el punto de configuración privada sin exponer la credencial. Faltan valores autorizados, carga del archivo empresarial, retención y restauración. |
+
+La migración `202611120142` agrega versiones append-only para US-3, US-10 y US-13, manteniendo intactas sus fuentes literales. El secreto de servicio y el ID de carpeta siguen sin estar configurados; por eso el producto debe seguir reportando Drive como desconectado.
