@@ -9,6 +9,7 @@ from app.config import get_settings
 from app.auth import auth_service, bootstrap_admin
 from app.product_api import router as product_router
 from app.reminders import followup_push_loop
+from app.drive_backup import business_snapshot_loop
 
 settings = get_settings()
 
@@ -16,12 +17,14 @@ settings = get_settings()
 async def lifespan(_: FastAPI):
     bootstrap_admin()
     worker = asyncio.create_task(followup_push_loop())
+    snapshot_worker = asyncio.create_task(business_snapshot_loop())
     try:
         yield
     finally:
         worker.cancel()
+        snapshot_worker.cancel()
         try:
-            await worker
+            await asyncio.gather(worker, snapshot_worker)
         except asyncio.CancelledError:
             pass
 
