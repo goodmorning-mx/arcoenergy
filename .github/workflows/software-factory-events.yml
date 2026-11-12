@@ -156,20 +156,23 @@ jobs:
               const frontend = `https://dev.${product}.goodmorning.mx`;
               let observedApi = '';
               let observedFrontend = '';
+              let observedCrm = '';
               let verified = false;
               for (let attempt = 1; attempt <= 36; attempt += 1) {
                 try {
-                  const [apiResponse, frontendResponse] = await Promise.all([
+                  const [apiResponse, frontendResponse, crmResponse] = await Promise.all([
                     fetch(`${api}/version`, { signal: AbortSignal.timeout(8000) }),
                     fetch(`${frontend}/version.json`, { signal: AbortSignal.timeout(8000) }),
+                    fetch(`${frontend}/crm/version.json`, { signal: AbortSignal.timeout(8000) }),
                   ]);
                   if (apiResponse.ok) observedApi = (await apiResponse.json().catch(() => ({}))).commit_sha || '';
                   if (frontendResponse.ok) observedFrontend = (await frontendResponse.json().catch(() => ({}))).commit_sha || '';
+                  if (crmResponse.ok) observedCrm = (await crmResponse.json().catch(() => ({}))).commit_sha || '';
                   if (observedFrontend !== sourceSha) {
                     const hybridResponse = await fetch(`${frontend}/app/version.json`, { signal: AbortSignal.timeout(8000) });
                     if (hybridResponse.ok) observedFrontend = (await hybridResponse.json().catch(() => ({}))).commit_sha || observedFrontend;
                   }
-                  if (observedApi === sourceSha && observedFrontend === sourceSha) {
+                  if (observedApi === sourceSha && observedFrontend === sourceSha && observedCrm === sourceSha) {
                     verified = true;
                     break;
                   }
@@ -186,13 +189,13 @@ jobs:
                 status: verified ? 'success' : 'failure',
                 title: verified ? `Versión ${environment} confirmada` : `Versión ${environment} sin confirmar`,
                 summary: verified
-                  ? 'API y frontend reportan exactamente la SHA enviada a la rama.'
-                  : 'El API y el frontend no reportaron la SHA esperada antes del tiempo límite.',
+                  ? 'API, PWA y CRM reportan exactamente la SHA enviada a la rama.'
+                  : 'El API, la PWA y el CRM no reportaron la SHA esperada antes del tiempo límite.',
                 environment,
                 desired_sha: sourceSha,
-                observed_sha: observedApi === sourceSha && observedFrontend === sourceSha
+                observed_sha: observedApi === sourceSha && observedFrontend === sourceSha && observedCrm === sourceSha
                   ? sourceSha
-                  : observedFrontend || observedApi || undefined,
+                  : observedCrm || observedFrontend || observedApi || undefined,
                 url: frontend,
               };
               let verificationDelivered = 0;
