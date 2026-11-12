@@ -1857,3 +1857,13 @@ Después de integrar el verificador de CRM en PR [#194](https://github.com/goodm
 | US-40 | Parcial funcional | La PWA y el CRM reportan el commit desplegado; ambos renderizan en la prueba Chrome de CI. Falta probar acceso autenticado y operación en teléfonos reales. |
 
 La evidencia se limita al despliegue DEV automatizado y no acredita validación de negocio o dispositivos de campo.
+
+## Iteración 133 — cotejo de OCR con orden manuscrita real (2026-11-12)
+
+Se ejecutó el extractor actual de `backend/app/product_api.py` sobre una orden manuscrita de instalación recibida como fotografía. El archivo se montó en modo solo lectura en el contenedor local; no se envió a un servicio externo, no se guardó en el repositorio y no se incluyeron datos del cliente en este registro. El blob del extractor probado (`86911c331a4cea76f6eab4413e7c38d623a72a90`) coincide con `dev`. Tesseract 5.5 con idiomas español e inglés devolvió 828 caracteres, pero solo reconoció unas pocas referencias parciales del cuadro de materiales y no transcribió cantidades y filas de forma fiable. Las pruebas locales de recorte de la tabla y ampliación tampoco resolvieron la lectura cursiva. La solicitud continúa como propuesta de revisión manual; no se debe emitir una salida de almacén a partir de esta lectura. Falta decidir si se autoriza un proveedor/modelo apto para escritura manuscrita y su tratamiento de documentos con datos personales, o si la captura seguirá siendo manual.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-25 | Parcial funcional | El endpoint actual procesa la foto y mantiene la propuesta sin mutar inventario; el cotejo con una orden real mostró reconocimiento insuficiente de las filas manuscritas. Se requiere una solución aprobada para manuscritos o continuar la captura humana antes de permitir uso operativo. |
+
+La validación fue local y aislada; no demuestra precisión suficiente para operación ni aprobación para enviar documentos a un tercero.
