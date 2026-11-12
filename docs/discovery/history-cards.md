@@ -1798,3 +1798,15 @@ Factory run [#43146112522](https://github.com/goodmorning-mx/goodmorning-factory
 | US-40 | Parcial funcional | PWA muestra su formulario de login al abrir `/app/` sin sesión; falta CI de Chrome y validación en dispositivos de campo reales. |
 
 La migración `202611120139` agrega evidencia append-only a US-1, US-3, US-13, US-14 y US-40 sin cambiar sus relatos originales.
+
+
+## Iteración 128 — verificación Chrome del acceso protegido (2026-11-12)
+
+Después de corregir el render del login en las raíces protegidas, CI run [#43245435339](https://github.com/goodmorning-mx/arcoenergy/actions/runs/43245435339) pasó en Chrome las cinco rutas `/app/`, `/app/login`, `/crm/`, `/crm/login` y `/login` sin sesión. El test verificó que el PWA y el CRM muestran el formulario, en lugar de quedar en blanco. La compilación y validación Docker del mismo commit también pasaron. Esta prueba no cubre el inicio de sesión exitoso, permisos por rol ni dispositivos reales.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Parcial funcional | Chrome verifica que las rutas protegidas renderizan el login. Falta comprobar el acceso y aislamiento con cuentas reales por rol. |
+| US-40 | Parcial funcional | Chrome verifica el formulario de acceso en la PWA desde la raíz y la ruta explícita. Falta validar teléfonos y flujos autenticados de campo. |
+
+La migración `202611120140` agrega esta evidencia a US-14 y US-40 sin sobrescribir sus fuentes.
