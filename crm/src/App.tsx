@@ -6,8 +6,9 @@ import { OperationsReportView } from './OperationsReportView';
 import { InventoryIssueIntake } from './InventoryIssueIntake';
 import { addCalendarDaysToIsoDate, addLocalCalendarDays, localDateInputValue } from './dateUtils';
 import './inventory-labels.css';
+import './integrations.css';
 
-type View = 'inicio' | 'clientes' | 'cotizaciones' | 'ventas' | 'seguimientos' | 'proyectos' | 'instalaciones' | 'inventario' | 'gastos' | 'cobranza' | 'cuentas' | 'proveedores' | 'compras' | 'reportes' | 'catalogo' | 'equipo' | 'historial';
+type View = 'inicio' | 'clientes' | 'cotizaciones' | 'ventas' | 'seguimientos' | 'proyectos' | 'instalaciones' | 'inventario' | 'gastos' | 'cobranza' | 'cuentas' | 'proveedores' | 'compras' | 'reportes' | 'catalogo' | 'equipo' | 'integraciones' | 'historial';
 type Customer = { id: string; name: string; phone: string; email: string; city: string; address: string; status: string; source: string; created_at?: string };
 type Quote = { id: string; folio: string; customer_id: string; customer?: Customer; panel_count: number; panel_brand: string; panel_watts: number; inverter: string; payment_method: string; total: number; status: string; pricing_approved: boolean; installation_city: string; installation_address: string; created_at: string };
 type Package = { id: string; panel_count: number; panel_brand: string; panel_watts: number; panel_unit_price: number; structure_name: string; structure_price: number; inverter_options: Array<{ name: string; price_mxn: number }>; default_inverter: string; payment_methods: string[]; enabled: boolean; pricing_approved: boolean; price_mxn: number; system_kw: number };
@@ -166,9 +167,9 @@ export default function App() {
     ...(can('suppliers:read') ? ['proveedores' as View] : []),
     ...(can('purchases:read') ? ['compras' as View] : []),
     ...(can('reports:read') ? ['reportes' as View] : []),
-    ...(can('team:manage') ? ['catalogo' as View, 'equipo' as View, 'historial' as View] : []),
+    ...(can('team:manage') ? ['catalogo' as View, 'equipo' as View, 'integraciones' as View, 'historial' as View] : []),
   ]), [can, clientAccount]);
-  const title: Record<View, string> = { inicio: 'Resumen', clientes: 'Clientes', cotizaciones: 'Cotizaciones', ventas: 'Ventas y órdenes', seguimientos: 'Seguimientos', proyectos: 'Proyectos', instalaciones: 'Instalaciones', inventario: 'Inventario', gastos: 'Gastos operativos', cobranza: 'Cuentas por cobrar', cuentas: 'Caja y bancos', proveedores: 'Proveedores', compras: 'Compras y cuentas por pagar', reportes: 'Costeo por proyecto', catalogo: 'Catálogo de paquetes', equipo: 'Equipo y accesos', historial: 'History cards' };
+  const title: Record<View, string> = { inicio: 'Resumen', clientes: 'Clientes', cotizaciones: 'Cotizaciones', ventas: 'Ventas y órdenes', seguimientos: 'Seguimientos', proyectos: 'Proyectos', instalaciones: 'Instalaciones', inventario: 'Inventario', gastos: 'Gastos operativos', cobranza: 'Cuentas por cobrar', cuentas: 'Caja y bancos', proveedores: 'Proveedores', compras: 'Compras y cuentas por pagar', reportes: 'Costeo por proyecto', catalogo: 'Catálogo de paquetes', equipo: 'Equipo y accesos', integraciones: 'Integraciones y respaldo', historial: 'History cards' };
 
   const announce = (text: string, type: Notice['type'] = 'success') => {
     setNotice({ text, type });
@@ -569,7 +570,7 @@ export default function App() {
   if (!identity || !accessToken) { window.location.replace('/crm/login'); return null; }
   if (clientAccount) { window.location.replace('/app/'); return null; }
 
-  const nav: Array<[View, string, string]> = [['inicio', '◫', 'Resumen'], ['clientes', '♙', 'Clientes'], ['cotizaciones', '▤', 'Cotizaciones'], ...(can('sales:read') ? [['ventas', '▣', 'Ventas / OT']] as Array<[View, string, string]> : []), ['seguimientos', '◷', 'Seguimientos'], ...(can('installations:read') ? [['proyectos','▧','Proyectos'], ['instalaciones', '⌂', 'Instalaciones']] as Array<[View, string, string]> : []), ...(can('inventory:read') ? [['inventario', '▦', 'Inventario']] as Array<[View, string, string]> : []), ...(can('expenses:read') ? [['gastos', '$', 'Gastos']] as Array<[View, string, string]> : []), ...(can('receivables:read') ? [['cobranza', '↙', 'Cobranza']] as Array<[View, string, string]> : []), ...(can('accounts:read') ? [['cuentas', '▤', 'Caja / bancos']] as Array<[View, string, string]> : []), ...(can('suppliers:read') ? [['proveedores', '♧', 'Proveedores']] as Array<[View, string, string]> : []), ...(can('purchases:read') ? [['compras', '▤', 'Compras / CxP']] as Array<[View, string, string]> : []), ...(can('reports:read') ? [['reportes', '▥', 'Reportes']] as Array<[View, string, string]> : []), ...(can('team:manage') ? [['catalogo', '⊞', 'Catálogo'], ['equipo', '♧', 'Equipo'], ['historial', '↺', 'History cards']] as Array<[View, string, string]> : [])];
+  const nav: Array<[View, string, string]> = [['inicio', '◫', 'Resumen'], ['clientes', '♙', 'Clientes'], ['cotizaciones', '▤', 'Cotizaciones'], ...(can('sales:read') ? [['ventas', '▣', 'Ventas / OT']] as Array<[View, string, string]> : []), ['seguimientos', '◷', 'Seguimientos'], ...(can('installations:read') ? [['proyectos','▧','Proyectos'], ['instalaciones', '⌂', 'Instalaciones']] as Array<[View, string, string]> : []), ...(can('inventory:read') ? [['inventario', '▦', 'Inventario']] as Array<[View, string, string]> : []), ...(can('expenses:read') ? [['gastos', '$', 'Gastos']] as Array<[View, string, string]> : []), ...(can('receivables:read') ? [['cobranza', '↙', 'Cobranza']] as Array<[View, string, string]> : []), ...(can('accounts:read') ? [['cuentas', '▤', 'Caja / bancos']] as Array<[View, string, string]> : []), ...(can('suppliers:read') ? [['proveedores', '♧', 'Proveedores']] as Array<[View, string, string]> : []), ...(can('purchases:read') ? [['compras', '▤', 'Compras / CxP']] as Array<[View, string, string]> : []), ...(can('reports:read') ? [['reportes', '▥', 'Reportes']] as Array<[View, string, string]> : []), ...(can('team:manage') ? [['catalogo', '⊞', 'Catálogo'], ['equipo', '♧', 'Equipo'], ['integraciones', '☁', 'Drive / integraciones'], ['historial', '↺', 'History cards']] as Array<[View, string, string]> : [])];
   const visibleCustomers = customers.filter(item => `${item.name} ${item.city} ${item.email} ${item.phone}`.toLowerCase().includes(search.toLowerCase()));
 
   return <div className="crm-app">
@@ -607,6 +608,7 @@ export default function App() {
         {view === 'reportes' && <><OperationsReportView token={accessToken || ''} /><ProfitabilityView token={accessToken || ''} installations={installations} projects={projects} canManageAdjustments={can('accounts:manage')} /></>}
         {view === 'catalogo' && <CatalogView catalog={catalog} onSave={savePackage} onLogin={() => window.location.assign('/crm/login')} />}
         {view === 'equipo' && <TeamView members={team} roleDefinitions={roleDefinitions} loading={teamLoading} error={teamError} name={teamName} email={teamEmail} password={teamPassword} role={teamRole} busy={teamBusy} onName={setTeamName} onEmail={setTeamEmail} onPassword={setTeamPassword} onRole={setTeamRole} onSubmit={createMember} onUpdateRole={updateMemberRole} />}
+        {view === 'integraciones' && <IntegrationsView token={accessToken || ''} />}
         {view === 'historial' && <HistoryCardsView token={accessToken || ''} announce={announce} />}
 
         <footer className="page-foot"><span>Arco Energy · CRM</span><span>La información se actualiza desde el espacio de trabajo de Arco Energy.</span></footer>
@@ -625,7 +627,7 @@ export default function App() {
   </div>;
 }
 
-function headingDescription(view: View) { return ({ inicio: '', clientes: 'Consulta prospectos, contactos y actividad comercial.', cotizaciones: 'Prepara, descarga y comparte propuestas con folio.', ventas: 'Registra ventas aceptadas, entradas de dinero y órdenes de trabajo.', seguimientos: 'Da continuidad a las conversaciones y registra cada contacto.', proyectos: 'Agrupa órdenes, gastos y costos bajo un código único de proyecto.', instalaciones: 'Asigna y consulta órdenes de trabajo.', inventario: 'Administra materiales, entradas y existencias.', gastos: 'Registra gastos operativos y directos por fecha y proyecto.', cobranza: 'Administra saldos, abonos recibidos y recordatorios a clientes.', cuentas: 'Consulta saldos y registra movimientos de caja y bancos.', proveedores: 'Administra proveedores y sus condiciones de pago.', compras: 'Registra entradas de material, facturas y saldos por pagar.', reportes: 'Consulta ventas, consumo de materiales y gastos por periodo o proyecto.', catalogo: 'Administra paquetes, inversores, precios y formas de pago.', equipo: 'Usuarios y privilegios para cada área.', historial: 'Conserva relatos, fuentes y versiones de cada user story card.' })[view] || ''; }
+function headingDescription(view: View) { return ({ inicio: '', clientes: 'Consulta prospectos, contactos y actividad comercial.', cotizaciones: 'Prepara, descarga y comparte propuestas con folio.', ventas: 'Registra ventas aceptadas, entradas de dinero y órdenes de trabajo.', seguimientos: 'Da continuidad a las conversaciones y registra cada contacto.', proyectos: 'Agrupa órdenes, gastos y costos bajo un código único de proyecto.', instalaciones: 'Asigna y consulta órdenes de trabajo.', inventario: 'Administra materiales, entradas y existencias.', gastos: 'Registra gastos operativos y directos por fecha y proyecto.', cobranza: 'Administra saldos, abonos recibidos y recordatorios a clientes.', cuentas: 'Consulta saldos y registra movimientos de caja y bancos.', proveedores: 'Administra proveedores y sus condiciones de pago.', compras: 'Registra entradas de material, facturas y saldos por pagar.', reportes: 'Consulta ventas, consumo de materiales y gastos por periodo o proyecto.', catalogo: 'Administra paquetes, inversores, precios y formas de pago.', equipo: 'Usuarios y privilegios para cada área.', integraciones: 'Conexiones externas y exportación segura de datos empresariales.', historial: 'Conserva relatos, fuentes y versiones de cada user story card.' })[view] || ''; }
 
 function DashboardView({ data, customers, quotes, followups, can, onCustomer, onView, onComplete }: { data: Dashboard; customers: Customer[]; quotes: Quote[]; followups: FollowUp[]; can: (p: string) => boolean; onCustomer: (c: Customer) => void; onView: (v: View) => void; onComplete: (f: FollowUp) => void }) {
   const recent = [...quotes].slice(0, 4);
@@ -1259,6 +1261,67 @@ function ProfitabilityView({ token, installations, projects, canManageAdjustment
         </section>
       </>}
     </section>
+  </div>;
+}
+
+function IntegrationsView({ token }: { token: string }) {
+  const [drive, setDrive] = useState<{ connected: boolean; status: string; folder_name?: string; business_snapshot_available?: boolean } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState('');
+  const [savedFile, setSavedFile] = useState<{ filename: string; record_count: number; bytes: number } | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await request<{ google_drive: typeof drive }>('/integrations', token);
+      setDrive(result.google_drive);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo consultar Drive.');
+    } finally { setLoading(false); }
+  }, [token]);
+  useEffect(() => { void load(); }, [load]);
+
+  async function exportData() {
+    setExporting(true);
+    setError('');
+    setSavedFile(null);
+    try {
+      const result = await request<{ saved: boolean; filename: string; record_count: number; bytes: number }>(
+        '/integrations/google-drive/business-snapshot', token, { method: 'POST' },
+      );
+      setSavedFile(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar el archivo en Drive.');
+    } finally { setExporting(false); }
+  }
+
+  const connected = Boolean(drive?.connected);
+  const connectionLabel = loading ? 'Consultando conexión…' : connected
+    ? `Conectado${drive?.folder_name ? ` · ${drive.folder_name}` : ''}`
+    : drive?.status === 'folder_not_configured' ? 'Pendiente: falta configurar la carpeta privada'
+      : drive?.status === 'credentials_not_configured' ? 'Pendiente: faltan credenciales de servicio'
+        : 'Sin conexión · revisa carpeta y permisos de Drive';
+
+  return <div className="page-content">
+    <div className="page-heading"><div><span className="eyebrow">ADMINISTRACIÓN / DATOS</span><h1>Integraciones y respaldo</h1><p>Revisa las conexiones externas y guarda una exportación privada de los datos empresariales.</p></div><button className="button button-outline" onClick={() => void load()} disabled={loading}>{loading ? 'Consultando…' : 'Actualizar estado'}</button></div>
+    <div className="dashboard-grid">
+      <section className="surface-card table-surface">
+        <div className="section-title"><div><span className="eyebrow">ALMACENAMIENTO PRIVADO</span><h2>Google Drive</h2></div><span className={`status-chip ${connected ? 'status-approved' : 'status-overdue'}`}>{connected ? 'Conectado' : 'Pendiente'}</span></div>
+        <p className="muted-copy">{connectionLabel}</p>
+        <div className="integration-data-list"><p><b>Archivos incluidos:</b> PDFs de cotización, solicitudes de materiales, comprobantes y exportación de datos del negocio.</p><p><b>Exportación:</b> JSON descargable, máximo 64 MB; se genera al solicitarla y se guarda en la carpeta privada configurada.</p><p><b>Historial incluido:</b> clientes, cotizaciones, proyectos, órdenes, inventario, movimientos, compras, pagos, cuentas, gastos, ajustes, history cards y perfiles/roles del equipo.</p><p><b>Datos excluidos:</b> hashes de contraseña, tokens de sesión, credenciales y metadatos de integración, claves/endpoints push y recibos técnicos de sincronización offline.</p></div>
+        <div className="notice warning"><b>Datos sensibles</b><span>La exportación contiene información de contacto y financiera. Mantén la carpeta de Drive compartida solo con personal autorizado.</span></div>
+        {savedFile && <p className="notice success" role="status">Archivo guardado en Drive: <b>{savedFile.filename}</b> · {savedFile.record_count.toLocaleString('es-MX')} registros · {(savedFile.bytes / 1024 / 1024).toFixed(2)} MB.</p>}
+        {error && <p className="error-message" role="alert">{error}</p>}
+        <button className="button button-primary" onClick={() => void exportData()} disabled={!connected || exporting || loading}>{exporting ? 'Exportando datos…' : 'Guardar exportación en Drive'}</button>
+        {!connected && <small className="muted-copy">Configura la carpeta privada y la cuenta de servicio desde Factory para habilitar la exportación.</small>}
+      </section>
+      <section className="surface-card table-surface">
+        <span className="eyebrow">CANALES DE CONTACTO</span><h2>WhatsApp</h2><p className="muted-copy">Disponible como click-to-chat. El equipo abre la conversación y adjunta los documentos; el sistema no envía mensajes automáticamente.</p>
+        <hr/><span className="eyebrow">DOCUMENTACIÓN</span><h2>Contratos y firma electrónica</h2><p className="muted-copy">Pendiente de plantillas legales aprobadas, política de privacidad y selección de proveedor para firma y verificación.</p>
+      </section>
+    </div>
   </div>;
 }
 
