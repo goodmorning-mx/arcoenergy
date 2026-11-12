@@ -19,7 +19,7 @@ def test_dev_quote_release_migration_appends_evidence_to_three_cards() -> None:
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
     records = json.loads((root / "app" / "history_card_initial.json").read_text(encoding="utf-8"))
-    selected = [row for row in records if row["story_id"] in {"US-1", "US-3", "US-13"}]
+    selected = [row for row in records if row["story_id"] in {"US-1", "US-3", "US-13", "US-14", "US-40"}]
     sources = {row["story_id"]: row["source_literal"] for row in selected}
     for row in selected:
         row.update(id=str(uuid4()), recorded_by="source-import", created_at=datetime.now(timezone.utc))
@@ -36,7 +36,7 @@ def test_dev_quote_release_migration_appends_evidence_to_three_cards() -> None:
             .where(HistoryCard.story_id.in_(list(sources)))
             .order_by(HistoryCard.story_id, HistoryCard.version)
         ).all()
-    assert len(versions) == 6
+    assert len(versions) == 10
     for story_id, source in sources.items():
         rows = [row for row in versions if row.story_id == story_id]
         assert rows[0].source_literal == rows[1].source_literal == source
@@ -44,3 +44,7 @@ def test_dev_quote_release_migration_appends_evidence_to_three_cards() -> None:
     us13 = next(row for row in versions if row.story_id == "US-13" and row.version == 2)
     assert any("cinco servicios DEV" in item for item in us13.acceptance_criteria)
     assert any("no acredita una carga empresarial JSON" in item for item in us13.unresolved_questions)
+    us14 = next(row for row in versions if row.story_id == "US-14" and row.version == 2)
+    assert any("LoginScreen" in item for item in us14.acceptance_criteria)
+    us40 = next(row for row in versions if row.story_id == "US-40" and row.version == 2)
+    assert any("formulario de acceso" in item for item in us40.acceptance_criteria)
