@@ -27,7 +27,9 @@ def test_manual_receipt_correction_is_append_only_and_updates_stock() -> None:
         assert result["movement"]["related_movement_id"] == source.id
         assert db.get(InventoryMovement, source.id) is not None
         assert {row["movement_type"]: row["signed_quantity"] for row in rows} == {"in": 5, "receipt_reversal": -5}
-        assert next(row for row in rows if row["id"] == source.id)["can_reverse"] is False
+        original = next(row for row in rows if row["id"] == source.id)
+        assert original["can_reverse"] is False
+        assert original["correction_note"] == "Esta entrada ya tiene una corrección enlazada en el kardex."
 
 
 @pytest.mark.parametrize("source_type,reason", [("purchase", "compra"), ("in", "existencia inicial")])
@@ -59,3 +61,7 @@ def test_receipt_with_later_activity_or_insufficient_stock_requires_reconciliati
         with pytest.raises(HTTPException) as error:
             reverse_manual_inventory_receipt(source.id, InventoryMovementCorrectionInput(reason="Corrección válida"), identity, db)
         assert error.value.status_code == 409
+        original = next(row for row in list_inventory_movements(identity=identity, db=db) if row["id"] == source.id)
+        assert original["can_reverse"] is False
+        assert "movimientos posteriores" in original["correction_note"]
+        assert "conciliación" in original["correction_note"]
