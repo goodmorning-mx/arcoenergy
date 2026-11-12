@@ -12,7 +12,7 @@ Fecha de corte: 2026-11-12. Esta matriz resume el último registro encontrado po
 | US-6 | 103 · dashboard y dependencias legales | Bloqueada por decisión legal, consentimiento, proveedor de firma/verificación y excepción en papel. |
 | US-7 | 82 · compatibilidad de instalación limpia para Web Push | Parcial: asignación y push implementados; falta validar recepción en dispositivos reales. |
 | US-8 | 111 · disponibilidad por orden para instaladores | Funcional básico: faltantes por orden/reservas y permisos probados. Falta validación con almacén y teléfonos reales. |
-| US-9 | 109 · reintentos de sincronización temporal | Funcional básico: cola offline idempotente y recuperación de fallos. Falta validar sesiones vencidas, límites de API y reconexión en campo. |
+| US-9 | 134 · verificación de shell PWA y API offline | Funcional básico: CI verifica shell de acceso en caché, API network-only y cola idempotente. Falta validar sesión vencida, límites reales y reconexión autenticada en campo. |
 | US-10 | 131 · verificación del esquema de DEV desplegado | Parcial: captura/cola offline y archivo privado usan Drive y la revisión 202611120142 quedó desplegada. Falta configurar secreto/carpeta y confirmar carga real; falta política de aprobación de comprobantes. |
 | US-11 | 81 · calendario de cobranza y caja | Parcial: agenda y textos para pago próximo/hoy/vencido. Falta confirmar planes, intereses y zona horaria de negocio. |
 | US-12 | 105 · costos directos y resultado preliminar | Funcional básico: costo por consumos/devoluciones y faltantes de costo visibles. Falta aprobación contable de valuación y ajustes. |
@@ -31,7 +31,7 @@ Fecha de corte: 2026-11-12. Esta matriz resume el último registro encontrado po
 | US-25 | 133 · cotejo de OCR con orden manuscrita real | Parcial: la prueba aislada no leyó confiablemente cantidades/filas; sigue siendo revisión manual y no muta inventario. Hace falta OCR manuscrito aprobado o captura humana. |
 | US-26 | 112 · auditoría funcional de inventario | Funcional básico: mínimos, responsable y Web Push implementados. Falta recepción en los equipos reales. |
 | US-27 | 112 · auditoría funcional de inventario | Funcional básico: kardex con filtros, paginación y CSV; costos protegidos. Falta validar volúmenes y movimientos históricos sin costo. |
-| US-28 | 97 · preparación offline del escáner | Parcial: lector de cámara precargable y alternativas manual/teclado. Falta recorrido completo offline con teléfonos y etiquetas reales. |
+| US-28 | 134 · verificación de shell PWA y API offline | Parcial: login y bundle PWA cargan offline en Chrome; falta escáner con instalador autenticado, flujo completo y etiquetas/teléfonos reales. |
 | US-29 | 96 · cobertura de reportes operativos | Funcional básico: agregados, fechas, paginación y permisos probados. La validación contable corresponde a US-12/US-38. |
 | US-30 | 102 · directorio y saldos de proveedores | Funcional básico: directorio y relación con compras/pagos. Falta confirmar campos y política para proveedores inactivos. |
 | US-31 | 104 · compras, saldos y pagos a proveedores | Funcional básico: compras contado/crédito, pagos parciales y reversas probados. La conciliación requiere reglas contables. |
