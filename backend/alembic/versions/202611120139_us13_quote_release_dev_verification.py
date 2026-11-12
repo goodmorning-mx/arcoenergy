@@ -27,6 +27,14 @@ REVISIONS = {
         ["Factory run 43146112522 terminó con éxito: los cinco servicios DEV finalizaron, la base viva confirmó el esquema 202611120138 y el respaldo externo de PostgreSQL quedó verificado."],
         ["La verificación de PostgreSQL no acredita una carga empresarial JSON en Google Drive; faltan configuración privada, carga real, retención y prueba de restauración."],
     ),
+    "US-14": (
+        ["La raíz protegida `/crm/` muestra LoginScreen y actualiza la URL a `/crm/login` sin sesión, en vez de renderizar una pantalla vacía durante la navegación."],
+        ["Falta validar la matriz de privilegios y alcance con cuentas reales de cada rol."],
+    ),
+    "US-40": (
+        ["La raíz protegida `/app/` muestra el formulario de acceso y actualiza la URL a `/app/login` sin sesión."],
+        ["Falta confirmar el resultado del navegador automatizado y validar la ruta en dispositivos de campo."],
+    ),
 }
 
 def upgrade() -> None:
