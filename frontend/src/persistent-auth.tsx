@@ -3,7 +3,7 @@ import { createAuthClient } from '@goodmorning/gm-auth';
 
 type Identity = { user_id: string; organization_id: string; roles: string[]; permissions: string[]; email?: string | null; name?: string | null };
 type Tokens = { access_token: string; refresh_token: string; expires_in: number; expires_at?: number; identity: Identity };
-type AuthValue = { identity: Identity | null; accessToken: string | null; loading: boolean; error: string | null; login(email: string, password: string, remember?: boolean): Promise<void>; logout(): Promise<void> };
+type AuthValue = { identity: Identity | null; accessToken: string | null; loading: boolean; error: string | null; login(email: string, password: string, remember?: boolean): Promise<void>; refreshSession(): Promise<string | null>; logout(): Promise<void> };
 const KEY = 'arcoenergy-auth-tokens';
 const client = createAuthClient(import.meta.env.VITE_API_URL || '/api');
 const Context = createContext<AuthValue | null>(null);
@@ -27,10 +27,11 @@ export function PersistentAuthProvider({ children }: { children: React.ReactNode
     if (normalized) localStorage.setItem(KEY, JSON.stringify(normalized)); else localStorage.removeItem(KEY);
     localStorage.removeItem('gm-auth-tokens'); sessionStorage.removeItem('gm-auth-tokens');
   };
-  const renew = async (force = false) => {
+  const renew = async (force = false): Promise<Tokens | null> => {
     const current = tokensRef.current;
-    if (!current || renewing.current) return;
-    if (!force && current.expires_at && current.expires_at - Date.now() > 90_000) return;
+    if (!current) return null;
+    if (renewing.current) return tokensRef.current;
+    if (!force && current.expires_at && current.expires_at - Date.now() > 90_000) return current;
     renewing.current = true;
     const rotate = async () => {
       const latest = localStorage.getItem(KEY);
@@ -46,10 +47,12 @@ export function PersistentAuthProvider({ children }: { children: React.ReactNode
       if (navigator.locks) await navigator.locks.request(`${KEY}-refresh`, rotate);
       else await rotate();
       setError(null);
+      return tokensRef.current;
     }
     catch (cause) {
       if (cause instanceof InvalidSessionError) { update(null); setError('La sesión ya no está activa. Inicia sesión nuevamente.'); }
       else { setError(null); window.setTimeout(() => void renew(), 30_000); }
+      return tokensRef.current;
     }
     finally { renewing.current = false; }
   };
@@ -82,6 +85,7 @@ export function PersistentAuthProvider({ children }: { children: React.ReactNode
   const value = useMemo<AuthValue>(() => ({
     identity: tokens?.identity ?? null, accessToken: tokens?.access_token ?? null, loading, error,
     async login(email, password) { setLoading(true); setError(null); try { update(await client.login(email, password)); } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo iniciar sesión.'); throw e; } finally { setLoading(false); } },
+    async refreshSession() { const refreshed = await renew(true); return refreshed?.access_token ?? null; },
     async logout() { const current = tokensRef.current; update(null); setError(null); if (current) await client.logout(current.refresh_token).catch(() => undefined); },
   }), [tokens, loading, error]);
   return <Context.Provider value={value}>{children}</Context.Provider>;

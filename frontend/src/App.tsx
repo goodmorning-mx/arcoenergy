@@ -33,7 +33,7 @@ function App() {
   const [liveInstallations, setLiveInstallations] = useState<Installation[]|null>(null);
   const [paymentMethod, setPaymentMethod] = useState('Contado');
   const [inverter, setInverter] = useState('');
-  const { identity, accessToken, logout, login, loading: authLoading, error: authError } = useAuth();
+  const { identity, accessToken, logout, login, refreshSession, loading: authLoading, error: authError } = useAuth();
   const [loginError, setLoginError] = useState('');
   const [workInstallId, setWorkInstallId] = useState('');
   const [actionMessage, setActionMessage] = useState('');
@@ -180,14 +180,23 @@ function App() {
         if (cancelled) return;
         if (action.last_error_status) break;
         try {
-          const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}${action.path}`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          let actionAccessToken = accessToken;
+          const sendQueuedAction = (token: string) => fetch(`${import.meta.env.VITE_API_URL || '/api'}${action.path}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify({ ...action.payload, operation_id: action.operation_id }),
           });
+          let response = await sendQueuedAction(actionAccessToken);
+          if (response.status === 401) {
+            const renewedAccessToken = await refreshSession();
+            if (renewedAccessToken && renewedAccessToken !== actionAccessToken) {
+              actionAccessToken = renewedAccessToken;
+              response = await sendQueuedAction(actionAccessToken);
+            }
+          }
           if (!response.ok) {
             if (isRetryableFieldActionStatus(response.status)) {
               setActionMessage(response.status === 401
-                ? 'La sesión ya no está vigente. La operación se conserva; inicia sesión de nuevo y reintenta la sincronización.'
+                ? 'La operación permanece guardada. La app volverá a sincronizarla cuando recupere el acceso.'
                 : response.status === 429
                   ? 'El servidor pidió esperar antes de sincronizar. La operación se conserva para reintentar.'
                   : 'El servidor no confirmó una operación pendiente. Se conserva para reintentar.');
@@ -211,7 +220,7 @@ function App() {
             const receiptResponse = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/v1/expenses/${expense.id}/receipt-file`, {
               method: 'PUT',
               headers: {
-                Authorization: `Bearer ${accessToken}`,
+                Authorization: `Bearer ${actionAccessToken}`,
                 'Content-Type': action.receipt.type,
                 'X-Document-Name': encodeURIComponent(action.receipt.name),
               },
@@ -248,7 +257,7 @@ function App() {
       if (!cancelled) setActionQueue(await readFieldActionQueue(identity.email!));
     })();
     return () => { cancelled = true; };
-  }, [isOnline, accessToken, identity?.email, actionQueue.length, syncAttempt]);
+  }, [isOnline, accessToken, identity?.email, actionQueue.length, syncAttempt, refreshSession]);
   useEffect(() => {
     if (!liveInstallations) { seenInstallationIds.current = null; return; }
     const current = new Set(liveInstallations.map(item => item.id));
@@ -359,14 +368,36 @@ function App() {
     const queueLocally=async(message=`${summary}${receiptFile?' y comprobante':''} guardado en este dispositivo. Pendiente de sincronizar.`)=>{await queueFieldAction(queued);setActionQueue(await readFieldActionQueue(ownerEmail));setActionMessage(message);formElement.reset();};
     if (!isOnline || actionQueue.length>0) { try { await queueLocally(); } catch { setActionMessage('No se pudo guardar la operación localmente. Mantén esta pantalla abierta e intenta de nuevo.'); } return; }
     try {
-      const response=await fetch(`${import.meta.env.VITE_API_URL||'/api'}${path}`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${accessToken}`},body:JSON.stringify({...payload,operation_id:operationId})});
-      if(!response.ok){if(response.status>=500){await queueLocally();return;}throw new Error((await response.json()).detail||'No se pudo guardar el movimiento.');}
+      const sendAction = (token: string) => fetch(`${import.meta.env.VITE_API_URL||'/api'}${path}`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({...payload,operation_id:operationId})});
+      let actionAccessToken = accessToken;
+      let response: Response;
+      try { response = await sendAction(actionAccessToken); }
+      catch { await queueLocally('Se perdió la conexión. La operación quedó guardada en este dispositivo para sincronizar.'); return; }
+      if (response.status === 401) {
+        const renewedAccessToken = await refreshSession();
+        if (renewedAccessToken) {
+          actionAccessToken = renewedAccessToken;
+          try { response = await sendAction(actionAccessToken); }
+          catch { await queueLocally('La sesión se renovó, pero se perdió la conexión. La operación quedó guardada para sincronizar.'); return; }
+        }
+      }
+      if(!response.ok){
+        if(isRetryableFieldActionStatus(response.status)){
+          const message = response.status === 401
+            ? 'No se pudo confirmar la sesión. La operación se guardó en este dispositivo y se reintentará al recuperar el acceso.'
+            : response.status === 429
+              ? 'El servidor pidió esperar antes de sincronizar. La operación se conserva para reintentar.'
+              : 'El servidor no confirmó la operación. Se conserva en este dispositivo para reintentar.';
+          await queueLocally(message); return;
+        }
+        throw new Error((await response.json()).detail||'No se pudo guardar el movimiento.');
+      }
       if (kind === 'expense' && receiptFile) {
         const expense: { id?: string } = await response.json();
         if (!expense.id) { await queueLocally('Gasto confirmado. El comprobante queda en este dispositivo para reintentar la vinculación.'); return; }
         const receiptResponse = await fetch(`${import.meta.env.VITE_API_URL||'/api'}/v1/expenses/${expense.id}/receipt-file`, {
           method: 'PUT',
-          headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': receiptFile.type, 'X-Document-Name': encodeURIComponent(receiptFile.name) },
+          headers: { Authorization: `Bearer ${actionAccessToken}`, 'Content-Type': receiptFile.type, 'X-Document-Name': encodeURIComponent(receiptFile.name) },
           body: receiptFile,
         });
         if (!receiptResponse.ok) {
