@@ -1926,3 +1926,19 @@ La configuración viva no tiene ID de carpeta ni credencial de servicio de Googl
 | US-13 | Parcial funcional | Configuración segura disponible, pero Drive no está configurado; faltan respaldo y restauración reales. |
 | US-14 | Parcial funcional | Tres cuentas nuevas de los roles pedidos iniciaron sesión y recibieron el rol correcto; faltan instalador/cliente y aislamiento por entidad/campo. |
 | US-40 | Parcial funcional | Versiones API/PWA/CRM coinciden y rutas cargan; faltan usuarios de campo/cliente y pruebas en teléfonos reales. |
+
+## Iteración 139 — sesión persistente y renovación transparente (2026-11-13)
+
+PWA y CRM conservan los tokens de sesión en almacenamiento persistente del mismo origen. Al recargar, renuevan y rotan el refresh token antes de mostrar el login; mientras se usa la app, renuevan el acceso antes de que expire. Las pestañas coordinan renovaciones cuando el navegador ofrece Web Locks y sincronizan cambios/logout por `storage`. Un fallo temporal de red conserva los tokens y reintenta en 30 segundos; un refresh rechazado, el cierre de sesión o el cambio de contraseña elimina/invalida la sesión. Los tokens de acceso duran 15 minutos y el refresh se extiende de manera deslizante por 30 días desde cada rotación; tras 30 días sin actividad se requiere volver a entrar.
+
+La prueba `frontend/scripts/verify-persistent-auth.mjs` se ejecutó contra los bundles desplegados en DEV para `/app` y `/crm`, usando respuestas de autenticación simuladas desde Chrome. En ambos portales pasó login, persistencia/rotación tras recarga, retención ante una falla temporal y logout; no usó credenciales reales ni modificó información empresarial. El test se añade también a CI. La sesión persistente está desplegada en `bcee5cd2629522ce73b73ed9a91d6a26f8a0174f`; la revisión append-only `202611130143` registrará esta implementación al desplegar la iteración.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-9 | Funcional básico | La app conserva la sesión ante un refresh temporal fallido. Falta probar una operación de campo en cola cuyo acceso caduque durante desconexión y su reconexión autenticada. |
+| US-14 | Parcial funcional | CRM restaura sesión al recargar, rota tokens, conserva sesión ante error temporal y la elimina al cerrar; falta CI, prueba de aislamiento por entidad/campo, usuarios de instalador/cliente y acordar el límite de 30 días inactivos. |
+| US-40 | Parcial funcional | PWA restaura sesión al recargar, rota tokens, conserva sesión ante error temporal y la elimina al cerrar; falta CI, validación en teléfonos reales, usuarios de campo/cliente y acordar el límite de 30 días inactivos. |
+
+## Trabajo acordado después de completar el goal
+
+El usuario pidió construir una ruta de revisión que muestre las 42 story cards en una tabla detallada, con checklist y un campo de observaciones para verificar cada cambio con los stakeholders. Este entregable se hará después de cerrar el goal de las story cards.
