@@ -6,17 +6,17 @@ Fecha de corte: 2026-11-13. Esta matriz resume el último registro encontrado po
 | --- | --- | --- |
 | US-1 | 127 · despliegue DEV del cotizador PWA | Parcial. Falta recorrido autenticado con usuarios comerciales y catálogo aprobado. |
 | US-2 | 2 · producto autenticado y operación de campo | Pendiente/diferida: análisis automático del recibo de luz, fórmula y aprobación. El cliente indicó que es fase avanzada posterior. |
-| US-3 | 141 · auditoría en vivo después del despliegue | Parcial. DEV ahora confirma schema 202611130145 y las rutas de API, PWA y CRM responden; Drive sigue sin ID de carpeta ni credencial de cuenta de servicio. Falta configurar y probar carga, lectura y compartición. |
+| US-3 | 141 · auditoría en vivo después del despliegue | Parcial. DEV ahora confirma schema 202611130146 y las rutas de API, PWA y CRM responden; Drive sigue sin ID de carpeta ni credencial de cuenta de servicio. Falta configurar y probar carga, lectura y compartición. |
 | US-4 | 98 · cobertura del seguimiento comercial | Funcional básico: presets, fecha libre, responsable, comentarios y bitácora. Falta validar avisos con vendedores/dispositivos reales. |
 | US-5 | 103 · dashboard y dependencias legales | Bloqueada por plantillas contractuales aprobadas y política de privacidad/consentimiento para INE. |
 | US-6 | 103 · dashboard y dependencias legales | Bloqueada por decisión legal, consentimiento, proveedor de firma/verificación y excepción en papel. |
 | US-7 | 82 · compatibilidad de instalación limpia para Web Push | Parcial: asignación y push implementados; falta validar recepción en dispositivos reales. |
 | US-8 | 111 · disponibilidad por orden para instaladores | Funcional básico: faltantes por orden/reservas y permisos probados. Falta validación con almacén y teléfonos reales. |
 | US-9 | 142 · reintento de operación de campo tras renovar sesión | Funcional básico: una respuesta 401 fuerza refresh y un reintento idempotente; si no se recupera, la PWA conserva la acción en IndexedDB. Chrome CI cubre el flujo con API simulada. Falta validar sesiones reales y teléfonos de campo. |
-| US-10 | 141 · auditoría en vivo después del despliegue | Parcial: captura/cola offline está desplegada; DEV confirma schema 202611130145, pero no tiene ID de carpeta ni credencial de Drive. Falta probar archivo real y aprobar la política de comprobantes. |
+| US-10 | 141 · auditoría en vivo después del despliegue | Parcial: captura/cola offline está desplegada; DEV confirma schema 202611130146, pero no tiene ID de carpeta ni credencial de Drive. Falta probar archivo real y aprobar la política de comprobantes. |
 | US-11 | 81 · calendario de cobranza y caja | Parcial: agenda y textos para pago próximo/hoy/vencido. Falta confirmar planes, intereses y zona horaria de negocio. |
 | US-12 | 105 · costos directos y resultado preliminar | Funcional básico: costo por consumos/devoluciones y faltantes de costo visibles. Falta aprobación contable de valuación y ajustes. |
-| US-13 | 141 · auditoría en vivo después del despliegue | Parcial: API responde con schema 202611130145; DEV no tiene ID de carpeta ni credencial de Drive. Falta configurar y probar respaldo, retención y restauración reales. |
+| US-13 | 141 · auditoría en vivo después del despliegue | Parcial: API responde con schema 202611130146; DEV no tiene ID de carpeta ni credencial de Drive. Falta configurar y probar respaldo, retención y restauración reales. |
 | US-14 | 143 · sesión renovable sin vencimiento por inactividad | Funcional en DEV: CRM renueva el refresh token con vigencia de 100 años, conserva la sesión entre recargas y la revoca al cerrar sesión. CI verifica rotación y tolerancia a fallos; faltan usuarios reales de campo/cliente y validación de aislamiento por entidad/campo. |
 | US-15 | 136 · desglose fiscal y condiciones de venta | Parcial. El paquete calcula componentes y total, pero no guarda subtotal fiscal/impuestos; la venta admite contado/crédito y bloquea Plan 24. Contabilidad debe definir tratamiento y tasa fiscal, pagos mixtos, fecha de proyecto y efectos asociados antes de cerrar la historia. |
 | US-16 | 101 · cobranza de clientes y flujo de efectivo | Funcional básico: pagos parciales/completos, caja y reversas. Falta definir distribución entre deudas, mora y cancelaciones. |
@@ -45,7 +45,7 @@ Fecha de corte: 2026-11-13. Esta matriz resume el último registro encontrado po
 | US-39 | 119 · continuidad del asistente CRM | Parcial: el hilo se conserva mientras la sesión está activa. Persistencia tras recarga exige decisión de privacidad/retención. |
 | US-40 | 143 · sesión renovable sin vencimiento por inactividad | Funcional en DEV: PWA renueva sesión y reintenta una acción de campo tras 401 con el mismo identificador; fallos conservan la cola local. CI usa identidad simulada. Faltan cuentas reales de instalador/cliente y validación en teléfonos físicos. |
 | US-41 | 114 · consentimiento y contacto del agente público | Parcial: agente de solo lectura y flujo de contacto con consentimiento. Faltan catálogo/precios aprobados y validación comercial de punta a punta. |
-| US-42 | 140 · verificación en DEV de sesión y schema de history cards | Búsqueda CRM y registro append-only están implementados; PostgreSQL confirmó versiones nuevas 33/22 de US-14/US-40 y sus fuentes literales intactas. Falta cotejo humano de reconstrucciones/transcripciones y política de fuentes sensibles. |
+| US-42 | 144 · auditoría PostgreSQL de las 42 tarjetas | Funcional en DEV: PostgreSQL registra 42 tarjetas distintas y 345 versiones append-only, todas con relato literal no vacío. La auditoría registró US-9 v7, US-14 v34 y US-40 v24; US-42 avanzó a v6. Falta cotejo humano de reconstrucciones/transcripciones y política de retención de fuentes sensibles. |
 
 ## Dependencias para continuar
 

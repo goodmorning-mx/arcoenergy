@@ -1986,12 +1986,22 @@ El usuario definió que CRM y PWA no deben cerrar la sesión por inactividad dur
 
 La migración `202611130145` agrega una versión append-only de US-14 y US-40, preserva sus relatos literales y quita de la versión actual la pregunta pendiente sobre el límite de 30 días inactivos. La migración no elimina ni reescribe las versiones históricas. La prueba automatizada verifica ambas tarjetas y la nueva política.
 
-Verificación después del despliegue: la API responde `/health` con HTTP 200 y `/version` reporta schema `202611130145`; Coolify aplica `AUTH_REFRESH_DAYS=36500`. `/app/`, `/app/version.json`, `/crm/` y `/crm/version.json` responden HTTP 200 y reportan el commit desplegado `09448767af5ec4b78170c1a93381b83741f01e55`. Chrome pasó la restauración de sesión, rotación, error temporal, logout y reintento 401 contra las páginas de DEV (respuestas auth simuladas); además, el login shell PWA se mostró desde caché al perder la red. No se usaron credenciales de usuarios reales.
+Verificación después del despliegue: la API responde `/health` con HTTP 200 y `/version` reporta schema `202611130146`; Coolify aplica `AUTH_REFRESH_DAYS=36500`. `/app/`, `/app/version.json`, `/crm/` y `/crm/version.json` responden HTTP 200 y reportan el commit desplegado `a556f1ef34de4e53f3f8d6fedae51c138854661c`. Chrome pasó la restauración de sesión, rotación, error temporal, logout y reintento 401 contra las páginas de DEV (respuestas auth simuladas); además, el login shell PWA se mostró desde caché al perder la red. No se usaron credenciales de usuarios reales.
 
 | Tarjeta | Estado revisado | Evidencia / alcance pendiente |
 | --- | --- | --- |
 | US-14 | Funcional en DEV | CRM y backend están configurados para renovar la sesión sin expiración operativa por inactividad. CI verifica rotación, restauración, continuidad ante falla temporal y logout. Pendiente probar cuentas reales e aislamiento de los cinco roles. |
 | US-40 | Funcional en DEV | PWA y backend comparten la sesión renovable del CRM. CI verifica restauración, continuidad ante falla temporal, logout y reintento de una operación 401. Pendiente probar teléfonos físicos y usuarios reales de campo. |
+
+## Iteración 144 — auditoría PostgreSQL de las 42 story cards (2026-11-13)
+
+Una consulta de sólo lectura en PostgreSQL DEV comprobó 42 `story_id` distintos y 344 versiones antes de registrar esta auditoría, con `source_literal` no vacío en todas. La misma consulta verificó las versiones vigentes US-9 v7, US-14 v34 y US-40 v24. La migración `202611130146` agrega a US-42 la evidencia de esa instantánea como versión 6, sin modificar el relato original ni versiones anteriores.
+
+Después de desplegar la migración, PostgreSQL contiene 42 tarjetas y 345 versiones append-only; ninguna tiene relato fuente vacío. La API reporta schema `202611130146`; el chequeo automático de Factory lo verificó. API `/health`, `/app/`, `/app/version.json`, `/crm/` y `/crm/version.json` respondieron HTTP 200. La pregunta de US-42 sobre validación humana de transcripciones/reconstrucciones y retención de fuentes sensibles sigue abierta.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-42 | Funcional en DEV | PostgreSQL verifica las 42 tarjetas, 345 versiones append-only y relatos originales no vacíos; el registro de auditoría está en US-42 v6. Falta cotejo humano de transcripciones/reconstrucciones y acordar retención de fuentes sensibles. |
 
 ## Trabajo acordado después de completar el goal
 
