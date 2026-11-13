@@ -91,11 +91,17 @@ async function verifySurface(route) {
       const { requestId, request } = message.params;
       const pathname = new URL(request.url).pathname;
       const complete = async (status, payload) => {
-        await send('Fetch.fulfillRequest', {
-          requestId, responseCode: status,
-          responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
-          body: payload === null ? '' : Buffer.from(JSON.stringify(payload)).toString('base64'),
-        });
+        try {
+          await send('Fetch.fulfillRequest', {
+            requestId, responseCode: status,
+            responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+            body: payload === null ? '' : Buffer.from(JSON.stringify(payload)).toString('base64'),
+          });
+        } catch (error) {
+          // Chrome can cancel an in-flight intercepted request during route changes.
+          // Its interception ID is then stale; that is harmless to the browser test.
+          if (!error.message.includes('Invalid InterceptionId')) throw error;
+        }
       };
       if (pathname.endsWith('/auth/login')) {
         loginCount += 1;
@@ -129,7 +135,9 @@ async function verifySurface(route) {
         const invalid = invalidAccessTokens.has(token);
         void complete(invalid ? 401 : 201, invalid ? { detail: 'Expired access token.' } : { id: 'browser-check-movement' });
       } else {
-        void send('Fetch.continueRequest', { requestId });
+        void send('Fetch.continueRequest', { requestId }).catch(error => {
+          if (!error.message.includes('Invalid InterceptionId')) throw error;
+        });
       }
     });
 
