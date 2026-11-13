@@ -105,10 +105,9 @@ async function request<T>(path: string, token?: string, init: RequestInit = {}):
 
 
 export default function App() {
-  const { identity, accessToken, logout } = useAuth();
+  const { identity, accessToken, logout, loading: authLoading } = useAuth();
   const [view, setView] = useState<View>('inicio');
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [authResolved, setAuthResolved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [dashboard, setDashboard] = useState<Dashboard>({});
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -196,7 +195,6 @@ export default function App() {
     } finally { setLoading(false); }
   }, [accessToken, can]);
 
-  useEffect(() => { const timer = window.setTimeout(() => setAuthResolved(true), 0); return () => window.clearTimeout(timer); }, []);
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => { if (allowedViews.length && !allowedViews.includes(view)) setView(allowedViews[0]); }, [allowedViews, view]);
 
@@ -565,7 +563,7 @@ export default function App() {
     catch (error) { setTeamError(error instanceof Error ? error.message : 'No se pudo actualizar el rol.'); }
   }
 
-  if (!authResolved) return <div className="login-screen"><section className="login-card">Cargando sesión…</section></div>;
+  if (authLoading) return <div className="login-screen"><section className="login-card">Cargando sesión…</section></div>;
   const routePath = window.location.pathname.replace(/\/$/, '');
   const isLoginRoute = ['/login', '/crm/login'].includes(routePath);
   if (isLoginRoute && identity && accessToken) { window.location.replace(clientAccount ? '/app/' : '/crm/'); return null; }
