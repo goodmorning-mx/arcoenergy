@@ -111,7 +111,10 @@ async function verifySurface(route) {
       let result;
       try { result = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }); }
       catch (error) { throw new Error(`Browser expression failed: ${expression.slice(0, 180)} (${error.message})`); }
-      if (result.exceptionDetails) fail(result.exceptionDetails.text || `Page evaluation failed on ${route}.`);
+      if (result.exceptionDetails) {
+        const detail = result.exceptionDetails.exception?.description || result.exceptionDetails.text;
+        fail(`${detail || `Page evaluation failed on ${route}.`} [${expression.slice(0, 240)}]`);
+      }
       return result.result?.value;
     };
     const waitFor = async (expression, description, matches = Boolean) => {
