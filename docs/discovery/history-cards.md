@@ -1900,3 +1900,13 @@ No se cambió el cálculo ni se inventó una tasa o tratamiento fiscal. Contabil
 | Tarjeta | Estado revisado | Evidencia / alcance pendiente |
 | --- | --- | --- |
 | US-15 | Parcial funcional | Cotización y venta contado/crédito conservan importes y efectos básicos. Faltan subtotal fiscal e impuestos explícitos, pagos mixtos y definición de fecha del proyecto; Plan 24 permanece bloqueado hasta la aprobación de sus reglas. |
+
+## Iteración 137 — cobertura de devoluciones y bonificaciones en US-38 (2026-11-12)
+
+La revisión de `backend/app/product_api.py`, `crm/src/App.tsx` y `backend/tests/test_profitability_report.py` confirma que el resultado preliminar mensual y por proyecto incluye los ajustes capturados de devolución/bonificación, muestra su desglose y permite reversarlos con historial. Las pruebas cubren el cálculo, el filtro por proyecto y la reversa sin alterar caja. La CI completa del PR [#201](https://github.com/goodmorning-mx/arcoenergy/pull/201) ejecutó las pruebas backend sobre el mismo código de producto y pasó.
+
+La tarjeta sigue parcial: el CRM rotula el reporte como preliminar y aclara que los ajustes no crean movimientos de caja ni modifican ventas. Contabilidad aún debe aprobar fechas de corte, tratamiento fiscal/contable, reclasificaciones y cierre formal. Se actualiza la matriz para reflejar la función ya existente; la fuente original se conserva sin cambios.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-38 | Parcial funcional | Devoluciones/bonificaciones capturadas se incorporan al resultado mensual y por proyecto, con desglose, reversa e historial. Fechas de corte, fórmula fiscal/contable, reclasificaciones y estados formales requieren aprobación contable. |
