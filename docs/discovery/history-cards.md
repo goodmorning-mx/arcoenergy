@@ -1939,6 +1939,19 @@ La prueba `frontend/scripts/verify-persistent-auth.mjs` se ejecutó contra los b
 | US-14 | Parcial funcional | CRM restaura sesión al recargar, rota tokens, conserva sesión ante error temporal y la elimina al cerrar; falta CI, prueba de aislamiento por entidad/campo, usuarios de instalador/cliente y acordar el límite de 30 días inactivos. |
 | US-40 | Parcial funcional | PWA restaura sesión al recargar, rota tokens, conserva sesión ante error temporal y la elimina al cerrar; falta CI, validación en teléfonos reales, usuarios de campo/cliente y acordar el límite de 30 días inactivos. |
 
+## Iteración 140 — verificación en DEV de sesión y schema de history cards (2026-11-13)
+
+El PR de ArcoEnergy [#205](https://github.com/goodmorning-mx/arcoenergy/pull/205) quedó integrado en `dev` como `dede7da94cddf87ba3d7130eae513414417ef0ae`. El CI [run 43502601549](https://github.com/goodmorning-mx/arcoenergy/actions/runs/43502601549) pasó Backend, CRM, Frontend, Next.js, Docker/Chrome y el test de sesión persistente. El PR de Factory [#496](https://github.com/goodmorning-mx/goodmorning-factory/pull/496) alineó `expected_schema_revision` a `202611130143`; Factory [run 43503077723](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/43503077723) completó reconciliación, despliegue de productos, verificación del schema y reconciliación de respaldos.
+
+Desde DEV, API `/health/ready` respondió listo; API, PWA y CRM reportaron la SHA `dede7da94cddf87ba3d7130eae513414417ef0ae`, la API reportó schema `202611130143` y las rutas `/`, `/app/`, `/app/login`, `/crm/` y `/crm/login` respondieron HTTP 200. Los contenedores de API, CRM, PWA, gateway y SEO reportaron estado saludable. En PostgreSQL se verificó que la migración añadió la versión 33 de US-14 y la versión 22 de US-40 en la Iteración 139.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-9 | Funcional básico | E2E de Chrome en PWA verifica recarga, rotación de refresh, refresh temporal fallido y renovación al volver la conectividad. Falta validar operaciones reales en cola al caducar la sesión y reconexión desde teléfonos de campo. |
+| US-14 | Parcial funcional | Chrome CI y DEV verifican login, restauración de sesión, rotación, recuperación ante falla temporal y logout en CRM. Quedan usuarios reales de instalador/cliente y aislamiento por entidad/campo. |
+| US-40 | Parcial funcional | Chrome CI y DEV verifican login, restauración de sesión, rotación, recuperación ante falla temporal y logout en PWA. Quedan usuarios de campo/cliente y validación en teléfonos físicos. |
+| US-42 | Funcional básico | PostgreSQL conserva las nuevas versiones append-only de US-14/US-40, sin alterar las fuentes originales. Siguen pendientes cotejo humano de reconstrucciones/ASR y política de fuentes sensibles. |
+
 ## Trabajo acordado después de completar el goal
 
 El usuario pidió construir una ruta de revisión que muestre las 42 story cards en una tabla detallada, con checklist y un campo de observaciones para verificar cada cambio con los stakeholders. Este entregable se hará después de cerrar el goal de las story cards.
