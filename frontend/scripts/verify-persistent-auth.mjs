@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 const origin = process.env.ARCOENERGY_AUTH_TEST_ORIGIN || 'http://127.0.0.1:18081';
 const chromeBin = process.env.CHROME_BIN || 'google-chrome';
 const timeoutMs = 20_000;
+const commandTimeoutMs = 15_000;
 const permissions = [
   'customers:read', 'customers:write', 'quotes:read', 'quotes:write',
   'installations:read', 'installations:write', 'inventory:read', 'inventory:write',
@@ -74,7 +75,15 @@ async function verifySurface(route) {
     const pending = new Map();
     const send = (method, params = {}) => new Promise((resolve, reject) => {
       const id = ++nextId;
-      pending.set(id, { resolve, reject, method });
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error(`${method}: Chrome DevTools did not respond within ${commandTimeoutMs} ms.`));
+      }, commandTimeoutMs);
+      pending.set(id, {
+        resolve(value) { clearTimeout(timer); resolve(value); },
+        reject(error) { clearTimeout(timer); reject(error); },
+        method,
+      });
       socket.send(JSON.stringify({ id, method, params }));
     });
     socket.addEventListener('message', event => {
