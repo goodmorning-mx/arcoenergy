@@ -1967,6 +1967,19 @@ Durante el reemplazo de contenedores una consulta a `/crm/version.json` devolvi�
 | US-14 | Parcial funcional | Login, restauración, refresh rotatorio, error temporal y logout pasan en CRM en CI y DEV; siguen pendientes cuentas de instalador/cliente y aislamiento de datos con esos usuarios. |
 | US-40 | Parcial funcional | El flujo de sesión de PWA pasa en CI y DEV; sigue pendiente validar en dispositivos físicos y cuentas reales de campo/cliente. |
 
+## Iteración 142 — reintento de operaciones de campo tras renovar sesión (2026-11-13)
+
+Se corrigió el envío en línea de consumos, devoluciones y gastos desde PWA. Si la API contesta 401, la app fuerza una renovación y repite una vez la misma operación con el mismo `operation_id`. Si la renovación falla, no hay conexión o el servidor no confirma el reintento, la operación se guarda en IndexedDB y sigue la cola idempotente para sincronizar cuando vuelva el acceso. Las demás respuestas transitorias también se conservan; los rechazos de validación siguen pidiendo revisión.
+
+El test Chrome `frontend/scripts/verify-persistent-auth.mjs` ahora autentica una identidad instaladora simulada, carga una orden e inventario de prueba, fuerza un 401 en el consumo, comprueba el refresh y verifica que el reintento use el token nuevo y el mismo identificador. También simula dos fallas de refresh y verifica que la operación permanezca en IndexedDB con su identificador original. Se ejecutó tres veces en el stack híbrido local, junto con tres ejecuciones del test de PWA offline. No usó cuentas reales ni alteró datos empresariales. Una prueba directa contra el DEV anterior a este cambio confirmó el comportamiento previo: la operación quedaba detenida después del 401. La validación se repetirá en DEV después del despliegue de la iteración.
+
+La migración `202611130144` agrega versiones para US-9 y US-40 sin reemplazar el relato original. La prueba de migración comprueba el incremento de versión y preservación de `source_literal`.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-9 | Funcional básico | Ante 401, renueva y reintenta una vez con `operation_id` estable; si no se confirma, la cola persiste y sincroniza después. CI prueba el flujo simulado. Falta validar con token real caducado, conexión intermitente y dispositivos de campo. |
+| US-40 | Parcial funcional | La PWA de campo conserva y reintenta la operación después de renovar la sesión. Faltan cuentas reales de instalador/cliente y pruebas físicas con cuadrillas. |
+
 ## Trabajo acordado después de completar el goal
 
 El usuario pidió construir una ruta de revisión que muestre las 42 story cards en una tabla detallada, con checklist y un campo de observaciones para verificar cada cambio con los stakeholders. Este entregable se hará después de cerrar el goal de las story cards.

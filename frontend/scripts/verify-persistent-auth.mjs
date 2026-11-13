@@ -53,7 +53,11 @@ async function verifySurface(route) {
   let socket;
   let loginCount = 0;
   let refreshCount = 0;
-  let failNextRefresh = false;
+  let failRefreshesRemaining = 0;
+  let currentAccessToken = '';
+  let expireNextFieldAction = false;
+  const invalidAccessTokens = new Set();
+  const fieldActionAttempts = [];
   try {
     const deadline = Date.now() + timeoutMs;
     await waitForJson(`http://127.0.0.1:${port}/json/version`, child, deadline);
@@ -95,13 +99,35 @@ async function verifySurface(route) {
       };
       if (pathname.endsWith('/auth/login')) {
         loginCount += 1;
-        void complete(200, tokenResponse(loginCount));
+        const tokens = tokenResponse(loginCount, route);
+        currentAccessToken = tokens.access_token;
+        void complete(200, tokens);
       } else if (pathname.endsWith('/auth/refresh')) {
         refreshCount += 1;
-        if (failNextRefresh) { failNextRefresh = false; void complete(503, { detail: 'Temporary test outage.' }); }
-        else void complete(200, tokenResponse(loginCount + refreshCount));
+        if (failRefreshesRemaining > 0) {
+          failRefreshesRemaining -= 1;
+          void complete(503, { detail: 'Temporary test outage.' });
+        }
+        else {
+          const tokens = tokenResponse(loginCount + refreshCount, route);
+          currentAccessToken = tokens.access_token;
+          void complete(200, tokens);
+        }
       } else if (pathname.endsWith('/auth/logout')) {
         void complete(204, null);
+      } else if (route === '/app' && pathname.endsWith('/v1/installations')) {
+        void complete(200, [installationFixture]);
+      } else if (route === '/app' && pathname.endsWith('/v1/inventory/movements')) {
+        void complete(200, []);
+      } else if (route === '/app' && pathname.endsWith('/v1/inventory')) {
+        void complete(200, [inventoryFixture]);
+      } else if (route === '/app' && pathname.endsWith('/v1/inventory/consume')) {
+        const authorization = Object.entries(request.headers || {}).find(([name]) => name.toLowerCase() === 'authorization')?.[1] || '';
+        fieldActionAttempts.push({ authorization, body: request.postData || '' });
+        if (expireNextFieldAction) { invalidAccessTokens.add(currentAccessToken); expireNextFieldAction = false; }
+        const token = authorization.replace(/^Bearer\s+/i, '');
+        const invalid = invalidAccessTokens.has(token);
+        void complete(invalid ? 401 : 201, invalid ? { detail: 'Expired access token.' } : { id: 'browser-check-movement' });
       } else {
         void send('Fetch.continueRequest', { requestId });
       }
@@ -133,22 +159,23 @@ async function verifySurface(route) {
 
     await send('Page.enable');
     await send('Runtime.enable');
-    await send('Fetch.enable', { patterns: [{ urlPattern: '*://*/api/auth/*', requestStage: 'Request' }] });
+    await send('Fetch.enable', { patterns: [{ urlPattern: '*://*/api/*', requestStage: 'Request' }] });
     await send('Page.navigate', { url: `${origin}${route}/login` });
-    await waitFor("document.readyState === 'complete' && Boolean(document.querySelector('input[name=email]')) && Boolean(document.querySelector('input[name=password]'))", 'login form render');
-    await evaluate(`(() => {
+    await waitFor(`(() => {
+      if (document.readyState !== 'complete') return false;
       const set = (name, value) => {
         const input = document.querySelector('input[name="' + name + '"]');
+        if (!input) return false;
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
         setter.call(input, value);
         input.dispatchEvent(new Event('input', { bubbles: true }));
         input.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
       };
-      set('email', 'session-check@arcoenergy.example');
-      set('password', 'test-only-session-password');
-      document.querySelector('form').requestSubmit();
+      if (!set('email', 'session-check@arcoenergy.example') || !set('password', 'test-only-session-password')) return false;
+      document.querySelector('form')?.requestSubmit();
       return true;
-    })()`);
+    })()`, 'login form render and submit');
     await waitFor(`location.pathname === '${route}/' && !document.querySelector('input[name=password]')`, 'authenticated landing view after login');
     const storedRefreshToken = await waitFor("(() => { try { return JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || '' } catch { return '' } })()", 'persistent token storage', value => Boolean(value));
     if (loginCount !== 1) fail(`Expected one intercepted login on ${route}, received ${loginCount}.`);
@@ -161,10 +188,85 @@ async function verifySurface(route) {
       fail(`${error.message}; login calls=${loginCount}, refresh calls=${refreshCount}, browser state=${state}.`);
     }
     if (refreshCount < 1) fail(`Expected at least one intercepted refresh after reload on ${route}, received ${refreshCount}.`);
-    const rotatedRefreshToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || ''");
-    if (rotatedRefreshToken === storedRefreshToken) fail(`Refresh token was not rotated after reloading ${route}.`);
+    let latestRefreshToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || ''");
+    if (latestRefreshToken === storedRefreshToken) fail(`Refresh token was not rotated after reloading ${route}.`);
+    if (route === '/app') {
+      await evaluate("Array.from(document.querySelectorAll('.rail-item')).find(button => button.textContent.includes('Inventario'))?.click()");
+      await waitFor("Boolean(document.querySelector('.field-actions select[name=installation_id]')) && Boolean(document.querySelector('.field-actions select[name=item_id]'))", 'installer inventory action form');
+      await evaluate(`(() => {
+        const select = document.querySelector('.field-actions select[name="installation_id"]');
+        const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+        setter.call(select, 'browser-check-order');
+        select.dispatchEvent(new Event('input', { bubbles: true }));
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      await waitFor("Array.from(document.querySelector('.field-actions select[name=item_id]').options).some(option => option.value === 'browser-check-item')", 'assigned item available for the installation');
+      expireNextFieldAction = true;
+      await evaluate(`(() => {
+        const item = document.querySelector('.field-actions select[name="item_id"]');
+        const selectSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+        selectSetter.call(item, 'browser-check-item');
+        item.dispatchEvent(new Event('input', { bubbles: true }));
+        item.dispatchEvent(new Event('change', { bubbles: true }));
+        const quantity = document.querySelector('.field-actions input[name="quantity"]');
+        const inputSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        inputSetter.call(quantity, '1');
+        quantity.dispatchEvent(new Event('input', { bubbles: true }));
+        quantity.dispatchEvent(new Event('change', { bubbles: true }));
+        item.closest('form').requestSubmit();
+      })()`);
+      try {
+        await waitFor("document.body.innerText.includes('Consumo registrado en la orden de trabajo.')", 'field action retry after access token renewal');
+      } catch (error) {
+        const state = await evaluate("JSON.stringify({body:document.body?.innerText?.slice(-900), actionRequests:" + JSON.stringify(fieldActionAttempts) + ", refreshCalls:" + refreshCount + ", form:document.querySelector('.field-actions form')?.innerText})");
+        fail(`${error.message}; browser state=${state}.`);
+      }
+      if (refreshCount < 2 || fieldActionAttempts.length !== 2) fail(`Expected a 401, forced refresh and one action retry; refresh calls=${refreshCount}, field action requests=${fieldActionAttempts.length}.`);
+      const firstAction = JSON.parse(fieldActionAttempts[0].body);
+      const secondAction = JSON.parse(fieldActionAttempts[1].body);
+      const savedAccessToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.access_token || ''");
+      if (fieldActionAttempts[0].authorization === fieldActionAttempts[1].authorization || fieldActionAttempts[1].authorization !== `Bearer ${savedAccessToken}`) fail(`Field action did not retry with the rotated access token: ${JSON.stringify(fieldActionAttempts.map(attempt => attempt.authorization))}.`);
+      if (!firstAction.operation_id || firstAction.operation_id !== secondAction.operation_id) fail('Field action retry did not preserve its idempotency identifier.');
+      latestRefreshToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || ''");
+      if (latestRefreshToken === storedRefreshToken) fail('Field action renewal did not persist its rotated refresh token.');
+
+      const queuedAttemptStart = fieldActionAttempts.length;
+      const refreshCountBeforeQueue = refreshCount;
+      failRefreshesRemaining = 2;
+      expireNextFieldAction = true;
+      await evaluate(`(() => {
+        const item = document.querySelector('.field-actions select[name="item_id"]');
+        const selectSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+        selectSetter.call(item, 'browser-check-item');
+        item.dispatchEvent(new Event('input', { bubbles: true }));
+        item.dispatchEvent(new Event('change', { bubbles: true }));
+        const quantity = document.querySelector('.field-actions input[name="quantity"]');
+        const inputSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        inputSetter.call(quantity, '1');
+        quantity.dispatchEvent(new Event('input', { bubbles: true }));
+        quantity.dispatchEvent(new Event('change', { bubbles: true }));
+        item.closest('form').requestSubmit();
+      })()`);
+      const queuedActions = await waitFor(`new Promise(resolve => {
+        const request = indexedDB.open('arcoenergy-field-cache');
+        request.onsuccess = () => {
+          const database = request.result;
+          const transaction = database.transaction('actions-queue', 'readonly');
+          const rows = transaction.objectStore('actions-queue').getAll();
+          rows.onsuccess = () => { const own = rows.result.filter(row => row.owner === 'session-check@arcoenergy.example'); database.close(); resolve(own.map(row => ({ operation_id: row.operation_id, summary: row.summary }))); };
+          rows.onerror = () => { database.close(); resolve([]); };
+        };
+        request.onerror = () => resolve([]);
+      })`, 'field action retained after renewal failure', rows => Array.isArray(rows) && rows.length > 0);
+      await waitForRequestCount(refreshCountBeforeQueue + 2, 'queued operation refresh retry after a temporary failure');
+      const queuedId = queuedActions[0].operation_id;
+      const queuedAttempts = fieldActionAttempts.slice(queuedAttemptStart);
+      if (refreshCount < refreshCountBeforeQueue + 2 || queuedAttempts.length < 2) fail(`Expected failed refresh attempts and a queued field action; refresh calls=${refreshCount}, action retries=${queuedAttempts.length}.`);
+      if (queuedAttempts.some(attempt => JSON.parse(attempt.body).operation_id !== queuedId)) fail('Failed-refresh retry changed or lost the queued action identifier.');
+      if (queuedActions.length !== 1) fail(`Expected one pending field action after refresh failure, received ${queuedActions.length}.`);
+    }
     const failedRefreshExpected = refreshCount + 1;
-    failNextRefresh = true;
+    failRefreshesRemaining = 5;
     await evaluate(`(() => {
       const saved = JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null');
       saved.expires_at = Date.now() + 30_000;
@@ -176,7 +278,7 @@ async function verifySurface(route) {
     })()`);
     await waitForRequestCount(failedRefreshExpected, 'temporary refresh retry request');
     const retainedRefreshToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || ''");
-    if (retainedRefreshToken !== rotatedRefreshToken) fail(`A temporary refresh outage discarded the saved session on ${route}.`);
+    if (retainedRefreshToken !== latestRefreshToken) fail(`A temporary refresh outage discarded the saved session on ${route}.`);
     await waitFor(`!document.querySelector('input[name=password]') && Boolean(localStorage.getItem('arcoenergy-auth-tokens'))`, 'session retention through temporary refresh outage');
     await evaluate("document.querySelector('button[title=\"Cerrar sesión\"]')?.click()");
     await waitFor(`location.pathname.endsWith('/login') && Boolean(document.querySelector('input[name=password]')) && !localStorage.getItem('arcoenergy-auth-tokens')`, 'explicit logout clearing the saved session');
@@ -192,14 +294,24 @@ async function verifySurface(route) {
   }
 }
 
-function tokenResponse(sequence) {
+const installationFixture = {
+  id: 'browser-check-order', folio: 'AE-CHECK-1', scheduled_at: null,
+  lead_installer: 'session-check@arcoenergy.example', assigned_installers: ['session-check@arcoenergy.example'],
+  confirmed_installers: [], status: 'assigned', notes: '',
+  customer: { id: 'browser-check-customer', name: 'Cliente de verificación', city: 'Tampico', address: 'Tampico' },
+  checklist: [], materials: [{ item_id: 'browser-check-item', item_name: 'Panel de verificación', requested_quantity: 1, preissued_quantity: 0, consumed_quantity: 0, remaining_quantity: 1, remaining_to_issue: 0, available_for_order: 2, shortage_quantity: 0 }],
+};
+const inventoryFixture = { id: 'browser-check-item', name: 'Panel de verificación', category: 'Paneles', unit: 'pieza', quantity: 2, reserved_quantity: 0, available_quantity: 2, minimum_quantity: 0, unit_cost: 1, barcode: null };
+
+function tokenResponse(sequence, route) {
+  const installerPermissions = ['installations:read', 'inventory:read', 'inventory:write', 'expenses:write'];
   return {
     access_token: `browser-check-access-${sequence}`,
     refresh_token: `browser-check-refresh-${sequence}`,
     token_type: 'bearer', expires_in: 900,
     identity: {
       user_id: 'browser-check-user', organization_id: 'arcoenergy',
-      roles: ['administrador'], permissions,
+      roles: route === '/app' ? ['instalador'] : ['administrador'], permissions: route === '/app' ? installerPermissions : permissions,
       email: 'session-check@arcoenergy.example', name: 'Browser Session Check',
     },
   };
@@ -207,5 +319,7 @@ function tokenResponse(sequence) {
 
 for (const route of ['/app', '/crm']) {
   await verifySurface(route);
-  console.log(`${route} login and saved-session browser checks passed.`);
+  console.log(route === '/app'
+    ? '/app login, saved-session and expired-access field-action checks passed.'
+    : '/crm login and saved-session browser checks passed.');
 }
