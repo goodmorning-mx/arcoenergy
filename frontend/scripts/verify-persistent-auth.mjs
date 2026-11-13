@@ -162,7 +162,15 @@ async function verifySurface(route) {
     if (rotatedRefreshToken === storedRefreshToken) fail(`Refresh token was not rotated after reloading ${route}.`);
     const failedRefreshExpected = refreshCount + 1;
     failNextRefresh = true;
-    await evaluate("document.dispatchEvent(new Event('visibilitychange'))");
+    await evaluate(`(() => {
+      const saved = JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null');
+      saved.expires_at = Date.now() + 30_000;
+      const value = JSON.stringify(saved);
+      localStorage.setItem('arcoenergy-auth-tokens', value);
+      window.dispatchEvent(new StorageEvent('storage', { key: 'arcoenergy-auth-tokens', newValue: value }));
+      window.dispatchEvent(new Event('online'));
+      document.dispatchEvent(new Event('visibilitychange'));
+    })()`);
     await waitForRequestCount(failedRefreshExpected, 'temporary refresh retry request');
     const retainedRefreshToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || ''");
     if (retainedRefreshToken !== rotatedRefreshToken) fail(`A temporary refresh outage discarded the saved session on ${route}.`);

@@ -74,8 +74,10 @@ export function PersistentAuthProvider({ children }: { children: React.ReactNode
     if (!tokens) return;
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void renew(); }, Math.max(60_000, (tokens.expires_in - 90) * 1000));
     const onFocus = () => { if (document.visibilityState === 'visible') void renew(); };
+    const onOnline = () => { void renew(); };
     document.addEventListener('visibilitychange', onFocus);
-    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', onFocus); };
+    window.addEventListener('online', onOnline);
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', onFocus); window.removeEventListener('online', onOnline); };
   }, [tokens]);
   const value = useMemo<AuthValue>(() => ({
     identity: tokens?.identity ?? null, accessToken: tokens?.access_token ?? null, loading, error,
