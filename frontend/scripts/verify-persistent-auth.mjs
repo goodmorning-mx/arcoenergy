@@ -160,9 +160,10 @@ async function verifySurface(route) {
     if (refreshCount < 1) fail(`Expected at least one intercepted refresh after reload on ${route}, received ${refreshCount}.`);
     const rotatedRefreshToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || ''");
     if (rotatedRefreshToken === storedRefreshToken) fail(`Refresh token was not rotated after reloading ${route}.`);
+    const failedRefreshExpected = refreshCount + 1;
     failNextRefresh = true;
     await evaluate("document.dispatchEvent(new Event('visibilitychange'))");
-    await waitForRequestCount(refreshCount + 1, 'temporary refresh retry request');
+    await waitForRequestCount(failedRefreshExpected, 'temporary refresh retry request');
     const retainedRefreshToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || ''");
     if (retainedRefreshToken !== rotatedRefreshToken) fail(`A temporary refresh outage discarded the saved session on ${route}.`);
     await waitFor(`!document.querySelector('input[name=password]') && Boolean(localStorage.getItem('arcoenergy-auth-tokens'))`, 'session retention through temporary refresh outage');
