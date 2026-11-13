@@ -1888,3 +1888,15 @@ La [PR #199](https://github.com/goodmorning-mx/arcoenergy/pull/199) agregó un m
 | US-36 | Parcial funcional | El kardex muestra por qué una reversa append-only requiere conciliación cuando hay movimientos posteriores o saldo insuficiente. Sigue pendiente implementar la conciliación con la regla contable de valuación aprobada y probar ciclos reales. |
 
 La mejora hace visible el límite y evita que la ausencia de acción parezca un error; no completa la corrección de movimientos con efectos posteriores.
+
+## Iteración 136 — auditoría fiscal y condiciones de venta US-15 (2026-11-12)
+
+Se cotejó la tarjeta US-15 con los comentarios originales del contador y la implementación en `backend/app/models.py` y `backend/app/product_api.py`. La fuente original pide distinguir subtotal, impuestos y valor de venta, además de contado, crédito o Plan 24.
+
+La cotización persiste `panel_subtotal`, `structure_cost`, `inverter_cost` y `total`; no tiene campos de subtotal fiscal, tasa o importe de impuesto. La entidad de venta persiste el total. La captura de venta acepta contado o crédito; el API rechaza Plan 24 hasta que contabilidad defina anticipo y calendario. Tampoco se puede registrar un pago mixto.
+
+No se cambió el cálculo ni se inventó una tasa o tratamiento fiscal. Contabilidad/dirección debe definir si los precios capturados incluyen impuestos, cómo se calcula y presenta el impuesto, cómo se registran pagos mixtos y qué fecha representa la fecha del proyecto. Después de esa decisión se implementan y prueban los campos y efectos relacionados. La fuente literal original permanece intacta; este registro agrega evidencia y preguntas para la siguiente iteración.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-15 | Parcial funcional | Cotización y venta contado/crédito conservan importes y efectos básicos. Faltan subtotal fiscal e impuestos explícitos, pagos mixtos y definición de fecha del proyecto; Plan 24 permanece bloqueado hasta la aprobación de sus reglas. |
