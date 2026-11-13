@@ -1910,3 +1910,19 @@ La tarjeta sigue parcial: el CRM rotula el reporte como preliminar y aclara que 
 | Tarjeta | Estado revisado | Evidencia / alcance pendiente |
 | --- | --- | --- |
 | US-38 | Parcial funcional | Devoluciones/bonificaciones capturadas se incorporan al resultado mensual y por proyecto, con desglose, reversa e historial. Fechas de corte, fórmula fiscal/contable, reclasificaciones y estados formales requieren aprobación contable. |
+
+## Iteración 138 — auditoría de acceso, roles y Drive en DEV (2026-11-13)
+
+La conexión SSH a Coolify volvió a estar disponible. La API respondió lista en `/health/ready`; API, PWA y CRM reportaron la misma SHA `3237dec8b27f77506ccab1f5eb0ce208699488f9` y la base reportó revisión `202611120142`. Las rutas `/app/login`, `/crm/login` y `/login` respondieron HTTP 200.
+
+Con el administrador de DEV se validó `/auth/login` y `/auth/me`; `/v1/team/roles` devolvió los cinco roles y `/v1/team` rechazó el acceso anónimo con 401. Se crearon las cuentas solicitadas de administrador, marketing y contador. Cada cuenta inició sesión y `/auth/me` devolvió el rol asignado. El equipo de DEV quedó con cuatro miembros: dos administradores, una cuenta de marketing y una de contador. No se guardan correos de usuarios ni contraseñas en el historial.
+
+La configuración viva no tiene ID de carpeta ni credencial de servicio de Google Drive. No se pudieron validar cargas, exportaciones, compartición ni restauración reales. Tampoco hay cuentas de instalador/cliente en DEV ni pruebas en teléfonos físicos; la validación de permisos por entidad/campo queda pendiente.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-3 | Parcial funcional | Despliegue y esquema verificados; Drive no está configurado en DEV. |
+| US-10 | Parcial funcional | Captura móvil/cola están desplegadas; la carga real a Drive y aprobación de comprobantes siguen pendientes. |
+| US-13 | Parcial funcional | Configuración segura disponible, pero Drive no está configurado; faltan respaldo y restauración reales. |
+| US-14 | Parcial funcional | Tres cuentas nuevas de los roles pedidos iniciaron sesión y recibieron el rol correcto; faltan instalador/cliente y aislamiento por entidad/campo. |
+| US-40 | Parcial funcional | Versiones API/PWA/CRM coinciden y rutas cargan; faltan usuarios de campo/cliente y pruebas en teléfonos reales. |

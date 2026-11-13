@@ -1,23 +1,23 @@
 # Cobertura vigente de las 42 user story cards
 
-Fecha de corte: 2026-11-12. Esta matriz resume el último registro encontrado por tarjeta en [history-cards.md](history-cards.md). El registro es append-only: cada fila apunta al último estado/evidencia registrado, no modifica el relato original ni implica validación del stakeholder. “Funcional básico” significa que hay código y evidencia técnica para el alcance descrito; las verificaciones de negocio/dispositivo se indican aparte.
+Fecha de corte: 2026-11-13. Esta matriz resume el último registro encontrado por tarjeta en [history-cards.md](history-cards.md). El registro es append-only: cada fila apunta al último estado/evidencia registrado, no modifica el relato original ni implica validación del stakeholder. “Funcional básico” significa que hay código y evidencia técnica para el alcance descrito; las verificaciones de negocio/dispositivo se indican aparte.
 
 | Tarjeta | Última iteración registrada | Estado registrado y trabajo que falta |
 | --- | --- | --- |
 | US-1 | 127 · despliegue DEV del cotizador PWA | Parcial. Falta recorrido autenticado con usuarios comerciales y catálogo aprobado. |
 | US-2 | 2 · producto autenticado y operación de campo | Pendiente/diferida: análisis automático del recibo de luz, fórmula y aprobación. El cliente indicó que es fase avanzada posterior. |
-| US-3 | 131 · verificación del esquema de DEV desplegado | Parcial. Factory confirmó la revisión 202611120142 en la base de datos viva; Drive aún requiere carpeta/credencial aprobadas y prueba real de carga/lectura/compartición. |
+| US-3 | 138 · auditoría de acceso e integración en DEV | Parcial. Esquema 202611120142 y versiones API/PWA/CRM coinciden; en la configuración viva no hay carpeta ni credencial de Drive. Falta configurarlas y probar carga, lectura y compartición. |
 | US-4 | 98 · cobertura del seguimiento comercial | Funcional básico: presets, fecha libre, responsable, comentarios y bitácora. Falta validar avisos con vendedores/dispositivos reales. |
 | US-5 | 103 · dashboard y dependencias legales | Bloqueada por plantillas contractuales aprobadas y política de privacidad/consentimiento para INE. |
 | US-6 | 103 · dashboard y dependencias legales | Bloqueada por decisión legal, consentimiento, proveedor de firma/verificación y excepción en papel. |
 | US-7 | 82 · compatibilidad de instalación limpia para Web Push | Parcial: asignación y push implementados; falta validar recepción en dispositivos reales. |
 | US-8 | 111 · disponibilidad por orden para instaladores | Funcional básico: faltantes por orden/reservas y permisos probados. Falta validación con almacén y teléfonos reales. |
 | US-9 | 134 · verificación de shell PWA y API offline | Funcional básico: CI verifica shell de acceso en caché, API network-only y cola idempotente. Falta validar sesión vencida, límites reales y reconexión autenticada en campo. |
-| US-10 | 131 · verificación del esquema de DEV desplegado | Parcial: captura/cola offline y archivo privado usan Drive y la revisión 202611120142 quedó desplegada. Falta configurar secreto/carpeta y confirmar carga real; falta política de aprobación de comprobantes. |
+| US-10 | 138 · auditoría de acceso e integración en DEV | Parcial: captura/cola offline está desplegada, pero DEV no tiene carpeta/credencial de Drive configuradas; no se pudo comprobar archivo real. También falta aprobar la política de comprobantes. |
 | US-11 | 81 · calendario de cobranza y caja | Parcial: agenda y textos para pago próximo/hoy/vencido. Falta confirmar planes, intereses y zona horaria de negocio. |
 | US-12 | 105 · costos directos y resultado preliminar | Funcional básico: costo por consumos/devoluciones y faltantes de costo visibles. Falta aprobación contable de valuación y ajustes. |
-| US-13 | 131 · verificación del esquema de DEV desplegado | Parcial: Factory expone configuración opcional segura y DEV verificó esquema 202611120142. Falta secreto/carpeta aprobados y confirmar exportación, retención y restauración en Drive. |
-| US-14 | 132 · verificación externa de API, PWA y CRM en DEV | Parcial: versiones desplegadas coinciden con el commit y las rutas renderizan en CI. Falta probar autorización y aislamiento con cuentas reales de los cinco roles. |
+| US-13 | 138 · auditoría de acceso e integración en DEV | Parcial: API, PWA y CRM están en el mismo commit y el esquema 202611120142. DEV no tiene carpeta/credencial de Drive; falta configurar y probar respaldo, retención y restauración reales. |
+| US-14 | 138 · auditoría de acceso e integración en DEV | Parcial: login admin real funciona; DEV tiene 2 administradores, 1 marketing y 1 contador; la API define los cinco roles y niega anónimos. Faltan usuarios de instalador/cliente y pruebas de aislamiento por entidad/campo. |
 | US-15 | 136 · desglose fiscal y condiciones de venta | Parcial. El paquete calcula componentes y total, pero no guarda subtotal fiscal/impuestos; la venta admite contado/crédito y bloquea Plan 24. Contabilidad debe definir tratamiento y tasa fiscal, pagos mixtos, fecha de proyecto y efectos asociados antes de cerrar la historia. |
 | US-16 | 101 · cobranza de clientes y flujo de efectivo | Funcional básico: pagos parciales/completos, caja y reversas. Falta definir distribución entre deudas, mora y cancelaciones. |
 | US-17 | 100 · cobertura del registro de gastos | Funcional básico: gastos por fecha, cuenta y proyecto, incluida captura móvil. Falta política contable de casos mixtos, recurrencia y aprobación. |
@@ -43,7 +43,7 @@ Fecha de corte: 2026-11-12. Esta matriz resume el último registro encontrado po
 | US-37 | 116 · cotejo del menú público Base44 | Parcial: menú público y rutas cotejados. Falta comparación autenticada visual/funcional con el sistema de César. |
 | US-38 | 137 · cobertura de devoluciones y bonificaciones | Parcial. El resultado por mes/proyecto suma ajustes de devoluciones y bonificaciones registrados, con reversa y bitácora; backend y CRM lo presentan como preliminar. Faltan validar fechas de corte, tratamiento fiscal/contable, reclasificaciones y cierre formal. |
 | US-39 | 119 · continuidad del asistente CRM | Parcial: el hilo se conserva mientras la sesión está activa. Persistencia tras recarga exige decisión de privacidad/retención. |
-| US-40 | 132 · verificación externa de API, PWA y CRM en DEV | Parcial: PWA y CRM reportan el commit desplegado y renderizan en CI. Falta probar operación autenticada en teléfonos reales. |
+| US-40 | 138 · auditoría de acceso e integración en DEV | Parcial: API, PWA y CRM reportan la misma SHA en vivo; PWA/CRM y login cargan. Cuentas admin/marketing/contador pueden iniciar sesión; faltan instalador/cliente y validación en teléfonos reales. |
 | US-41 | 114 · consentimiento y contacto del agente público | Parcial: agente de solo lectura y flujo de contacto con consentimiento. Faltan catálogo/precios aprobados y validación comercial de punta a punta. |
 | US-42 | 129 · búsqueda y vínculos visibles en history cards | Registro append-only y búsqueda CRM implementados. Falta cotejo humano de reconstrucciones/transcripciones y política de fuentes sensibles. |
 
