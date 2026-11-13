@@ -118,7 +118,7 @@ async function main() {
       child.once('exit', resolve);
       setTimeout(() => { child.kill('SIGKILL'); resolve(); }, 3000).unref();
     });
-    await rm(profile, { recursive: true, force: true });
+    await rm(profile, { recursive: true, force: true, maxRetries: 8, retryDelay: 100 });
   }
 }
 

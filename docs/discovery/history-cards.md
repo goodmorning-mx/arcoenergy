@@ -1952,6 +1952,21 @@ Desde DEV, API `/health/ready` respondió listo; API, PWA y CRM reportaron la SH
 | US-40 | Parcial funcional | Chrome CI y DEV verifican login, restauración de sesión, rotación, recuperación ante falla temporal y logout en PWA. Quedan usuarios de campo/cliente y validación en teléfonos físicos. |
 | US-42 | Funcional básico | PostgreSQL conserva las nuevas versiones append-only de US-14/US-40, sin alterar las fuentes originales. Siguen pendientes cotejo humano de reconstrucciones/ASR y política de fuentes sensibles. |
 
+## Iteración 141 — auditoría en vivo tras el despliegue del verificador de sesión (2026-11-13)
+
+La actualización del verificador del navegador en el PR de ArcoEnergy [#206](https://github.com/goodmorning-mx/arcoenergy/pull/206) produjo la imagen de PWA con SHA `e129d22c119c07b836e0e486a045a6f2a38920e7`. La API continúa sirviendo `dede7da94cddf87ba3d7130eae513414417ef0ae` con schema `202611130143`, y CRM continúa en esa misma SHA porque sus fuentes no cambiaron. Es una actualización solo del frontend; no implica que API y CRM estén ejecutando la misma revisión del repositorio.
+
+Durante el reemplazo de contenedores una consulta a `/crm/version.json` devolvió temporalmente HTTP 502. La auditoría posterior encontró contenedores saludables y las rutas `/`, `/app/`, `/app/login`, `/app/version.json`, `/crm/`, `/crm/login` y `/crm/version.json` respondieron HTTP 200. El test de Chrome `frontend/scripts/verify-persistent-auth.mjs` pasó en DEV para `/app` y `/crm`, usando respuestas de autenticación simuladas: inicio de sesión, recarga con rotación, falla temporal de refresh y logout. No se usaron credenciales reales ni se modificaron datos del negocio. El CI completo del PR #206 pasó en [run 43504846663](https://github.com/goodmorning-mx/arcoenergy/actions/runs/43504846663).
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-3 | Parcial funcional | API, PWA y CRM responden en DEV con schema 202611130143; la carga, lectura y compartición reales en Drive siguen pendientes de carpeta y credencial. |
+| US-9 | Funcional básico | Chrome CI y el smoke de Chrome en DEV prueban restauración y renovación en PWA; faltan operaciones reales en cola al caducar la sesión y prueba en teléfonos de campo. |
+| US-10 | Parcial funcional | Las rutas operativas responden; la evidencia no verifica archivos reales en Drive ni resuelve la política de comprobantes. |
+| US-13 | Parcial funcional | API confirma schema 202611130143; carpeta/credencial y pruebas reales de respaldo/restauración en Drive siguen pendientes. |
+| US-14 | Parcial funcional | Login, restauración, refresh rotatorio, error temporal y logout pasan en CRM en CI y DEV; siguen pendientes cuentas de instalador/cliente y aislamiento de datos con esos usuarios. |
+| US-40 | Parcial funcional | El flujo de sesión de PWA pasa en CI y DEV; sigue pendiente validar en dispositivos físicos y cuentas reales de campo/cliente. |
+
 ## Trabajo acordado después de completar el goal
 
 El usuario pidió construir una ruta de revisión que muestre las 42 story cards en una tabla detallada, con checklist y un campo de observaciones para verificar cada cambio con los stakeholders. Este entregable se hará después de cerrar el goal de las story cards.
