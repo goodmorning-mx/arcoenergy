@@ -10,7 +10,7 @@ from app.roles import ROLE_PERMISSIONS
 
 settings = get_settings()
 auth_engine = create_database_engine()
-auth_service = AuthService(auth_engine, AuthSettings(settings.auth_secret, issuer="arcoenergy"))
+auth_service = AuthService(auth_engine, AuthSettings(settings.auth_secret, refresh_days=settings.auth_refresh_days, issuer="arcoenergy"))
 
 
 def bootstrap_admin() -> None:

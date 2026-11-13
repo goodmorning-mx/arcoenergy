@@ -26,6 +26,11 @@ class _Engine:
         return _Connection()
 
 
+def test_refresh_session_lifetime_has_no_operational_idle_timeout() -> None:
+    assert auth.settings.auth_refresh_days == 36_500
+    assert auth.auth_service.settings.refresh_days == 36_500
+
+
 def test_bootstrap_admin_refreshes_existing_configured_account_role_and_permissions(monkeypatch) -> None:
     set_membership = Mock()
     create_user = Mock()
