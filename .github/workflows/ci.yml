@@ -148,6 +148,8 @@ jobs:
           smoke_render /crm/login 'Iniciar sesión'
           smoke_render /crm 'Iniciar sesión'
           smoke_render /login 'Iniciar sesión'
+      - name: Verify persistent sessions in Chrome
+        run: node frontend/scripts/verify-persistent-auth.mjs
       - name: Verify routed PWA and CRM bundles
         shell: bash
         run: |
