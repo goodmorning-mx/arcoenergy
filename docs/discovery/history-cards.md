@@ -2003,6 +2003,20 @@ Después de desplegar la migración, PostgreSQL contiene 42 tarjetas y 345 versi
 | --- | --- | --- |
 | US-42 | Funcional en DEV | PostgreSQL verifica las 42 tarjetas, 345 versiones append-only y relatos originales no vacíos; el registro de auditoría está en US-42 v6. Falta cotejo humano de transcripciones/reconstrucciones y acordar retención de fuentes sensibles. |
 
+## Iteración 145 — verificación de cuentas y roles en DEV (2026-11-13)
+
+El PR de ArcoEnergy [#214](https://github.com/goodmorning-mx/arcoenergy/pull/214) quedó integrado en `dev` y el PR de Factory [#500](https://github.com/goodmorning-mx/goodmorning-factory/pull/500) desplegó la revisión `202611130147`. El workflow de Factory [run 43517343974](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/43517343974) terminó con éxito. PostgreSQL DEV confirma 42 tarjetas, 346 versiones append-only, cero relatos fuente vacíos y US-14 v35. La migración registra la verificación sin guardar contraseñas.
+
+La consulta de sólo lectura confirmó las cuentas activas y roles esperados: Josue Agundiz (`administrador`), Elder Gonzalez (`marketing`) y Mario Guerrero (`contador`). El contenedor de API informa `AUTH_REFRESH_DAYS=36500`; la renovación da una vigencia deslizante de 100 años. Es una vigencia técnica muy extensa, no una sesión literalmente infinita: logout, restablecimiento de contraseña y desactivación siguen revocándola. El test Chrome `frontend/scripts/verify-persistent-auth.mjs` pasó contra DEV en PWA y CRM, incluyendo persistencia al recargar, rotación/recuperación de sesión y flujos de campo simulados. No se leyeron credenciales ni se modificaron datos operativos.
+
+API `/health` respondió 200; API `/version` reporta schema `202611130147`; `/app/`, `/app/version.json`, `/crm/` y `/crm/version.json` respondieron 200. Los bundles PWA y CRM reportan el commit `c2a5d6a282c4aa1100100222c7699dea2334b756`.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Funcional en DEV para el alcance autenticación/sesión y los tres roles pedidos | Las tres cuentas están activas y ligadas al rol correcto; Chrome verifica persistencia y renovación en CRM. Faltan cuentas reales de instalador/cliente y probar aislamiento de información por entidad/campo con los cinco roles. |
+| US-40 | Funcional en DEV para sesión renovable y PWA operativa | Chrome verifica restauración de sesión y reintento de acción tras 401; falta validar cuentas reales de instalador/cliente y teléfonos de campo. |
+| US-42 | Funcional en DEV para el registro auditable de tarjetas | PostgreSQL registra 42 tarjetas y 346 versiones, sin fuentes literales vacías; US-14 v35 conserva el historial append-only. Falta cotejo humano de transcripciones/reconstrucciones y política de retención de fuentes sensibles. |
+
 ## Trabajo acordado después de completar el goal
 
 El usuario pidió construir una ruta de revisión que muestre las 42 story cards en una tabla detallada, con checklist y un campo de observaciones para verificar cada cambio con los stakeholders. Este entregable se hará después de cerrar el goal de las story cards.
