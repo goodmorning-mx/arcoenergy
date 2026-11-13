@@ -1980,6 +1980,17 @@ La migración `202611130144` agrega versiones para US-9 y US-40 sin reemplazar e
 | US-9 | Funcional básico | Ante 401, renueva y reintenta una vez con `operation_id` estable; si no se confirma, la cola persiste y sincroniza después. CI prueba el flujo simulado. Falta validar con token real caducado, conexión intermitente y dispositivos de campo. |
 | US-40 | Parcial funcional | La PWA de campo conserva y reintenta la operación después de renovar la sesión. Faltan cuentas reales de instalador/cliente y pruebas físicas con cuadrillas. |
 
+## Iteración 143 — sesión renovable sin vencimiento por inactividad (2026-11-13)
+
+El usuario definió que CRM y PWA no deben cerrar la sesión por inactividad durante el uso operativo. ArcoEnergy configura los refresh tokens con vigencia de 36,500 días (100 años) y el backend genera una nueva vigencia cada vez que rota el token. La sesión continúa siendo revocable al cerrar sesión; restablecer la contraseña invalida los refresh tokens vigentes y las cuentas desactivadas no pueden renovarlos. Se mantiene el access token corto y el cliente lo renueva en segundo plano.
+
+La migración `202611130145` agrega una versión append-only de US-14 y US-40, preserva sus relatos literales y quita de la versión actual la pregunta pendiente sobre el límite de 30 días inactivos. La migración no elimina ni reescribe las versiones históricas. La prueba automatizada verifica ambas tarjetas y la nueva política.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-14 | Funcional en DEV | CRM y backend están configurados para renovar la sesión sin expiración operativa por inactividad. CI verifica rotación, restauración, continuidad ante falla temporal y logout. Pendiente probar cuentas reales e aislamiento de los cinco roles. |
+| US-40 | Funcional en DEV | PWA y backend comparten la sesión renovable del CRM. CI verifica restauración, continuidad ante falla temporal, logout y reintento de una operación 401. Pendiente probar teléfonos físicos y usuarios reales de campo. |
+
 ## Trabajo acordado después de completar el goal
 
 El usuario pidió construir una ruta de revisión que muestre las 42 story cards en una tabla detallada, con checklist y un campo de observaciones para verificar cada cambio con los stakeholders. Este entregable se hará después de cerrar el goal de las story cards.

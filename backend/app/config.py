@@ -16,6 +16,7 @@ class Settings(BaseSettings):
         alias="DATABASE_URL",
     )
     auth_secret: str = Field(default="local-development-auth-secret-change-me-000000", alias="AUTH_JWT_SECRET")
+    auth_refresh_days: int = Field(default=36_500, ge=1, le=36_500, alias="AUTH_REFRESH_DAYS")
     admin_bootstrap_email: str = Field(default="", alias="ADMIN_BOOTSTRAP_EMAIL")
     admin_bootstrap_password: str = Field(default="", alias="ADMIN_BOOTSTRAP_PASSWORD")
     organization_id: str = Field(default="arcoenergy", alias="ORGANIZATION_ID")
