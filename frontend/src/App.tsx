@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useAuth } from '@goodmorning/gm-auth';
+import { useAuth } from './persistent-auth';
 import { PwaStatus } from '@goodmorning/gm-pwa';
 import { cacheInstallations, cacheInventory, cacheMovements, checklistQueueKey, clearCachedFieldSnapshots, isRetryableFieldActionStatus, queueChecklistChange, queueFieldAction, readCachedInstallations, readCachedInventory, readCachedMovements, readChecklistQueue, readFieldActionQueue, removeChecklistChange, removeChecklistChangeIfCurrent, removeFieldAction, updateFieldAction, type ChecklistQueueItem, type FieldActionQueueItem, type Installation } from './offlineChecklist';
 import './styles.css';

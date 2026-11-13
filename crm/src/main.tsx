@@ -1,11 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { AuthProvider, createAuthClient } from '@goodmorning/gm-auth';
+import { PersistentAuthProvider } from './persistent-auth';
 import App from './App';
 import './styles.css';
 import './reports.css';
 import './cfdi.css';
 import './quote-share.css';
 import './payments.css';
-const client = createAuthClient(import.meta.env.VITE_API_URL || '/api');
-ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><AuthProvider client={client}><App /></AuthProvider></React.StrictMode>);
+ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><PersistentAuthProvider><App /></PersistentAuthProvider></React.StrictMode>);
