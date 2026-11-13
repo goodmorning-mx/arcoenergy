@@ -7,6 +7,13 @@ type AuthValue = { identity: Identity | null; accessToken: string | null; loadin
 const KEY = 'arcoenergy-auth-tokens';
 const client = createAuthClient(import.meta.env.VITE_API_URL || '/api');
 const Context = createContext<AuthValue | null>(null);
+class InvalidSessionError extends Error {}
+async function refreshTokens(token: string): Promise<Tokens> {
+  const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/auth/refresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: token }) });
+  if (response.status === 401) throw new InvalidSessionError('Invalid refresh token.');
+  if (!response.ok) throw new Error('Session refresh temporarily unavailable.');
+  return response.json() as Promise<Tokens>;
+}
 
 export function PersistentAuthProvider({ children }: { children: React.ReactNode }) {
   const [tokens, setTokens] = useState<Tokens | null>(null);
@@ -14,7 +21,7 @@ export function PersistentAuthProvider({ children }: { children: React.ReactNode
   const [error, setError] = useState<string | null>(null);
   const tokensRef = useRef<Tokens | null>(null);
   const renewing = useRef(false);
-  const update = (next: Tokens | null) => { tokensRef.current = next; setTokens(next); if (next) localStorage.setItem(KEY, JSON.stringify(next)); else localStorage.removeItem(KEY); };
+  const update = (next: Tokens | null) => { tokensRef.current = next; setTokens(next); if (next) localStorage.setItem(KEY, JSON.stringify(next)); else localStorage.removeItem(KEY); localStorage.removeItem('gm-auth-tokens'); sessionStorage.removeItem('gm-auth-tokens'); };
   const renew = async () => {
     const current = tokensRef.current;
     if (!current || renewing.current) return;
@@ -27,14 +34,17 @@ export function PersistentAuthProvider({ children }: { children: React.ReactNode
           if (parsed.refresh_token !== current.refresh_token) { update(parsed); return; }
         } catch { /* A malformed value is replaced by a fresh token or cleared below. */ }
       }
-      update(await client.refresh(current.refresh_token));
+      update(await refreshTokens(current.refresh_token));
     };
     try {
       if (navigator.locks) await navigator.locks.request(`${KEY}-refresh`, rotate);
       else await rotate();
       setError(null);
     }
-    catch { update(null); setError('La sesión terminó. Inicia sesión nuevamente.'); }
+    catch (cause) {
+      if (cause instanceof InvalidSessionError) { update(null); setError('La sesión ya no está activa. Inicia sesión nuevamente.'); }
+      else { setError(null); window.setTimeout(() => void renew(), 30_000); }
+    }
     finally { renewing.current = false; }
   };
   useEffect(() => {

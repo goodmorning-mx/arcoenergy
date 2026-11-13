@@ -48,7 +48,6 @@ function App() {
   const syncingChecklist = useRef(false);
   const seenInstallationIds = useRef<Set<string> | null>(null);
   const seenLowStockIds = useRef<Set<string>>(new Set());
-  const [authResolved, setAuthResolved] = useState(false);
   const can = (permission:string) => Boolean(identity?.permissions.includes(permission));
   const allowedScreens:Screen[] = [ ...(can('customers:read') || can('quotes:read') || can('installations:read') ? ['inicio' as Screen] : []), ...(can('quotes:write') ? ['cotizar' as Screen] : []), ...(can('installations:read') ? ['instalaciones' as Screen] : []), ...(can('inventory:read') ? ['inventario' as Screen] : []), 'cuenta' ];
   const navItems:[Screen,string,string][] = ([['inicio','⌂','Resumen'],['cotizar','＋','Cotizador'],['instalaciones','⌁','Instalaciones'],['inventario','▦','Inventario'],['cuenta','◉','Mi cuenta']] as [Screen,string,string][]).filter(([id])=>allowedScreens.includes(id));
@@ -56,7 +55,6 @@ function App() {
   const selectedInverter = selectedPackage?.inverter_options.find(item => item.name === (inverter || selectedPackage.default_inverter));
   const quote = useMemo(() => ({ watts: panels * (selectedPackage?.panel_watts || 0), price: selectedPackage ? panels * Number(selectedPackage.panel_unit_price) + Number(selectedPackage.structure_price) + Number(selectedInverter?.price_mxn || 0) : 0 }), [panels, selectedPackage, selectedInverter]);
 
-  useEffect(() => { const timer=window.setTimeout(()=>setAuthResolved(true),0); return ()=>window.clearTimeout(timer); }, []);
   useEffect(() => {
     const update = () => setIsOnline(navigator.onLine);
     window.addEventListener('online', update);
@@ -323,7 +321,7 @@ function App() {
     return () => { cancelled = true; window.clearInterval(timer); };
   }, [isOnline, accessToken, identity?.email, identity?.permissions.join(','), identity?.roles.join(',')]);
 
-  if (!authResolved) return <div className="login-page"><p>Cargando sesión…</p></div>;
+  if (authLoading) return <div className="login-page"><p>Cargando sesión…</p></div>;
   const routePath = window.location.pathname.replace(/\/$/, '');
   const isLoginRoute = ['/login', '/app/login'].includes(routePath);
   if (isLoginRoute && identity && accessToken) { window.location.replace('/app/'); return null; }
