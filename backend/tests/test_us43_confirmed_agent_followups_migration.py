@@ -6,9 +6,9 @@ from uuid import uuid4
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import create_engine, inspect, select, text
 
-from app.models import HistoryCard
+from app.models import AgentActionIntent, FollowUp, HistoryCard
 
 
 def _load(path):
@@ -48,3 +48,19 @@ def test_confirmed_followup_schema_and_card_revision_are_append_only():
     assert "confirmación explícita" in " ".join(versions[1]["acceptance_criteria"])
     assert "agent_intent_id" in columns
     assert {"arguments_hash", "confirmation_token_hash", "status", "expires_at"} <= intent_columns
+
+
+def test_confirmed_followup_migration_accepts_tables_precreated_from_current_models():
+    root = Path(__file__).parents[1]
+    migration = _load(root / "alembic/versions/202611130149_us43_confirmed_agent_followups.py")
+    engine = create_engine("sqlite://")
+
+    with engine.begin() as connection:
+        AgentActionIntent.__table__.create(connection)
+        FollowUp.__table__.create(connection)
+        with Operations.context(MigrationContext.configure(connection)):
+            migration.upgrade()
+
+        inspector = inspect(connection)
+        assert inspector.has_table("ae_agent_action_intents")
+        assert "agent_intent_id" in {column["name"] for column in inspector.get_columns("ae_followups")}
