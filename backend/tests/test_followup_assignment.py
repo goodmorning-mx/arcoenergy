@@ -14,8 +14,8 @@ import pytest
 from sqlalchemy import Boolean, Column, Date, DateTime, MetaData, String, Text, create_engine, select
 from sqlalchemy.orm import Session
 
-from app.models import Base, Customer, FollowUp, HistoryCard
-from app.product_api import FollowUpDoneInput, FollowUpInput, auth_service, create_followup, list_followups, update_followup
+from app.models import Activity, Base, Customer, FollowUp, HistoryCard
+from app.product_api import FollowUpDoneInput, FollowUpInput, _create_followup_record, auth_service, create_followup, list_followups, update_followup
 from app.roles import ROLE_PERMISSIONS
 
 
@@ -49,6 +49,28 @@ def test_followup_is_assigned_to_active_commercial_member_and_records_owner() ->
         assert row["assigned_to"] == "seller@example.test"
         assert "push_claimed_at" not in row and "push_notified_at" not in row
         assert db.scalar(select(FollowUp).where(FollowUp.id == row["id"])).created_by == "admin@example.test"
+
+
+def test_agent_followup_mutation_is_idempotent_by_confirmation_intent() -> None:
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    users.create(engine)
+    memberships.create(engine)
+    admin = AuthIdentity("admin-id", "arcoenergy", frozenset({"administrador"}), ROLE_PERMISSIONS["administrador"], "admin@example.test", "Admin")
+    now = datetime.now(timezone.utc)
+    with engine.begin() as connection:
+        connection.execute(users.insert(), {"id": "admin-id", "email": "admin@example.test", "name": "Admin", "password_hash": "x", "is_active": True, "created_at": now})
+        connection.execute(memberships.insert(), {"user_id": "admin-id", "organization_id": "arcoenergy", "roles": ["administrador"], "permissions": list(ROLE_PERMISSIONS["administrador"]), "created_at": now})
+
+    with Session(engine) as db, patch.object(auth_service, "engine", engine):
+        customer = Customer(name="Cliente solar")
+        db.add(customer); db.commit(); db.refresh(customer)
+        data = FollowUpInput(customer_id=customer.id, due_date=date.today() + timedelta(days=3), note="Retomar propuesta")
+        first = _create_followup_record(data, admin, db, agent_intent_id="intent-123")
+        second = _create_followup_record(data, admin, db, agent_intent_id="intent-123")
+        assert first.id == second.id
+        assert db.scalar(select(sa.func.count()).select_from(FollowUp)) == 1
+        assert db.scalar(select(sa.func.count()).select_from(Activity)) == 1
 
         with pytest.raises(HTTPException) as error:
             create_followup(

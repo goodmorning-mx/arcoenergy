@@ -45,8 +45,8 @@ Fecha de corte: 2026-11-13. Esta matriz resume el último registro encontrado po
 | US-39 | 119 · continuidad del asistente CRM | Parcial: el hilo se conserva mientras la sesión está activa. Persistencia tras recarga exige decisión de privacidad/retención. |
 | US-40 | 143 · sesión renovable sin vencimiento por inactividad | Funcional en DEV: PWA renueva sesión y reintenta una acción de campo tras 401 con el mismo identificador; fallos conservan la cola local. CI usa identidad simulada. Faltan cuentas reales de instalador/cliente y validación en teléfonos físicos. |
 | US-41 | 114 · consentimiento y contacto del agente público | Parcial: agente de solo lectura y flujo de contacto con consentimiento. Faltan catálogo/precios aprobados y validación comercial de punta a punta. |
-| US-42 | 144 · auditoría PostgreSQL de las 42 tarjetas | Funcional en DEV: PostgreSQL registra 42 tarjetas distintas y 346 versiones append-only, todas con relato literal no vacío. La auditoría registró US-9 v7, US-14 v35 y US-40 v24; US-42 permanece v6. Falta cotejo humano de reconstrucciones/transcripciones y política de retención de fuentes sensibles. |
-| US-43 | 146 · requisito del agente operativo en CRM | Requisito literal capturado en rama de trabajo; aún no está integrado/desplegado ni hay herramientas de escritura en CRM. Se propone comenzar con programación confirmada de seguimientos, sujeta a validar operaciones prioritarias y datos permitidos para el modelo. |
+| US-42 | 146 · inventario ampliado a 43 tarjetas | PostgreSQL DEV registra 43 tarjetas y 348 versiones append-only al desplegar schema 148; todas conservan relato literal no vacío. US-43 está en v1 y US-42 en v7. Falta cotejo humano de reconstrucciones/transcripciones y política de retención de fuentes sensibles. |
+| US-43 | 147 · primera operación confirmable en agente CRM | Implementada localmente: programar seguimientos con resumen previo, confirmación, permiso vigente e idempotencia. Schema 149 y PR de ArcoEnergy pendientes; acciones adicionales y alcance de datos del modelo requieren validación de stakeholders. |
 
 ## Dependencias para continuar
 

@@ -21,12 +21,13 @@ from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased, sessionmaker
 from gm_agent import AgentService, Conversation, Message, OpenAIProvider
-from gm_mcp import Permission, RequestContext, ToolRegistry, tool
+from gm_mcp import Permission, RequestContext, ToolCall, ToolRegistry, tool
 from openai import AsyncOpenAI
 from gm_auth.dependencies import identity_dependency
 from gm_auth.models import AuthIdentity
 from gm_auth.models import memberships, users
 
+from app.agent_intents import AgentActionIntentStore, current_agent_intent_id
 from app.auth import auth_service
 from app.config import get_settings
 from app.database import create_database_engine
@@ -43,7 +44,7 @@ engine = create_database_engine()
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 router = APIRouter(prefix="/v1", tags=["arcoenergy"])
 _pdfium_lock = Lock()
-_agent_services: dict[str, AgentService] = {}
+_agent_providers: dict[str, OpenAIProvider] = {}
 _agent_conversations: dict[tuple[str, str], Conversation] = {}
 
 
@@ -269,10 +270,21 @@ class PublicLeadInput(BaseModel):
 class AgentChatInput(BaseModel):
     prompt: str = Field(default="", max_length=4000)
     conversation_id: str | None = Field(default=None, max_length=80)
+    confirmation: "AgentConfirmationInput | None" = None
 
 
-def _agent_registry(audience: str) -> ToolRegistry:
-    registry = ToolRegistry()
+class AgentConfirmationInput(BaseModel):
+    tool: str = Field(min_length=1, max_length=160)
+    arguments: dict[str, object]
+    intent_id: str = Field(min_length=1, max_length=80)
+    confirmation_token: str = Field(min_length=32, max_length=128)
+    idempotency_key: str = Field(min_length=1, max_length=80)
+    summary: str | None = Field(default=None, max_length=500)
+    details: list[str] = Field(default_factory=list, max_length=8)
+
+
+def _agent_registry(audience: str, identity: AuthIdentity | None = None, intent_store=None) -> ToolRegistry:
+    registry = ToolRegistry(intent_store=intent_store)
     if audience == "public":
         @tool(
             name="arcoenergy.public_system_sizes",
@@ -304,74 +316,157 @@ def _agent_registry(audience: str) -> ToolRegistry:
                 return result
 
         registry.register(public_system_sizes)
-    else:
-        @tool(
-            name="arcoenergy.crm_summary",
-            description="Consulta conteos agregados de prospectos, cotizaciones y seguimientos abiertos; nunca devuelve datos personales.",
-            input_schema={"type": "object", "properties": {}, "additionalProperties": False},
-            permission=Permission.READ,
-            permissions={"customers:read"},
-        )
-        def crm_summary(*, context: RequestContext):
-            with SessionLocal() as db:
-                return {
-                    "customers": db.scalar(select(func.count()).select_from(Customer)) or 0,
-                    "quotes": db.scalar(select(func.count()).select_from(Quote)) or 0,
-                    "open_followups": db.scalar(select(func.count()).select_from(FollowUp).where(FollowUp.done.is_(False))) or 0,
-                }
+    elif identity is not None:
+        if "customers:read" in identity.permissions:
+            @tool(
+                name="arcoenergy.crm_summary",
+                description="Consulta conteos agregados de prospectos, cotizaciones y seguimientos abiertos; nunca devuelve datos personales.",
+                input_schema={"type": "object", "properties": {}, "additionalProperties": False},
+                permission=Permission.READ,
+                permissions={"customers:read"},
+            )
+            def crm_summary(*, context: RequestContext):
+                with SessionLocal() as db:
+                    return {
+                        "customers": db.scalar(select(func.count()).select_from(Customer)) or 0,
+                        "quotes": db.scalar(select(func.count()).select_from(Quote)) or 0,
+                        "open_followups": db.scalar(select(func.count()).select_from(FollowUp).where(FollowUp.done.is_(False))) or 0,
+                    }
 
-        @tool(
-            name="arcoenergy.crm_catalog",
-            description="Consulta paquetes, opciones de inversor y el estado de aprobación de precios de Arco Energy.",
-            input_schema={"type": "object", "properties": {}, "additionalProperties": False},
-            permission=Permission.READ,
-            permissions={"quotes:read"},
-        )
-        def crm_catalog(*, context: RequestContext):
-            with SessionLocal() as db:
-                rows = db.scalars(select(QuotePackage).where(QuotePackage.enabled.is_(True)).order_by(QuotePackage.panel_count)).all()
-                return [{"panel_count": row.panel_count, "panel_brand": row.panel_brand, "panel_watts": row.panel_watts,
-                         "inverters": row.inverter_options, "default_inverter": row.default_inverter,
-                         "pricing_approved": row.pricing_approved} for row in rows]
+            registry.register(crm_summary)
 
-        registry.register(crm_summary)
-        registry.register(crm_catalog)
+        if "quotes:read" in identity.permissions:
+            @tool(
+                name="arcoenergy.crm_catalog",
+                description="Consulta paquetes, opciones de inversor y el estado de aprobación de precios de Arco Energy.",
+                input_schema={"type": "object", "properties": {}, "additionalProperties": False},
+                permission=Permission.READ,
+                permissions={"quotes:read"},
+            )
+            def crm_catalog(*, context: RequestContext):
+                with SessionLocal() as db:
+                    rows = db.scalars(select(QuotePackage).where(QuotePackage.enabled.is_(True)).order_by(QuotePackage.panel_count)).all()
+                    return [{"panel_count": row.panel_count, "panel_brand": row.panel_brand, "panel_watts": row.panel_watts,
+                             "inverters": row.inverter_options, "default_inverter": row.default_inverter,
+                             "pricing_approved": row.pricing_approved} for row in rows]
+
+            registry.register(crm_catalog)
+
+        if "customers:write" in identity.permissions:
+            @tool(
+                name="arcoenergy.schedule_followup",
+                description="Propone programar un seguimiento para un cliente por nombre exacto y, si hace falta, ciudad, fecha y nota. Siempre requiere confirmación explícita antes de guardar.",
+                input_schema={"type": "object", "properties": {
+                    "customer_name": {"type": "string", "minLength": 2, "maxLength": 180},
+                    "customer_city": {"type": "string", "maxLength": 120},
+                    "due_date": {"type": "string", "format": "date"},
+                    "note": {"type": "string", "maxLength": 5000},
+                }, "required": ["customer_name", "due_date", "note"], "additionalProperties": False},
+                permission=Permission.WRITE, write=True, requires_confirmation=True,
+                permissions={"customers:write"},
+            )
+            def schedule_followup(*, context: RequestContext, customer_name: str, due_date: str, note: str, customer_city: str = ""):
+                with SessionLocal() as db:
+                    query = select(Customer).where(func.lower(Customer.name) == customer_name.strip().lower())
+                    if customer_city.strip():
+                        query = query.where(func.lower(Customer.city) == customer_city.strip().lower())
+                    matches = db.scalars(query.limit(2)).all()
+                    if len(matches) != 1:
+                        return {"status": "rejected", "message": "No hay un cliente único con ese nombre; no se creó ningún seguimiento."}
+                    agent_identity = AuthIdentity(
+                        context.user_id, context.organization_id, context.roles, context.permissions,
+                        context.metadata.get("user_email", ""), context.metadata.get("user_name", ""),
+                    )
+                    row = _create_followup_record(
+                        FollowUpInput(customer_id=matches[0].id, due_date=date.fromisoformat(due_date), note=note),
+                        agent_identity, db, agent_intent_id=current_agent_intent_id(),
+                    )
+                    return {"status": "scheduled", "followup_id": row.id, "due_date": row.due_date.isoformat()}
+
+            registry.register(schedule_followup)
     return registry
 
 
-def _agent_service(audience: str) -> AgentService:
+def _agent_service(audience: str, identity: AuthIdentity | None = None) -> AgentService:
     if not settings.openai_api_key:
         raise HTTPException(503, "El asistente no está configurado en este entorno.")
-    if audience not in _agent_services:
+    if audience not in _agent_providers:
         client = AsyncOpenAI(api_key=settings.openai_api_key)
-        _agent_services[audience] = AgentService(OpenAIProvider(client), _agent_registry(audience))
-    return _agent_services[audience]
+        _agent_providers[audience] = OpenAIProvider(client)
+    intent_store = AgentActionIntentStore(SessionLocal) if audience == "internal" else None
+    return AgentService(_agent_providers[audience], _agent_registry(audience, identity, intent_store))
 
 
 async def _run_agent_chat(data: AgentChatInput, audience: str, owner: str, identity: AuthIdentity | None = None):
+    conversation_id = data.conversation_id or str(uuid4())
+    if data.confirmation is not None:
+        if audience != "internal" or identity is None or not data.conversation_id:
+            raise HTTPException(403, "No se permite confirmar esta acción.")
+        context = RequestContext(
+            identity.user_id, identity.organization_id, "arcoenergy",
+            frozenset({"read", *identity.permissions}),
+            metadata={"conversation_id": conversation_id, "user_email": identity.email or "", "user_name": identity.name or ""},
+            roles=identity.roles,
+        )
+        store = AgentActionIntentStore(SessionLocal)
+        store.validate_confirmation(
+            context=context, tool_name=data.confirmation.tool, arguments=data.confirmation.arguments,
+            intent_id=data.confirmation.intent_id, confirmation_token=data.confirmation.confirmation_token,
+            idempotency_key=data.confirmation.idempotency_key,
+        )
+        registry = _agent_registry("internal", identity, store)
+        try:
+            result = await registry.invoke(ToolCall(
+                name=data.confirmation.tool, arguments=data.confirmation.arguments, confirmed=True,
+                intent_id=data.confirmation.intent_id, confirmation_token=data.confirmation.confirmation_token,
+                idempotency_key=data.confirmation.idempotency_key,
+            ), context)
+        except (KeyError, PermissionError):
+            raise HTTPException(403, "Ya no tienes permiso para ejecutar esta operación.") from None
+        content = result.content
+        if isinstance(content, dict) and content.get("status") == "scheduled":
+            message = f"Seguimiento programado para el {content['due_date']}."
+        elif isinstance(content, dict) and content.get("status") == "rejected":
+            message = content.get("message", "No se realizó ningún cambio.")
+        else:
+            message = "La acción ya había sido confirmada y no se duplicó."
+        return {"conversationId": conversation_id, "content": message}
+
     prompt = data.prompt.strip()
     if not prompt:
         raise HTTPException(422, "Escribe una pregunta para el asistente.")
-    service = _agent_service(audience)
-    conversation_id = data.conversation_id or str(uuid4())
+    service = _agent_service(audience, identity) if identity is not None else _agent_service(audience)
     key = (owner, conversation_id)
     conversation = _agent_conversations.get(key)
     if conversation is None:
         conversation = Conversation(id=conversation_id)
-        conversation.messages.append(Message("system", (
-            "Eres el asistente de Arco Energy. Responde en español, con claridad y sin inventar datos, precios, ahorros, "
-            "especificaciones ni compromisos. Si la persona pide cotizar, pregunta cuántos paneles desea y consulta la herramienta para la cantidad e inversor. Usa las herramientas disponibles para datos actuales. Si el catálogo dice "
-            "que el precio aún no está aprobado, dilo con claridad y ofrece que el equipo configure el precio comercial. "
-            "No solicites datos personales por el chat ni afirmes que guardaste o enviaste una solicitud: esta conversación no registra prospectos. "
-            "Cuando la persona quiera que la contacten, indícale que use el formulario visible ‘Contacto comercial’, donde puede revisar el aviso de privacidad y enviar sus datos con consentimiento. "
-            "Si comparte datos personales aquí, no los repitas ni prometas transmitirlos; explica que debe usar ese formulario. "
-            "No tienes permiso para crear ni modificar registros; solo puedes consultar datos permitidos."
-        )))
+        if audience == "internal":
+            system_message = (
+                "Eres el asistente interno autenticado de Arco Energy. Responde en español y no inventes datos. "
+                "Usa solo las herramientas habilitadas para la identidad actual. Para programar seguimientos, confirma el nombre exacto del cliente, la fecha y la nota. "
+                "Nunca afirmes que una escritura terminó hasta que la herramienta la confirme. Toda mutación requiere que el usuario revise el resumen y presione ‘Confirmar y ejecutar’. "
+                "Limita los datos personales a lo indispensable para la operación solicitada; no repitas teléfono, correo o domicilio."
+            )
+        else:
+            system_message = (
+                "Eres el asistente público de Arco Energy. Responde en español, con claridad y sin inventar datos, precios, ahorros, "
+                "especificaciones ni compromisos. Si la persona pide cotizar, pregunta cuántos paneles desea y consulta la herramienta disponible. "
+                "Si el catálogo dice que el precio aún no está aprobado, no proporciones una cantidad. "
+                "No solicites datos personales por el chat ni afirmes que guardaste o enviaste una solicitud: este chat no registra prospectos. "
+                "Remite al formulario visible ‘Contacto comercial’ con aviso y consentimiento. "
+                "Si comparte datos personales aquí, no los repitas ni prometas transmitirlos; explica que debe usar ese formulario. "
+                "No tienes permiso para crear ni modificar registros; solo puedes consultar datos públicos permitidos."
+            )
+        conversation.messages.append(Message("system", system_message))
         _agent_conversations[key] = conversation
         if len(_agent_conversations) > 1000:
             _agent_conversations.pop(next(iter(_agent_conversations)))
     if identity:
-        context = RequestContext(identity.user_id, identity.organization_id, "arcoenergy", frozenset({"read", *identity.permissions}), roles=identity.roles)
+        context = RequestContext(
+            identity.user_id, identity.organization_id, "arcoenergy", frozenset({"read", *identity.permissions}),
+            metadata={"conversation_id": conversation_id, "user_email": identity.email or "", "user_name": identity.name or ""},
+            roles=identity.roles,
+        )
     else:
         context = RequestContext(f"public:{conversation_id}", settings.organization_id, "arcoenergy", frozenset({"read"}), roles=frozenset({"prospect"}))
     try:
@@ -379,6 +474,17 @@ async def _run_agent_chat(data: AgentChatInput, audience: str, owner: str, ident
     except Exception as exc:
         # Do not expose provider messages, request payloads, or credentials to the browser.
         raise HTTPException(502, "El asistente no pudo responder en este momento.") from exc
+    confirmation = getattr(response, "confirmation", None)
+    if confirmation:
+        if confirmation.get("status") == "rejected":
+            details = " ".join(confirmation.get("details", []))
+            content = f"{confirmation.get('summary', 'No se puede preparar la acción.')} {details}".strip()
+            return {"conversationId": conversation.id, "content": content}
+        for message in reversed(conversation.messages):
+            if message.role == "tool":
+                message.content = json.dumps({"status": "confirmation_required", "tool": confirmation.get("tool")})
+                break
+        return {"conversationId": conversation.id, "confirmation": confirmation}
     return {"conversationId": conversation.id, "content": response.content}
 
 
@@ -902,8 +1008,11 @@ async def public_agent_chat(data: AgentChatInput):
     return await _run_agent_chat(data, "public", "public-session")
 
 
-@router.post("/agent/chat", dependencies=[Depends(require_permissions(auth_service, "customers:read"))])
-async def internal_agent_chat(data: AgentChatInput, identity: AuthIdentity = Depends(identity_dependency(auth_service))):
+@router.post("/agent/chat")
+async def internal_agent_chat(
+    data: AgentChatInput,
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "customers:read")),
+):
     return await _run_agent_chat(data, "internal", identity.user_id, identity)
 
 
@@ -1053,6 +1162,15 @@ def quote_pdf(quote_id: str, db: Session = Depends(get_db)):
 
 @router.post("/followups", status_code=201, dependencies=[Depends(require_permissions(auth_service, "customers:write"))])
 def create_followup(data: FollowUpInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    return _serialize_followup(_create_followup_record(data, identity, db))
+
+
+def _create_followup_record(data: FollowUpInput, identity: AuthIdentity, db: Session,
+                            agent_intent_id: str | None = None) -> FollowUp:
+    if agent_intent_id:
+        existing = db.scalar(select(FollowUp).where(FollowUp.agent_intent_id == agent_intent_id))
+        if existing is not None:
+            return existing
     if not db.get(Customer, data.customer_id): raise HTTPException(404, "Cliente no encontrado.")
     assigned_to = (data.assigned_to or identity.email or "").strip().lower()
     if not assigned_to:
@@ -1073,9 +1191,20 @@ def create_followup(data: FollowUpInput, identity: AuthIdentity = Depends(identi
     if member is None or "customers:write" not in (member["permissions"] or []):
         raise HTTPException(422, "La persona responsable debe ser un usuario activo del equipo con permiso comercial.")
     values = data.model_dump(exclude={"assigned_to"})
-    row = FollowUp(**values, assigned_to=assigned_to, created_by=identity.email or ""); db.add(row); db.flush()
-    db.add(Activity(customer_id=row.customer_id, kind="seguimiento programado", note=f"{row.due_date}: {row.note}", created_by=identity.email)); db.commit(); db.refresh(row)
-    return _serialize_followup(row)
+    row = FollowUp(**values, assigned_to=assigned_to, created_by=identity.email or "", agent_intent_id=agent_intent_id)
+    db.add(row)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        if agent_intent_id:
+            existing = db.scalar(select(FollowUp).where(FollowUp.agent_intent_id == agent_intent_id))
+            if existing is not None:
+                return existing
+        raise
+    db.add(Activity(customer_id=row.customer_id, kind="seguimiento programado", note=f"{row.due_date}: {row.note}", created_by=identity.email))
+    db.commit(); db.refresh(row)
+    return row
 
 
 @router.get("/followups", dependencies=[Depends(require_permissions(auth_service, "customers:read"))])

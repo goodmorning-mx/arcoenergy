@@ -2028,8 +2028,23 @@ La migración `202611130148` agrega US-43 v1 y una nueva versión append-only de
 | Tarjeta | Estado revisado | Evidencia / alcance pendiente |
 | --- | --- | --- |
 | US-39 | Parcial | El CRM tiene chat interno `gm-agent`, pero las herramientas actuales solo consultan datos agregados y catálogo. Falta completar operaciones internas con autorización vigente y confirmación segura. |
-| US-43 | Capturada; implementación pendiente | Fuente literal guardada y tarjeta versionada; herramientas de escritura aún no se han desplegado. Se propone comenzar por programar seguimientos con confirmación. Faltan acordar acciones adicionales y el alcance de datos para el modelo. |
-| US-42 | Funcional en DEV para historial previo; auditoría actualizada pendiente de despliegue | US-43 queda registrada en una nueva versión append-only; la revisión `202611130148` debe desplegarse antes de afirmar que PostgreSQL contiene 43 tarjetas. |
+| US-43 | Capturada; primera acción en desarrollo | Fuente literal guardada y tarjeta versionada; el primer alcance propuesto es programar seguimientos con confirmación. Faltan acordar acciones adicionales y el alcance de datos para el modelo. |
+| US-42 | Funcional en DEV | La revisión `202611130148` está desplegada; PostgreSQL DEV contiene 43 tarjetas y 348 versiones append-only. US-43 v1 mantiene el relato literal y US-42 avanzó a v7. |
+
+## Iteración 147 — primera acción confirmable del agente CRM (2026-11-13)
+
+La primera operación en implementación permite programar un seguimiento desde el chat interno `gm-agent`. Solo aparece para membresías actuales con `customers:write`; el servidor resuelve coincidencia única de cliente por nombre exacto y, opcionalmente, ciudad. Antes de modificar la base, muestra cliente, ciudad, fecha y nota en una vista previa legible y requiere pulsar **Confirmar y ejecutar**. El token vence en diez minutos, queda ligado a usuario, organización, conversación, herramienta y hash de argumentos; los tokens y datos personales no se guardan en claro en la tabla de intents. El `agent_intent_id` único vuelve idempotente la escritura; el seguimiento y su actividad se guardan con la misma transacción funcional. La repetición de confirmación devuelve el mismo resultado sin duplicar seguimiento ni bitácora.
+
+La confirmación vuelve a verificar la membresía y el permiso antes de ejecutar. El agente público conserva herramientas separadas de solo lectura. La tarjeta aún requiere verificar el flujo contra el agente/modelo real en DEV y revisar con stakeholders las acciones siguientes y el tratamiento de datos que el proveedor del modelo procesa.
+
+La migración `202611130149` agrega intents de confirmación y la clave idempotente en seguimientos, y registra US-43 v2 sin reescribir la fuente original. La suite local valida confirmación, expiración, identidad, permisos y repetición antes de integrar el PR. Al desplegarla, el historial llegará a 349 versiones; US-43 avanzará a v2.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-4 | Funcional básico; extensión con agente en desarrollo | La captura normal de seguimientos existe; el nuevo canal agente reutiliza la creación y bitácora, con vista previa y confirmación. Falta integrar y validar en DEV. |
+| US-14 | Parcial para permisos de agentes | La herramienta de escritura se ofrece solo con `customers:write`; falta verificar cambios de rol durante el ciclo de confirmación contra DEV y probar la matriz completa de cinco roles. |
+| US-39 | En ampliación | `gm-agent` muestra los detalles de confirmación; el CRM conecta la acción de seguimiento. El historial del chat sigue en memoria y las operaciones restantes no se han priorizado. |
+| US-43 | Primera acción implementada localmente; DEV pendiente | Programar seguimiento con nombre exacto/ciudad, fecha y nota; confirmación legible, intent ligado a usuario/conversación, vencimiento, permiso vigente e idempotencia. Faltan PR, despliegue, prueba viva con el modelo y demás operaciones del módulo. |
 
 ## Trabajo acordado después de completar el goal
 
