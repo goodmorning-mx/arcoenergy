@@ -2098,6 +2098,13 @@ El login/refresh/logout del runtime se probó con la cuenta de bootstrap adminis
 | US-40 | Renovación de 36,500 días y persistencia tras recarga verificadas en runtime/Chrome CI | Prueba prolongada en segundo plano y en teléfonos reales con usuarios de campo. |
 | US-42 | Migración 153 registra evidencia y conserva los relatos originales | Cotejo humano de transcripciones y reconstrucciones. |
 
-## Trabajo acordado después de completar el goal
+## Iteración 152 — revisión colaborativa de storycards en CRM (2026-11-14)
 
-El usuario pidió construir una ruta de revisión que muestre las story cards registradas en una tabla detallada, con checklist y un campo de observaciones para verificar cada cambio con los stakeholders. Este entregable se hará después de cerrar el goal de las story cards.
+Se construye `/crm/story-cards/review` como espacio autenticado para verificar cada tarjeta con su stakeholder. La tabla lista la última versión por tarjeta y permite buscar y filtrar por estado; el detalle conserva el relato normalizado, fuente literal y procedencia, criterios, preguntas abiertas, vínculos y el checklist de aceptación. Cada guardado registra una revisión append-only ligada a la versión de la tarjeta, con checklist, observaciones, correo del revisor y fecha. El historial anterior permanece visible. Administrador, contador y marketing reciben el permiso `history_cards:review`; instalador y cliente no lo reciben. Una ruta directa sin sesión envía al login y, después de autenticarse, regresa a la revisión si el rol tiene permiso.
+
+La migración `202611140154` crea la tabla de revisiones, otorga el permiso a las membresías existentes de esos roles y agrega esta iteración a US-42 preservando las fuentes. Las pruebas locales cubren versiones append-only, rechazo de revisiones obsoletas o incompletas, roles, migración, build CRM y el recorrido Chrome de login, checklist, observaciones y restauración tras recargar. **La aceptación de las historias sigue en manos de los stakeholders**: el estado técnico no marca tarjetas como aprobadas por ellos. Pendiente completar merge y despliegue DEV; registrar debajo la evidencia viva una vez desplegada.
+
+| Tarjeta | Estado de implementación | Validación con stakeholder / pendiente |
+| --- | --- | --- |
+| US-14 | Permiso de revisión separado para administrador, contador y marketing; instalador y cliente excluidos | Validar acceso con cuentas reales de cada rol después del despliegue. |
+| US-42 | Ruta CRM, tabla de tarjetas vigentes, detalle de fuente, checklist, observaciones e historial append-only implementados | Stakeholders deben revisar tarjeta por tarjeta y dejar su checklist/observaciones; verificar las 43 tarjetas y persistencia en DEV. |

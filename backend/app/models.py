@@ -475,3 +475,21 @@ class HistoryCard(Base):
     linked_cards: Mapped[list] = mapped_column(JSON, default=list)
     recorded_by: Mapped[str] = mapped_column(String(180), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class HistoryCardReview(Base):
+    """Append-only stakeholder review snapshot for a specific story-card version."""
+    __tablename__ = "ae_history_card_reviews"
+    __table_args__ = (
+        UniqueConstraint("story_id", "review_version", name="uq_ae_history_card_review_version"),
+        Index("ix_ae_history_card_reviews_story_created", "story_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    story_id: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    history_card_id: Mapped[str] = mapped_column(ForeignKey("ae_history_cards.id", ondelete="RESTRICT"), nullable=False)
+    story_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    review_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    checklist: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    observations: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    reviewed_by: Mapped[str] = mapped_column(String(180), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)

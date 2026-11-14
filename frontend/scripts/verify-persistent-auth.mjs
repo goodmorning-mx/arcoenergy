@@ -15,7 +15,7 @@ const permissions = [
   'expenses:write', 'receivables:read', 'receivables:write', 'accounts:read',
   'accounts:write', 'accounts:manage', 'suppliers:read', 'suppliers:manage',
   'purchases:read', 'purchases:write', 'team:manage', 'sales:read',
-  'sales:write', 'reports:read',
+  'sales:write', 'reports:read', 'history_cards:review',
 ];
 
 function fail(message) { throw new Error(message); }
@@ -43,6 +43,10 @@ async function waitForJson(url, child, deadline) {
 }
 
 async function verifySurface(route) {
+  const isReviewRoute = route === '/crm-review';
+  const reviewPath = '/crm/story-cards/review';
+  const loginPath = isReviewRoute ? '/crm/login' : `${route}/login`;
+  const landingPath = isReviewRoute ? reviewPath : `${route}/`;
   const port = await freePort();
   const profile = await mkdtemp(join(tmpdir(), 'arcoenergy-auth-chrome-'));
   const child = spawn(chromeBin, [
@@ -60,6 +64,8 @@ async function verifySurface(route) {
   const invalidAccessTokens = new Set();
   const fieldActionAttempts = [];
   let agentChatRequests = 0;
+  const reviewPosts = [];
+  const reviewRecords = [];
   try {
     const deadline = Date.now() + timeoutMs;
     await waitForJson(`http://127.0.0.1:${port}/json/version`, child, deadline);
@@ -155,6 +161,21 @@ async function verifySurface(route) {
             idempotency_key: 'browser-check-idempotency-key',
           },
         });
+      } else if (isReviewRoute && pathname.endsWith('/v1/history-cards')) {
+        void complete(200, reviewCardFixture);
+      } else if (isReviewRoute && pathname.endsWith('/v1/history-card-reviews')) {
+        void complete(200, reviewRecords);
+      } else if (isReviewRoute && pathname.endsWith('/v1/history-cards/US-42/reviews') && request.method === 'POST') {
+        const payload = JSON.parse(request.postData || '{}');
+        reviewPosts.push(payload);
+        const saved = {
+          id: `browser-check-review-${reviewRecords.length + 1}`, story_id: 'US-42', history_card_id: 'browser-check-card',
+          story_version: payload.story_version, review_version: reviewRecords.length + 1,
+          checklist: payload.checklist, observations: payload.observations, reviewed_by: 'elder.gonzalez@arcoenergy.mx',
+          created_at: '2026-11-14T18:00:00Z',
+        };
+        reviewRecords.push(saved);
+        void complete(201, saved);
       } else {
         void send('Fetch.continueRequest', { requestId }).catch(error => {
           if (!error.message.includes('Invalid InterceptionId')) throw error;
@@ -189,7 +210,7 @@ async function verifySurface(route) {
     await send('Page.enable');
     await send('Runtime.enable');
     await send('Fetch.enable', { patterns: [{ urlPattern: '*://*/api/*', requestStage: 'Request' }] });
-    await send('Page.navigate', { url: `${origin}${route}/login` });
+    await send('Page.navigate', { url: `${origin}${isReviewRoute ? reviewPath : loginPath}` });
     await waitFor(`(() => {
       if (document.readyState !== 'complete') return false;
       const set = (name, value) => {
@@ -205,20 +226,26 @@ async function verifySurface(route) {
       document.querySelector('form')?.requestSubmit();
       return true;
     })()`, 'login form render and submit');
-    await waitFor(`location.pathname === '${route}/' && !document.querySelector('input[name=password]')`, 'authenticated landing view after login');
+    try {
+      await waitFor(`location.pathname === '${landingPath}' && !document.querySelector('input[name=password]')`, 'authenticated landing view after login');
+    } catch (error) {
+      const state = await evaluate("JSON.stringify({ path: location.pathname, loginVisible: Boolean(document.querySelector('input[name=password]')), tokens: localStorage.getItem('arcoenergy-auth-tokens')?.slice(0, 160), returnTo: sessionStorage.getItem('arcoenergy-return-to'), body: document.body?.innerText?.slice(0, 300) })");
+      fail(`${error.message}; login calls=${loginCount}, refresh calls=${refreshCount}, browser state=${state}.`);
+    }
     const storedRefreshToken = await waitFor("(() => { try { return JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || '' } catch { return '' } })()", 'persistent token storage', value => Boolean(value));
     if (loginCount !== 1) fail(`Expected one intercepted login on ${route}, received ${loginCount}.`);
 
-    await send('Page.navigate', { url: `${origin}${route}/login` });
+    if (isReviewRoute) await send('Page.reload');
+    else await send('Page.navigate', { url: `${origin}${loginPath}` });
     try {
-      await waitFor(`location.pathname === '${route}/' && !document.querySelector('input[name=password]') && (() => { try { return (JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || '').startsWith('browser-check-refresh-') } catch { return false } })()`, 'session renewal and authenticated route restoration after reload');
+      await waitFor(`location.pathname === '${landingPath}' && !document.querySelector('input[name=password]') && (() => { try { return (JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || '').startsWith('browser-check-refresh-') } catch { return false } })()`, 'session renewal and authenticated route restoration after reload');
     } catch (error) {
       const state = await evaluate("JSON.stringify({ path: location.pathname, loginVisible: Boolean(document.querySelector('input[name=password]')), tokens: localStorage.getItem('arcoenergy-auth-tokens')?.slice(0, 160), body: document.body?.innerText?.slice(0, 300) })");
       fail(`${error.message}; login calls=${loginCount}, refresh calls=${refreshCount}, browser state=${state}.`);
     }
-    if (refreshCount < 1) fail(`Expected at least one intercepted refresh after reload on ${route}, received ${refreshCount}.`);
     let latestRefreshToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || ''");
-    if (latestRefreshToken === storedRefreshToken) fail(`Refresh token was not rotated after reloading ${route}.`);
+    if (!latestRefreshToken) fail(`The persistent session token was lost after reloading ${route}.`);
+    if (!isReviewRoute && (refreshCount < 1 || latestRefreshToken === storedRefreshToken)) fail(`Refresh token was not rotated after reloading ${route}.`);
     if (route === '/app') {
       await evaluate("Array.from(document.querySelectorAll('.rail-item')).find(button => button.textContent.includes('Inventario'))?.click()");
       await waitFor("Boolean(document.querySelector('.field-actions select[name=installation_id]')) && Boolean(document.querySelector('.field-actions select[name=item_id]'))", 'installer inventory action form');
@@ -317,6 +344,26 @@ async function verifySurface(route) {
       const savedChat = await evaluate(`sessionStorage.getItem(${JSON.stringify(storageKey)}) || ''`);
       if (agentChatRequests !== 1 || savedChat.includes('browser-check-secret-token')) fail('Reload lost the conversation or persisted a confirmation credential.');
       latestRefreshToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || ''");
+    } else if (isReviewRoute) {
+      await waitFor("Boolean(document.querySelector('.story-review-page h2') && document.querySelector('.story-review-table tr.selected'))", 'story-card review route and selected card');
+      if (!await evaluate("document.body.innerText.includes('Revisión de user story cards') && document.body.innerText.includes('US-42') && document.body.innerText.includes('Elder Gonzalez')")) fail('The collaborative review route did not render the selected story card and stakeholder.');
+      await evaluate(`(() => {
+        const checkbox = document.querySelector('.story-review-checklist input[type="checkbox"]');
+        checkbox.click();
+        const textarea = document.querySelector('.story-review-observations textarea');
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+        setter.call(textarea, 'Validado en la sesión Chrome de revisión.');
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        textarea.dispatchEvent(new Event('change', { bubbles: true }));
+        document.querySelector('.story-review-save button')?.click();
+      })()`);
+      await waitFor("document.body.innerText.includes('Revisión 1 guardada para US-42.')", 'saved append-only stakeholder review');
+      if (reviewPosts.length !== 1 || reviewPosts[0].story_version !== 11 || reviewPosts[0].checklist[0].checked !== true || reviewPosts[0].observations !== 'Validado en la sesión Chrome de revisión.') fail(`Unexpected review payload: ${JSON.stringify(reviewPosts)}.`);
+      await send('Page.reload');
+      await waitFor("document.querySelector('.story-review-page') && document.body.innerText.includes('En progreso')", 'persisted checklist state after review page reload');
+      const restored = await evaluate("({checked:document.querySelector('.story-review-checklist input[type=checkbox]')?.checked, observation:document.querySelector('.story-review-observations textarea')?.value, reviewer:document.body.innerText.includes('elder.gonzalez@arcoenergy.mx')})");
+      if (!restored?.checked || restored.observation !== 'Validado en la sesión Chrome de revisión.' || !restored.reviewer) fail(`Review state did not persist after reload: ${JSON.stringify(restored)}.`);
+      latestRefreshToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || ''");
     }
     const failedRefreshExpected = refreshCount + 1;
     failRefreshesRemaining = 5;
@@ -355,6 +402,13 @@ const installationFixture = {
   checklist: [], materials: [{ item_id: 'browser-check-item', item_name: 'Panel de verificación', requested_quantity: 1, preissued_quantity: 0, consumed_quantity: 0, remaining_quantity: 1, remaining_to_issue: 0, available_for_order: 2, shortage_quantity: 0 }],
 };
 const inventoryFixture = { id: 'browser-check-item', name: 'Panel de verificación', category: 'Paneles', unit: 'pieza', quantity: 2, reserved_quantity: 0, available_quantity: 2, minimum_quantity: 0, unit_cost: 1, barcode: null };
+const reviewCardFixture = [{
+  id: 'browser-check-card', story_id: 'US-42', version: 11, iteration: 'Iteración de Chrome', stakeholder: 'Elder Gonzalez',
+  source_literal: 'Conserva el relato original de la user story card.', source_type: 'WhatsApp', source_reference: 'history-cards.md#US-42',
+  source_attribution: 'Elder Gonzalez', source_confidence: 'verbatim', normalized_story: 'Revisar las tarjetas con su stakeholder.',
+  acceptance_criteria: ['El checklist aparece para revisión.', 'Las observaciones se conservan por iteración.'],
+  unresolved_questions: ['La validación final corresponde al stakeholder.'], linked_cards: [], created_at: '2026-11-14T18:00:00Z',
+}];
 
 function tokenResponse(sequence, route) {
   const installerPermissions = ['installations:read', 'inventory:read', 'inventory:write', 'expenses:write'];
@@ -364,15 +418,18 @@ function tokenResponse(sequence, route) {
     token_type: 'bearer', expires_in: 900,
     identity: {
       user_id: 'browser-check-user', organization_id: 'arcoenergy',
-      roles: route === '/app' ? ['instalador'] : ['administrador'], permissions: route === '/app' ? installerPermissions : permissions,
+      roles: route === '/app' ? ['instalador'] : route === '/crm-review' ? ['marketing'] : ['administrador'],
+      permissions: route === '/app' ? installerPermissions : permissions,
       email: 'session-check@arcoenergy.example', name: 'Browser Session Check',
     },
   };
 }
 
-for (const route of ['/app', '/crm']) {
+for (const route of ['/app', '/crm', '/crm-review']) {
   await verifySurface(route);
   console.log(route === '/app'
     ? '/app login, saved-session and expired-access field-action checks passed.'
-    : '/crm login and saved-session browser checks passed.');
+    : route === '/crm-review'
+      ? '/crm/story-cards/review login, checklist, observation, append-only review and reload checks passed.'
+      : '/crm login and saved-session browser checks passed.');
 }

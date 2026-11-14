@@ -4,11 +4,12 @@ import { useAuth } from './persistent-auth';
 import { QRCodeSVG } from 'qrcode.react';
 import { OperationsReportView } from './OperationsReportView';
 import { InventoryIssueIntake } from './InventoryIssueIntake';
+import { StoryCardReviewView } from './StoryCardReviewView';
 import { addCalendarDaysToIsoDate, addLocalCalendarDays, localDateInputValue } from './dateUtils';
 import './inventory-labels.css';
 import './integrations.css';
 
-type View = 'inicio' | 'clientes' | 'cotizaciones' | 'ventas' | 'seguimientos' | 'proyectos' | 'instalaciones' | 'inventario' | 'gastos' | 'cobranza' | 'cuentas' | 'proveedores' | 'compras' | 'reportes' | 'catalogo' | 'equipo' | 'integraciones' | 'historial';
+type View = 'inicio' | 'clientes' | 'cotizaciones' | 'ventas' | 'seguimientos' | 'proyectos' | 'instalaciones' | 'inventario' | 'gastos' | 'cobranza' | 'cuentas' | 'proveedores' | 'compras' | 'reportes' | 'catalogo' | 'equipo' | 'integraciones' | 'historial' | 'revisiones';
 type Customer = { id: string; name: string; phone: string; email: string; city: string; address: string; status: string; source: string; created_at?: string };
 type Quote = { id: string; folio: string; customer_id: string; customer?: Customer; panel_count: number; panel_brand: string; panel_watts: number; inverter: string; payment_method: string; total: number; status: string; pricing_approved: boolean; installation_city: string; installation_address: string; created_at: string };
 type Package = { id: string; panel_count: number; panel_brand: string; panel_watts: number; panel_unit_price: number; structure_name: string; structure_price: number; inverter_options: Array<{ name: string; price_mxn: number }>; default_inverter: string; payment_methods: string[]; enabled: boolean; pricing_approved: boolean; price_mxn: number; system_kw: number };
@@ -41,6 +42,7 @@ type Notice = { type: 'success' | 'error' | 'info'; text: string };
 type PendingQuoteShare = { quote: Quote; file: File; message: string; driveStatus: string };
 
 const apiBase = '/api/v1';
+const STORY_REVIEW_PATH = '/crm/story-cards/review';
 const money = (amount: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 2 }).format(amount || 0);
 function supportsPdfFileShare(file: File) {
   try { return typeof navigator.share === 'function' && Boolean(navigator.canShare?.({ files: [file] })); }
@@ -88,7 +90,7 @@ const permissionLabel: Record<string, string> = {
   'suppliers:manage': 'Administrar proveedores', 'purchases:read': 'Consultar compras y CxP',
   'purchases:write': 'Registrar compras y pagos', 'sales:read': 'Consultar ventas',
   'sales:write': 'Registrar ventas', 'reports:read': 'Consultar reportes',
-  'team:manage': 'Administrar usuarios y roles', 'client:portal': 'Consultar su propio portal de cliente',
+  'team:manage': 'Administrar usuarios y roles', 'history_cards:review': 'Revisar user story cards', 'client:portal': 'Consultar su propio portal de cliente',
 };
 
 async function request<T>(path: string, token?: string, init: RequestInit = {}): Promise<T> {
@@ -106,7 +108,7 @@ async function request<T>(path: string, token?: string, init: RequestInit = {}):
 
 export default function App() {
   const { identity, accessToken, logout, loading: authLoading } = useAuth();
-  const [view, setView] = useState<View>('inicio');
+  const [view, setView] = useState<View>(() => window.location.pathname.replace(/\/$/, '') === STORY_REVIEW_PATH ? 'revisiones' : 'inicio');
   const [notice, setNotice] = useState<Notice | null>(null);
   const [loading, setLoading] = useState(false);
   const [dashboard, setDashboard] = useState<Dashboard>({});
@@ -150,6 +152,11 @@ export default function App() {
   const [printQuote, setPrintQuote] = useState<Quote | null>(null);
 
   const can = useCallback((permission: string) => Boolean(identity?.permissions.includes(permission)), [identity]);
+  const navigateView = useCallback((next: View) => {
+    setView(next);
+    const destination = next === 'revisiones' ? STORY_REVIEW_PATH : '/crm/';
+    if (window.location.pathname !== destination) window.history.pushState({ crmView: next }, '', destination);
+  }, []);
 
   const clientAccount = identity?.roles.includes('cliente') || false;
   const allowedViews = useMemo(() => clientAccount ? [] : ([
@@ -167,8 +174,9 @@ export default function App() {
     ...(can('purchases:read') ? ['compras' as View] : []),
     ...(can('reports:read') ? ['reportes' as View] : []),
     ...(can('team:manage') ? ['catalogo' as View, 'equipo' as View, 'integraciones' as View, 'historial' as View] : []),
+    ...(can('history_cards:review') ? ['revisiones' as View] : []),
   ]), [can, clientAccount]);
-  const title: Record<View, string> = { inicio: 'Resumen', clientes: 'Clientes', cotizaciones: 'Cotizaciones', ventas: 'Ventas y órdenes', seguimientos: 'Seguimientos', proyectos: 'Proyectos', instalaciones: 'Instalaciones', inventario: 'Inventario', gastos: 'Gastos operativos', cobranza: 'Cuentas por cobrar', cuentas: 'Caja y bancos', proveedores: 'Proveedores', compras: 'Compras y cuentas por pagar', reportes: 'Costeo por proyecto', catalogo: 'Catálogo de paquetes', equipo: 'Equipo y accesos', integraciones: 'Integraciones y respaldo', historial: 'History cards' };
+  const title: Record<View, string> = { inicio: 'Resumen', clientes: 'Clientes', cotizaciones: 'Cotizaciones', ventas: 'Ventas y órdenes', seguimientos: 'Seguimientos', proyectos: 'Proyectos', instalaciones: 'Instalaciones', inventario: 'Inventario', gastos: 'Gastos operativos', cobranza: 'Cuentas por cobrar', cuentas: 'Caja y bancos', proveedores: 'Proveedores', compras: 'Compras y cuentas por pagar', reportes: 'Costeo por proyecto', catalogo: 'Catálogo de paquetes', equipo: 'Equipo y accesos', integraciones: 'Integraciones y respaldo', historial: 'History cards', revisiones: 'Revisión de storycards' };
 
   const announce = (text: string, type: Notice['type'] = 'success') => {
     setNotice({ text, type });
@@ -196,7 +204,15 @@ export default function App() {
   }, [accessToken, can]);
 
   useEffect(() => { void refresh(); }, [refresh]);
-  useEffect(() => { if (allowedViews.length && !allowedViews.includes(view)) setView(allowedViews[0]); }, [allowedViews, view]);
+  useEffect(() => { if (allowedViews.length && !allowedViews.includes(view)) { setView(allowedViews[0]); if (window.location.pathname.replace(/\/$/, '') === STORY_REVIEW_PATH) window.history.replaceState({}, '', '/crm/'); } }, [allowedViews, view]);
+  useEffect(() => {
+    const onPopState = (event: PopStateEvent) => {
+      if (window.location.pathname.replace(/\/$/, '') === STORY_REVIEW_PATH) setView('revisiones');
+      else setView(allowedViews.includes(event.state?.crmView) ? event.state.crmView : 'inicio');
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [allowedViews]);
 
   useEffect(() => {
     if (!accessToken || !can('customers:read') || !('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -566,22 +582,22 @@ export default function App() {
   if (authLoading) return <div className="login-screen"><section className="login-card">Cargando sesión…</section></div>;
   const routePath = window.location.pathname.replace(/\/$/, '');
   const isLoginRoute = ['/login', '/crm/login'].includes(routePath);
-  if (isLoginRoute && identity && accessToken) { window.location.replace(clientAccount ? '/app/' : '/crm/'); return null; }
+  if (isLoginRoute && identity && accessToken) { const returnTo = new URLSearchParams(window.location.search).get('returnTo'); window.location.replace(clientAccount ? '/app/' : returnTo === STORY_REVIEW_PATH && can('history_cards:review') ? returnTo : '/crm/'); return null; }
   if (!identity || !accessToken) {
-    if (!isLoginRoute) window.history.replaceState(null, '', '/crm/login');
+    if (!isLoginRoute) { const returnTo = window.location.pathname.replace(/\/$/, '') === STORY_REVIEW_PATH ? `?returnTo=${encodeURIComponent(STORY_REVIEW_PATH)}` : ''; window.history.replaceState(null, '', `/crm/login${returnTo}`); }
     return <LoginScreen />;
   }
   if (isLoginRoute) { window.location.replace(clientAccount ? '/app/' : '/crm/'); return null; }
   if (clientAccount) { window.location.replace('/app/'); return null; }
 
-  const nav: Array<[View, string, string]> = [['inicio', '◫', 'Resumen'], ['clientes', '♙', 'Clientes'], ['cotizaciones', '▤', 'Cotizaciones'], ...(can('sales:read') ? [['ventas', '▣', 'Ventas / OT']] as Array<[View, string, string]> : []), ['seguimientos', '◷', 'Seguimientos'], ...(can('installations:read') ? [['proyectos','▧','Proyectos'], ['instalaciones', '⌂', 'Instalaciones']] as Array<[View, string, string]> : []), ...(can('inventory:read') ? [['inventario', '▦', 'Inventario']] as Array<[View, string, string]> : []), ...(can('expenses:read') ? [['gastos', '$', 'Gastos']] as Array<[View, string, string]> : []), ...(can('receivables:read') ? [['cobranza', '↙', 'Cobranza']] as Array<[View, string, string]> : []), ...(can('accounts:read') ? [['cuentas', '▤', 'Caja / bancos']] as Array<[View, string, string]> : []), ...(can('suppliers:read') ? [['proveedores', '♧', 'Proveedores']] as Array<[View, string, string]> : []), ...(can('purchases:read') ? [['compras', '▤', 'Compras / CxP']] as Array<[View, string, string]> : []), ...(can('reports:read') ? [['reportes', '▥', 'Reportes']] as Array<[View, string, string]> : []), ...(can('team:manage') ? [['catalogo', '⊞', 'Catálogo'], ['equipo', '♧', 'Equipo'], ['integraciones', '☁', 'Drive / integraciones'], ['historial', '↺', 'History cards']] as Array<[View, string, string]> : [])];
+  const nav: Array<[View, string, string]> = [['inicio', '◫', 'Resumen'], ['clientes', '♙', 'Clientes'], ['cotizaciones', '▤', 'Cotizaciones'], ...(can('sales:read') ? [['ventas', '▣', 'Ventas / OT']] as Array<[View, string, string]> : []), ['seguimientos', '◷', 'Seguimientos'], ...(can('installations:read') ? [['proyectos','▧','Proyectos'], ['instalaciones', '⌂', 'Instalaciones']] as Array<[View, string, string]> : []), ...(can('inventory:read') ? [['inventario', '▦', 'Inventario']] as Array<[View, string, string]> : []), ...(can('expenses:read') ? [['gastos', '$', 'Gastos']] as Array<[View, string, string]> : []), ...(can('receivables:read') ? [['cobranza', '↙', 'Cobranza']] as Array<[View, string, string]> : []), ...(can('accounts:read') ? [['cuentas', '▤', 'Caja / bancos']] as Array<[View, string, string]> : []), ...(can('suppliers:read') ? [['proveedores', '♧', 'Proveedores']] as Array<[View, string, string]> : []), ...(can('purchases:read') ? [['compras', '▤', 'Compras / CxP']] as Array<[View, string, string]> : []), ...(can('reports:read') ? [['reportes', '▥', 'Reportes']] as Array<[View, string, string]> : []), ...(can('team:manage') ? [['catalogo', '⊞', 'Catálogo'], ['equipo', '♧', 'Equipo'], ['integraciones', '☁', 'Drive / integraciones'], ['historial', '↺', 'History cards']] as Array<[View, string, string]> : []), ...(can('history_cards:review') ? [['revisiones', '☷', 'Revisión storycards']] as Array<[View, string, string]> : [])];
   const visibleCustomers = customers.filter(item => `${item.name} ${item.city} ${item.email} ${item.phone}`.toLowerCase().includes(search.toLowerCase()));
 
   return <div className="crm-app">
     <aside className="crm-sidebar">
       <a className="crm-brand" href="/"><span className="brand-mark">A</span><span>arco<span>energy</span><small>GESTIÓN SOLAR</small></span></a>
       <div className="sidebar-label">ESPACIO DE TRABAJO</div>
-      <nav aria-label="Navegación principal">{nav.filter(([key]) => allowedViews.includes(key)).map(([key, icon, label]) => <button key={key} className={`sidebar-link ${view === key ? 'selected' : ''}`} onClick={() => setView(key)}><span>{icon}</span>{label}{key === 'seguimientos' && followups.length > 0 && <b>{followups.length}</b>}</button>)}</nav>
+      <nav aria-label="Navegación principal">{nav.filter(([key]) => allowedViews.includes(key)).map(([key, icon, label]) => <button key={key} className={`sidebar-link ${view === key ? 'selected' : ''}`} onClick={() => navigateView(key)}><span>{icon}</span>{label}{key === 'seguimientos' && followups.length > 0 && <b>{followups.length}</b>}</button>)}</nav>
       <div className="sidebar-spacer" />
       <a className="sidebar-mobile-link" href="/app/">↗ App de campo</a>
       {identity?.permissions.includes('team:manage') && <button className="sidebar-mobile-link" onClick={() => setView('equipo')}>⚙ Administración</button>}
@@ -614,6 +630,7 @@ export default function App() {
         {view === 'equipo' && <TeamView members={team} roleDefinitions={roleDefinitions} loading={teamLoading} error={teamError} name={teamName} email={teamEmail} password={teamPassword} role={teamRole} busy={teamBusy} onName={setTeamName} onEmail={setTeamEmail} onPassword={setTeamPassword} onRole={setTeamRole} onSubmit={createMember} onUpdateRole={updateMemberRole} />}
         {view === 'integraciones' && <IntegrationsView token={accessToken || ''} />}
         {view === 'historial' && <HistoryCardsView token={accessToken || ''} announce={announce} />}
+        {view === 'revisiones' && <StoryCardReviewView token={accessToken || ''} />}
 
         <footer className="page-foot"><span>Arco Energy · CRM</span><span>La información se actualiza desde el espacio de trabajo de Arco Energy.</span></footer>
       </div>
@@ -631,7 +648,7 @@ export default function App() {
   </div>;
 }
 
-function headingDescription(view: View) { return ({ inicio: '', clientes: 'Consulta prospectos, contactos y actividad comercial.', cotizaciones: 'Prepara, descarga y comparte propuestas con folio.', ventas: 'Registra ventas aceptadas, entradas de dinero y órdenes de trabajo.', seguimientos: 'Da continuidad a las conversaciones y registra cada contacto.', proyectos: 'Agrupa órdenes, gastos y costos bajo un código único de proyecto.', instalaciones: 'Asigna y consulta órdenes de trabajo.', inventario: 'Administra materiales, entradas y existencias.', gastos: 'Registra gastos operativos y directos por fecha y proyecto.', cobranza: 'Administra saldos, abonos recibidos y recordatorios a clientes.', cuentas: 'Consulta saldos y registra movimientos de caja y bancos.', proveedores: 'Administra proveedores y sus condiciones de pago.', compras: 'Registra entradas de material, facturas y saldos por pagar.', reportes: 'Consulta ventas, consumo de materiales y gastos por periodo o proyecto.', catalogo: 'Administra paquetes, inversores, precios y formas de pago.', equipo: 'Usuarios y privilegios para cada área.', integraciones: 'Conexiones externas y exportación segura de datos empresariales.', historial: 'Conserva relatos, fuentes y versiones de cada user story card.' })[view] || ''; }
+function headingDescription(view: View) { return ({ inicio: '', clientes: 'Consulta prospectos, contactos y actividad comercial.', cotizaciones: 'Prepara, descarga y comparte propuestas con folio.', ventas: 'Registra ventas aceptadas, entradas de dinero y órdenes de trabajo.', seguimientos: 'Da continuidad a las conversaciones y registra cada contacto.', proyectos: 'Agrupa órdenes, gastos y costos bajo un código único de proyecto.', instalaciones: 'Asigna y consulta órdenes de trabajo.', inventario: 'Administra materiales, entradas y existencias.', gastos: 'Registra gastos operativos y directos por fecha y proyecto.', cobranza: 'Administra saldos, abonos recibidos y recordatorios a clientes.', cuentas: 'Consulta saldos y registra movimientos de caja y bancos.', proveedores: 'Administra proveedores y sus condiciones de pago.', compras: 'Registra entradas de material, facturas y saldos por pagar.', reportes: 'Consulta ventas, consumo de materiales y gastos por periodo o proyecto.', catalogo: 'Administra paquetes, inversores, precios y formas de pago.', equipo: 'Usuarios y privilegios para cada área.', integraciones: 'Conexiones externas y exportación segura de datos empresariales.', historial: 'Conserva relatos, fuentes y versiones de cada user story card.', revisiones: 'Verifica criterios con stakeholders y conserva observaciones por iteración.' })[view] || ''; }
 
 function DashboardView({ data, customers, quotes, followups, can, onCustomer, onView, onComplete }: { data: Dashboard; customers: Customer[]; quotes: Quote[]; followups: FollowUp[]; can: (p: string) => boolean; onCustomer: (c: Customer) => void; onView: (v: View) => void; onComplete: (f: FollowUp) => void }) {
   const recent = [...quotes].slice(0, 4);
@@ -1401,4 +1418,4 @@ function Modal({ title, subtitle, onClose, wide = false, children }: { title: st
 function Field({ label, name, type = 'text', required = false, placeholder, defaultValue, value, onChange, className = '', min, max, step, minLength, maxLength }: { label: string; name?: string; type?: string; required?: boolean; placeholder?: string; defaultValue?: string | number; value?: string; onChange?: (value: string) => void; className?: string; min?: string | number; max?: string | number; step?: string | number; minLength?: number; maxLength?: number }) { return <label className={`field ${className}`}><span>{label}</span><input name={name} type={type} required={required} placeholder={placeholder} defaultValue={value === undefined ? defaultValue : undefined} value={value} onChange={event => onChange?.(event.target.value)} min={min} max={max} step={step} minLength={minLength} maxLength={maxLength}/></label>; }
 function labelStatus(status: string) { return ({ draft: 'Borrador', sent: 'Enviada', accepted: 'Aceptada', declined: 'No aceptada', overdue: 'Vencido' })[status] || status; }
 function labelCustomerStatus(status: string) { return ({ lead: 'Prospecto', qualified: 'En conversación', followup: 'Seguimiento', customer: 'Cliente' })[status] || status; }
-function LoginScreen() { const { login, loading, error } = useAuth(); const [failure, setFailure] = useState(''); return <div className="login-screen"><a className="crm-brand" href="/"><span className="brand-mark">A</span><span>arco<span>energy</span><small>GESTIÓN SOLAR</small></span></a><section className="login-card"><span className="eyebrow">ACCESO DE EQUIPO</span><h1>Iniciar sesión</h1><p>Ingresa con la cuenta de tu negocio.</p><form onSubmit={async event => { event.preventDefault(); const form = new FormData(event.currentTarget); setFailure(''); try { await login(String(form.get('email')), String(form.get('password'))); window.location.replace('/crm/'); } catch (err) { setFailure(err instanceof Error ? err.message : error || 'No se pudo iniciar sesión.'); } }}><Field label="Correo electrónico" name="email" type="email" required/><Field label="Contraseña" name="password" type="password" required/><p className="muted-copy">La sesión se conserva y renueva automáticamente en este dispositivo.</p>{failure && <p role="alert">{failure}</p>}<button className="button button-primary" disabled={loading}>{loading ? 'Iniciando…' : 'Entrar'}</button></form><a href="/app/login">Acceso móvil</a></section></div>; }
+function LoginScreen() { const { login, loading, error } = useAuth(); const [failure, setFailure] = useState(''); return <div className="login-screen"><a className="crm-brand" href="/"><span className="brand-mark">A</span><span>arco<span>energy</span><small>GESTIÓN SOLAR</small></span></a><section className="login-card"><span className="eyebrow">ACCESO DE EQUIPO</span><h1>Iniciar sesión</h1><p>Ingresa con la cuenta de tu negocio.</p><form onSubmit={async event => { event.preventDefault(); const form = new FormData(event.currentTarget); setFailure(''); try { await login(String(form.get('email')), String(form.get('password'))); } catch (err) { setFailure(err instanceof Error ? err.message : error || 'No se pudo iniciar sesión.'); } }}><Field label="Correo electrónico" name="email" type="email" required/><Field label="Contraseña" name="password" type="password" required/><p className="muted-copy">La sesión se conserva y renueva automáticamente en este dispositivo.</p>{failure && <p role="alert">{failure}</p>}<button className="button button-primary" disabled={loading}>{loading ? 'Iniciando…' : 'Entrar'}</button></form><a href="/app/login">Acceso móvil</a></section></div>; }
