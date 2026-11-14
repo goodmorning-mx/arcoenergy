@@ -32,14 +32,24 @@ def test_us39_session_history_is_appended_without_replacing_source():
             connection.execute(HistoryCard.__table__.insert(), {
                 **source, "id": str(uuid4()), "recorded_by": "source-import", "created_at": now,
             })
-        before = connection.execute(select(HistoryCard.__table__).where(HistoryCard.story_id == "US-39")).mappings().one()
+        before = {
+            story_id: connection.execute(
+                select(HistoryCard.__table__).where(HistoryCard.story_id == story_id).order_by(HistoryCard.version.desc())
+            ).mappings().first()
+            for story_id in ("US-39", "US-42")
+        }
         with Operations.context(MigrationContext.configure(connection)):
             migration.upgrade()
         versions = connection.execute(
             select(HistoryCard.__table__).where(HistoryCard.story_id == "US-39").order_by(HistoryCard.version)
         ).mappings().all()
+        audit_versions = connection.execute(
+            select(HistoryCard.__table__).where(HistoryCard.story_id == "US-42").order_by(HistoryCard.version)
+        ).mappings().all()
 
     assert len(versions) == 2
-    assert versions[0]["source_literal"] == versions[1]["source_literal"] == before["source_literal"]
+    assert versions[0]["source_literal"] == versions[1]["source_literal"] == before["US-39"]["source_literal"]
     assert "sessionStorage" in " ".join(versions[1]["acceptance_criteria"])
     assert "reinicio de API" in " ".join(versions[1]["unresolved_questions"])
+    assert audit_versions[-1]["version"] == before["US-42"]["version"] + 1
+    assert audit_versions[-1]["source_literal"] == before["US-42"]["source_literal"]
