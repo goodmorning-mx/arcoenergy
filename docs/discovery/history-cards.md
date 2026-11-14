@@ -2046,6 +2046,20 @@ La migración `202611130149` agrega intents de confirmación y la clave idempote
 | US-39 | En ampliación | `gm-agent` muestra los detalles de confirmación; el CRM conecta la acción de seguimiento. El historial del chat sigue en memoria y las operaciones restantes no se han priorizado. |
 | US-43 | Primera acción implementada localmente; DEV pendiente | Programar seguimiento con nombre exacto/ciudad, fecha y nota; confirmación legible, intent ligado a usuario/conversación, vencimiento, permiso vigente e idempotencia. Faltan PR, despliegue, prueba viva con el modelo y demás operaciones del módulo. |
 
+## Iteración 148 — verificación DEV de la primera acción del agente CRM (2026-11-13)
+
+La versión `fdf7a4de3d9c06a4a1d0cb3dbef8194fa42bdf4d` de ArcoEnergy está integrada en `dev`. DEV responde con `/health` y `/version`, schema `202611130149`, y los portales PWA, CRM y web responden. PWA y CRM reportan el mismo commit que la API. La CI Docker pasó la verificación OCR, render de PWA/CRM, sesión persistente, rutas y login PWA offline. El test de navegador falló una vez por timeout de Chrome DevTools; el reintento completo terminó exitosamente.
+
+La migración `202611130150` registra esta evidencia en nuevas versiones append-only de US-43 y US-42; no sustituye ni modifica las fuentes literales. En schema 149, antes de esta auditoría, el registro contiene 43 tarjetas y 349 versiones. La nueva migración pasará a 351 versiones: US-43 v3 y US-42 v8. La ampliación de operaciones del agente, los datos permitidos al proveedor del modelo y los cotejos humanos de fuentes siguen pendientes con stakeholders.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-4 | Funcional en DEV para programar seguimientos | El agente agrega una vista previa y confirmación al flujo existente, con bitácora e idempotencia. Falta validar avisos con vendedores/dispositivos reales y priorizar otras acciones. |
+| US-14 | Permisos actuales verificados al confirmar | Solo se expone la herramienta CRM a miembros con `customers:write`; la confirmación revalida la identidad/permisos vigentes. Faltan cuentas reales de instalador/cliente y aislamiento de datos. |
+| US-39 | Parcial | `gm-agent` permite revisar y confirmar el resumen. El historial conversacional sigue en memoria y no sobrevive recarga. |
+| US-42 | Auditoría verificada en schema 149 | 43 tarjetas, 349 versiones y relatos literales no vacíos; migración 150 añade la evidencia como v8. |
+| US-43 | Primera acción en DEV | Seguimiento con preview, confirmación, expiry, identidad ligada, permiso vigente e idempotencia; US-43 v3 registra la validación. Quedan por definir operaciones siguientes y datos enviados al proveedor de IA. |
+
 ## Trabajo acordado después de completar el goal
 
 El usuario pidió construir una ruta de revisión que muestre las 42 story cards en una tabla detallada, con checklist y un campo de observaciones para verificar cada cambio con los stakeholders. Este entregable se hará después de cerrar el goal de las story cards.
