@@ -33,7 +33,7 @@ from app.config import get_settings
 from app.database import create_database_engine
 from app.drive_storage import download_private_file, folder_status, save_private_file, save_quote_pdf
 from app.drive_archive import archive_business_snapshot
-from app.models import Activity, BusinessSnapshotRun, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, Project, ProjectExpense, ProfitabilityAdjustment, Purchase, PurchaseCorrection, PurchaseLine, PushSubscription, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
+from app.models import Activity, BusinessSnapshotRun, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, HistoryCardReview, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, Project, ProjectExpense, ProfitabilityAdjustment, Purchase, PurchaseCorrection, PurchaseLine, PushSubscription, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
 from app.reminders import send_due_followup_pushes
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 from app.time_utils import business_today
@@ -897,9 +897,80 @@ class HistoryCardInput(BaseModel):
         return value
 
 
-@router.get("/history-cards", dependencies=[Depends(require_permissions(auth_service, "team:manage"))])
+class HistoryCardReviewCheckInput(BaseModel):
+    criterion: str = Field(min_length=1, max_length=10000)
+    checked: bool
+
+    @field_validator("criterion")
+    @classmethod
+    def criterion_is_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("El criterio no puede quedar vacío.")
+        return value
+
+
+class HistoryCardReviewInput(BaseModel):
+    story_version: int = Field(ge=1)
+    checklist: list[HistoryCardReviewCheckInput] = Field(max_length=100)
+    observations: str = Field(default="", max_length=5000)
+
+    @field_validator("observations")
+    @classmethod
+    def trim_observations(cls, value: str) -> str:
+        return value.strip()
+
+
+@router.get("/history-cards", dependencies=[Depends(require_permissions(auth_service, "history_cards:review"))])
 def list_history_cards(db: Session = Depends(get_db)):
     return [_serialize(row) for row in db.scalars(select(HistoryCard).order_by(HistoryCard.story_id, HistoryCard.version)).all()]
+
+
+@router.get("/history-card-reviews", dependencies=[Depends(require_permissions(auth_service, "history_cards:review"))])
+def list_history_card_reviews(db: Session = Depends(get_db)):
+    return [_serialize(row) for row in db.scalars(
+        select(HistoryCardReview).order_by(HistoryCardReview.story_id, HistoryCardReview.review_version)
+    ).all()]
+
+
+@router.post("/history-cards/{story_id}/reviews", status_code=201)
+def append_history_card_review(
+    story_id: str,
+    data: HistoryCardReviewInput,
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "history_cards:review")),
+    db: Session = Depends(get_db),
+):
+    latest_card = db.scalar(
+        select(HistoryCard).where(HistoryCard.story_id == story_id)
+        .order_by(HistoryCard.version.desc()).limit(1).with_for_update()
+    )
+    if latest_card is None:
+        raise HTTPException(404, "No se encontró la storycard solicitada.")
+    if latest_card.version != data.story_version:
+        raise HTTPException(409, "La storycard cambió desde que abriste esta revisión. Actualiza la vista antes de guardar.")
+    expected_criteria = list(latest_card.acceptance_criteria or [])
+    submitted_criteria = [item.criterion for item in data.checklist]
+    if submitted_criteria != expected_criteria:
+        raise HTTPException(422, "El checklist debe corresponder exactamente con los criterios de la versión actual.")
+    if not data.observations and not any(item.checked for item in data.checklist):
+        raise HTTPException(422, "Marca al menos un criterio o registra una observación para guardar la revisión.")
+    latest_review_version = db.scalar(
+        select(func.max(HistoryCardReview.review_version)).where(HistoryCardReview.story_id == story_id)
+    ) or 0
+    row = HistoryCardReview(
+        story_id=story_id, history_card_id=latest_card.id, story_version=latest_card.version,
+        review_version=latest_review_version + 1,
+        checklist=[item.model_dump() for item in data.checklist], observations=data.observations,
+        reviewed_by=identity.email,
+    )
+    db.add(row)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "La revisión cambió en otra sesión. Actualiza la vista antes de guardar.")
+    db.refresh(row)
+    return _serialize(row)
 
 
 @router.post("/history-cards", status_code=201, dependencies=[Depends(require_permissions(auth_service, "team:manage"))])
