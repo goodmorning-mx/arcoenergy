@@ -64,3 +64,32 @@ def test_confirmed_followup_migration_accepts_tables_precreated_from_current_mod
         inspector = inspect(connection)
         assert inspector.has_table("ae_agent_action_intents")
         assert "agent_intent_id" in {column["name"] for column in inspector.get_columns("ae_followups")}
+
+
+def test_dev_verification_appends_versions_without_changing_source_literals():
+    root = Path(__file__).parents[1]
+    migration148 = _load(root / "alembic/versions/202611130148_us43_agentic_crm_operations.py")
+    migration150 = _load(root / "alembic/versions/202611130150_us43_dev_verification.py")
+    records = json.loads((root / "app/history_card_initial.json").read_text(encoding="utf-8"))
+    engine = create_engine("sqlite://")
+    now = datetime.now(timezone.utc)
+
+    with engine.begin() as connection:
+        HistoryCard.__table__.create(connection)
+        for source in records:
+            if source["story_id"] == "US-42":
+                source = {**source, "version": 6}
+            connection.execute(HistoryCard.__table__.insert(), {
+                **source, "id": str(uuid4()), "recorded_by": "source-import", "created_at": now,
+            })
+        with Operations.context(MigrationContext.configure(connection)):
+            migration148.upgrade()
+            migration150.upgrade()
+
+        for story_id, expected_version in (("US-43", 2), ("US-42", 8)):
+            versions = connection.execute(
+                select(HistoryCard.__table__).where(HistoryCard.story_id == story_id).order_by(HistoryCard.version)
+            ).mappings().all()
+            assert versions[-1]["version"] == expected_version
+            assert versions[-1]["source_literal"] == versions[-2]["source_literal"]
+            assert versions[-1]["iteration"] == migration150.ITERATION
