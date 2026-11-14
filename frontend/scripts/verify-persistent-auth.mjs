@@ -59,6 +59,7 @@ async function verifySurface(route) {
   let expireNextFieldAction = false;
   const invalidAccessTokens = new Set();
   const fieldActionAttempts = [];
+  let agentChatRequests = 0;
   try {
     const deadline = Date.now() + timeoutMs;
     await waitForJson(`http://127.0.0.1:${port}/json/version`, child, deadline);
@@ -143,6 +144,17 @@ async function verifySurface(route) {
         const token = authorization.replace(/^Bearer\s+/i, '');
         const invalid = invalidAccessTokens.has(token);
         void complete(invalid ? 401 : 201, invalid ? { detail: 'Expired access token.' } : { id: 'browser-check-movement' });
+      } else if (route === '/crm' && pathname.endsWith('/v1/agent/chat')) {
+        agentChatRequests += 1;
+        void complete(200, {
+          conversationId: 'browser-check-agent-conversation',
+          confirmation: {
+            tool: 'arcoenergy.schedule_followup', arguments: { customer_id: 'browser-check-customer' },
+            summary: 'Programar seguimiento de prueba', details: ['Cliente: Rosa de prueba', 'Fecha: 2026-11-20'],
+            confirmation_token: 'browser-check-secret-token', intent_id: 'browser-check-intent',
+            idempotency_key: 'browser-check-idempotency-key',
+          },
+        });
       } else {
         void send('Fetch.continueRequest', { requestId }).catch(error => {
           if (!error.message.includes('Invalid InterceptionId')) throw error;
@@ -281,6 +293,29 @@ async function verifySurface(route) {
       if (refreshCount < refreshCountBeforeQueue + 2 || queuedAttempts.length < 2) fail(`Expected failed refresh attempts and a queued field action; refresh calls=${refreshCount}, action retries=${queuedAttempts.length}.`);
       if (queuedAttempts.some(attempt => JSON.parse(attempt.body).operation_id !== queuedId)) fail('Failed-refresh retry changed or lost the queued action identifier.');
       if (queuedActions.length !== 1) fail(`Expected one pending field action after refresh failure, received ${queuedActions.length}.`);
+    } else if (route === '/crm') {
+      await evaluate("document.querySelector('button.agent-launcher')?.click()");
+      await waitFor("Boolean(document.querySelector('section[aria-label=\"¿Qué necesitas resolver?\"] input[aria-label=Mensaje]'))", 'CRM agent chat panel');
+      await evaluate(`(() => {
+        const input = document.querySelector('section[aria-label="¿Qué necesitas resolver?"] input[aria-label="Mensaje"]');
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+        setter.call(input, 'Programa seguimiento de prueba');
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.closest('form').requestSubmit();
+      })()`);
+      await waitFor("document.body.innerText.includes('Programar seguimiento de prueba')", 'agent confirmation preview');
+      if (agentChatRequests !== 1) fail(`Expected one simulated agent request, received ${agentChatRequests}.`);
+      const storageKey = await evaluate("Object.keys(sessionStorage).find(key => key.startsWith('arcoenergy-agent:')) || ''");
+      const storedChat = await evaluate(`sessionStorage.getItem(${JSON.stringify(storageKey)}) || ''`);
+      if (!storageKey || storedChat.includes('browser-check-secret-token') || storedChat.includes('browser-check-idempotency-key')) fail('The CRM chat did not persist under the user key or stored confirmation credentials.');
+      await send('Page.reload');
+      await waitFor("document.querySelector('button.agent-launcher') && document.querySelector('input[name=password]') === null", 'CRM after authenticated agent chat reload');
+      await evaluate("document.querySelector('button.agent-launcher')?.click()");
+      await waitFor("document.body.innerText.includes('Programar seguimiento de prueba') && document.body.innerText.includes('La confirmación anterior venció')", 'restored CRM chat with expired confirmation');
+      const confirmButtons = await evaluate("Array.from(document.querySelectorAll('[aria-label=\"Confirmación de operación\"] button')).filter(button => button.textContent.includes('Confirmar y ejecutar')).length");
+      if (confirmButtons !== 0) fail('A restored CRM confirmation remained executable after reload.');
+      const savedChat = await evaluate(`sessionStorage.getItem(${JSON.stringify(storageKey)}) || ''`);
+      if (agentChatRequests !== 1 || savedChat.includes('browser-check-secret-token')) fail('Reload lost the conversation or persisted a confirmation credential.');
     }
     const failedRefreshExpected = refreshCount + 1;
     failRefreshesRemaining = 5;
