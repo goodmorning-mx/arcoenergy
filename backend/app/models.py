@@ -84,9 +84,27 @@ class FollowUp(Base):
     created_by: Mapped[str] = mapped_column(String(180), default="")
     assigned_to: Mapped[str] = mapped_column(String(180), default="")
     done: Mapped[bool] = mapped_column(Boolean, default=False)
+    agent_intent_id: Mapped[str | None] = mapped_column(String(36), nullable=True, unique=True)
     push_claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     push_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+
+
+class AgentActionIntent(Base):
+    __tablename__ = "ae_agent_action_intents"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    organization_id: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    conversation_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    tool_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    arguments_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    confirmation_token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(36), nullable=False, unique=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Activity(Base):
