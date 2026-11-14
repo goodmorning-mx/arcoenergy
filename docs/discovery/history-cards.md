@@ -2086,6 +2086,18 @@ La verificación complementa las pruebas unitarias de `gm-agent`; no resuelve pe
 | US-39 | Chrome CI verifica recarga, aislamiento por usuario y confirmación vencida | Persistencia durable y política de retención requieren decisión. |
 | US-42 | Migración 152 registra la evidencia y conserva fuentes | Cotejo humano de transcripciones y reconstrucciones. |
 
+## Iteración 151 — verificación viva de sesión persistente en DEV (2026-11-14)
+
+La API desplegada usa `AUTH_REFRESH_DAYS=36500` (100 años, con renovación rotativa). Sin imprimir ni registrar secretos, una prueba dentro del contenedor autenticó la cuenta de bootstrap configurada, rotó el refresh, validó la identidad y cerró la sesión para revocar el token. PostgreSQL mantiene activas las tres cuentas solicitadas con sus roles: administrador, marketing y contador. La prueba Chrome de CI cubre además la restauración del estado de sesión tras recargar y el reintento idempotente de una acción de campo.
+
+El login/refresh/logout del runtime se probó con la cuenta de bootstrap administrativa; esto no sustituye la prueba de roles de instalador/cliente en teléfonos físicos ni demuestra continuidad tras periodos prolongados sin conectividad. La sesión se revoca al cerrar sesión, cambiar/restablecer contraseña o desactivar la cuenta. La migración `202611140153` agrega versiones append-only de US-14, US-40 y US-42 y conserva sus relatos fuente.
+
+| Tarjeta | Estado revisado | Pendiente |
+| --- | --- | --- |
+| US-14 | Login, refresh rotativo, identidad, logout/revocación y roles de las cuentas de DEV verificados | Validar aislamiento por entidad/campo con usuarios instalador/cliente reales y dispositivos de campo. |
+| US-40 | Renovación de 36,500 días y persistencia tras recarga verificadas en runtime/Chrome CI | Prueba prolongada en segundo plano y en teléfonos reales con usuarios de campo. |
+| US-42 | Migración 153 registra evidencia y conserva los relatos originales | Cotejo humano de transcripciones y reconstrucciones. |
+
 ## Trabajo acordado después de completar el goal
 
 El usuario pidió construir una ruta de revisión que muestre las story cards registradas en una tabla detallada, con checklist y un campo de observaciones para verificar cada cambio con los stakeholders. Este entregable se hará después de cerrar el goal de las story cards.
