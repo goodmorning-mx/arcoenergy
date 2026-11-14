@@ -2017,6 +2017,20 @@ API `/health` respondió 200; API `/version` reporta schema `202611130147`; `/ap
 | US-40 | Funcional en DEV para sesión renovable y PWA operativa | Chrome verifica restauración de sesión y reintento de acción tras 401; falta validar cuentas reales de instalador/cliente y teléfonos de campo. |
 | US-42 | Funcional en DEV para el registro auditable de tarjetas | PostgreSQL registra 42 tarjetas y 346 versiones, sin fuentes literales vacías; US-14 v35 conserva el historial append-only. Falta cotejo humano de transcripciones/reconstrucciones y política de retención de fuentes sensibles. |
 
+## Iteración 146 — operaciones del negocio mediante agente CRM (2026-11-13)
+
+El dueño pidió que el CRM tenga un chat incrustado desde el que el equipo pueda ejecutar operaciones mediante agentes conectados con módulos `gm-*`. Se registra como US-43, separada de US-41: US-41 es el agente público de solo lectura para orientar cotizaciones; US-43 corresponde al asistente interno autenticado y sus herramientas operativas. La fuente literal y sin fecha explícita quedó en [requerimiento del agente CRM](sources/owner-agentic-crm-requirement.md).
+
+La implementación CRM actual solo ofrece lectura de agregados y catálogo, así que no satisface todavía el requisito de operaciones. Los cambios a datos deben consultar en servidor los permisos vigentes y mostrar una confirmación explícita antes de ejecutarse. El primer alcance se limitará a programar seguimientos, usando el flujo y la bitácora existentes; no expondrá búsqueda libre de datos personales al modelo. Aún falta diseñar la lista de operaciones prioritarias y la política de datos del agente con los stakeholders.
+
+La migración `202611130148` agrega US-43 v1 y una nueva versión append-only de US-42 para registrar la tarjeta. No reescribe fuentes anteriores. Antes del despliegue DEV, PostgreSQL conserva 42 tarjetas y 346 versiones; el registro pasará a 43 tarjetas al integrar esta revisión.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-39 | Parcial | El CRM tiene chat interno `gm-agent`, pero las herramientas actuales solo consultan datos agregados y catálogo. Falta completar operaciones internas con autorización vigente y confirmación segura. |
+| US-43 | Capturada; implementación pendiente | Fuente literal guardada y tarjeta versionada; herramientas de escritura aún no se han desplegado. Se propone comenzar por programar seguimientos con confirmación. Faltan acordar acciones adicionales y el alcance de datos para el modelo. |
+| US-42 | Funcional en DEV para historial previo; auditoría actualizada pendiente de despliegue | US-43 queda registrada en una nueva versión append-only; la revisión `202611130148` debe desplegarse antes de afirmar que PostgreSQL contiene 43 tarjetas. |
+
 ## Trabajo acordado después de completar el goal
 
 El usuario pidió construir una ruta de revisión que muestre las 42 story cards en una tabla detallada, con checklist y un campo de observaciones para verificar cada cambio con los stakeholders. Este entregable se hará después de cerrar el goal de las story cards.
