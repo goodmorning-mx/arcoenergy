@@ -2060,6 +2060,19 @@ La migración `202611130150` registra esta evidencia en nuevas versiones append-
 | US-42 | Auditoría verificada en schema 149 | 43 tarjetas, 349 versiones y relatos literales no vacíos; migración 150 añade la evidencia como v8. |
 | US-43 | Primera acción en DEV | Seguimiento con preview, confirmación, expiry, identidad ligada, permiso vigente e idempotencia; US-43 v3 registra la validación. Quedan por definir operaciones siguientes y datos enviados al proveedor de IA. |
 
+## Iteración 149 — historial del agente CRM en sesión (2026-11-13)
+
+Para avanzar US-39 sin introducir retención central de conversaciones, `gm-agent` agrega una opción de persistencia temporal en `sessionStorage`, habilitada por el CRM con una clave específica por usuario. Así se restaura la conversación visible y su identificador al recargar la pestaña; el CRM borra el hilo local al cerrar sesión. La navegación pública no habilita esta persistencia.
+
+La caché omite tokens, intentos e identificadores de idempotencia de confirmación. Una vista previa restaurada se muestra como vencida y exige solicitar otra antes de ejecutar; el backend conserva la validación de autorización e idempotencia existente. Esto no hace durable la conversación: cerrar la pestaña o reiniciar la API pierde el contexto de servidor. No se guarda historial permanente ni se resuelve la política de privacidad/retención.
+
+Cambios implementados en `gm-agent` commit `3ff7d4c` (PR [#11](https://github.com/goodmorning-mx/gm-agent/pull/11), integrado en `dev` con merge `5ab408e`). El CRM consume ese paquete y sus pruebas locales pasan; el despliegue DEV y la actualización append-only de US-39/US-42 están pendientes. La migración propuesta `202611130151` agrega una versión nueva por tarjeta, conserva el `source_literal` original y documenta las limitaciones.
+
+| Tarjeta | Estado revisado | Evidencia / alcance pendiente |
+| --- | --- | --- |
+| US-39 | Implementado localmente; DEV pendiente | Tres pruebas cubren restauración tras recarga, aislamiento por usuario/limpieza al logout y eliminación de credenciales de confirmación. `npm ci`, typecheck, build y 4 pruebas CRM pasan. Falta CI/merge/despliegue DEV; conversación durable y retención siguen pendientes. |
+| US-42 | Iteración registrada localmente | Migración 151 conserva el relato fuente y añade nuevas versiones append-only. Falta desplegar y verificar conteos en PostgreSQL DEV. |
+
 ## Trabajo acordado después de completar el goal
 
-El usuario pidió construir una ruta de revisión que muestre las 42 story cards en una tabla detallada, con checklist y un campo de observaciones para verificar cada cambio con los stakeholders. Este entregable se hará después de cerrar el goal de las story cards.
+El usuario pidió construir una ruta de revisión que muestre las story cards registradas en una tabla detallada, con checklist y un campo de observaciones para verificar cada cambio con los stakeholders. Este entregable se hará después de cerrar el goal de las story cards.
