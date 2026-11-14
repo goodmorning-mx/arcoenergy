@@ -316,6 +316,7 @@ async function verifySurface(route) {
       if (confirmButtons !== 0) fail('A restored CRM confirmation remained executable after reload.');
       const savedChat = await evaluate(`sessionStorage.getItem(${JSON.stringify(storageKey)}) || ''`);
       if (agentChatRequests !== 1 || savedChat.includes('browser-check-secret-token')) fail('Reload lost the conversation or persisted a confirmation credential.');
+      latestRefreshToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || ''");
     }
     const failedRefreshExpected = refreshCount + 1;
     failRefreshesRemaining = 5;
