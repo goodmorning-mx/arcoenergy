@@ -2079,7 +2079,7 @@ El despliegue de Factory [run 43541642384](https://github.com/goodmorning-mx/goo
 
 La CI abre el CRM con identidad simulada, solicita una respuesta MCP simulada y recarga el navegador. Chrome verifica que el hilo reaparece, la clave queda aislada por usuario, no se almacenan tokens ni credenciales de confirmación y la confirmación restaurada aparece vencida sin acción ejecutable. No se modifican datos reales.
 
-La verificación complementa las pruebas unitarias de `gm-agent`; no resuelve persistencia al cerrar pestaña/reiniciar API ni política de retención. La migración `202611140152` agrega nuevas versiones append-only de US-39 y US-42 preservando los relatos fuente.
+La verificación complementa las pruebas unitarias de `gm-agent`; no resuelve persistencia al cerrar pestaña/reiniciar API ni política de retención. La migración `202611140152` agrega nuevas versiones append-only de US-39 y US-42 preservando los relatos fuente. Factory terminó el despliegue DEV en el run [#43581547175](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/43581547175); API `/health` y `/version` respondieron HTTP 200, con schema `202611140152` y commit `ba14ee876a0c3cb1252e172fab775d43bc7159b9`. La consulta SQL de solo lectura confirmó 43 tarjetas, 355 versiones, US-39 v16 y US-42 v10. Web `/`, CRM `/crm/login`, PWA `/app/`, `/app/manifest.webmanifest` y `/app/sw.js` respondieron HTTP 200. La confirmación se restauró como vencida en Chrome CI, sin acción ejecutable.
 
 | Tarjeta | Estado revisado | Pendiente |
 | --- | --- | --- |
