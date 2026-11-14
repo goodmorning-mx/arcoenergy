@@ -2075,6 +2075,17 @@ Cambios implementados en `gm-agent` commit `3ff7d4c` (PR [#11](https://github.co
 
 El despliegue de Factory [run 43541642384](https://github.com/goodmorning-mx/goodmorning-factory/actions/runs/43541642384) terminó correctamente, incluidas la comprobación de revisiones vivas de base de datos y la reconciliación de respaldos externos. La consulta SQL de sólo lectura confirmó 43 tarjetas, 353 versiones, cero relatos fuente vacíos, US-39 v15, US-42 v9 y US-43 v3. La API `/health` respondió OK y `/version` reportó schema `202611130151`, commit `6c3baa767de63de6907a196d75fe32a1e2764a7c`. `/crm/login` respondió HTTP 200; PWA, CRM y API reportan ese commit. El bundle CRM en vivo contiene el almacenamiento por usuario y el manejo de confirmaciones restauradas como vencidas. Las tres pruebas nuevas del módulo `gm-agent` pasaron y la suite Docker de Arco verificó render, sesiones y login offline. Esto verifica la ruta de recarga con contexto de API activo; no verifica recuperación de contexto después de reiniciar el servidor.
 
+## Iteración 150 — verificación Chrome del historial de agente CRM (2026-11-14)
+
+La CI abre el CRM con identidad simulada, solicita una respuesta MCP simulada y recarga el navegador. Chrome verifica que el hilo reaparece, la clave queda aislada por usuario, no se almacenan tokens ni credenciales de confirmación y la confirmación restaurada aparece vencida sin acción ejecutable. No se modifican datos reales.
+
+La verificación complementa las pruebas unitarias de `gm-agent`; no resuelve persistencia al cerrar pestaña/reiniciar API ni política de retención. La migración `202611140152` agrega nuevas versiones append-only de US-39 y US-42 preservando los relatos fuente.
+
+| Tarjeta | Estado revisado | Pendiente |
+| --- | --- | --- |
+| US-39 | Chrome CI verifica recarga, aislamiento por usuario y confirmación vencida | Persistencia durable y política de retención requieren decisión. |
+| US-42 | Migración 152 registra la evidencia y conserva fuentes | Cotejo humano de transcripciones y reconstrucciones. |
+
 ## Trabajo acordado después de completar el goal
 
 El usuario pidió construir una ruta de revisión que muestre las story cards registradas en una tabla detallada, con checklist y un campo de observaciones para verificar cada cambio con los stakeholders. Este entregable se hará después de cerrar el goal de las story cards.
