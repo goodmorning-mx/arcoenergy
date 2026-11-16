@@ -7,6 +7,7 @@ type StoryCard = {
   version: number;
   iteration: string;
   stakeholder: string;
+  requested_by: string;
   source_literal: string;
   source_type: string;
   source_reference: string;
@@ -33,6 +34,7 @@ type StoryReview = {
 };
 
 const apiBase = '/api/v1';
+const UNKNOWN_AUTHOR = 'Por identificar';
 async function api<T>(path: string, token: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set('Authorization', `Bearer ${token}`);
@@ -52,6 +54,7 @@ export function StoryCardReviewView({ token }: { token: string }) {
   const [selectedId, setSelectedId] = useState('');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'todas' | 'pendientes' | 'progreso' | 'verificadas'>('todas');
+  const [authorFilter, setAuthorFilter] = useState('todas');
   const [checked, setChecked] = useState<boolean[]>([]);
   const [observations, setObservations] = useState('');
   const [dirty, setDirty] = useState(false);
@@ -85,6 +88,8 @@ export function StoryCardReviewView({ token }: { token: string }) {
     }
     return [...latest.values()].sort((a, b) => Number(a.story_id.replace(/\D/g, '')) - Number(b.story_id.replace(/\D/g, '')));
   }, [cards]);
+  const authors = useMemo(() => [...new Set(latestCards.map(card => card.requested_by || UNKNOWN_AUTHOR))]
+    .sort((a, b) => a.localeCompare(b, 'es-MX')), [latestCards]);
   const latestReviews = useMemo(() => {
     const latest = new Map<string, StoryReview>();
     for (const review of reviews) {
@@ -110,9 +115,10 @@ export function StoryCardReviewView({ token }: { token: string }) {
   }, [latestCards, latestReviews]);
   const visibleCards = latestCards.filter(card => {
     const term = search.trim().toLocaleLowerCase('es-MX');
-    const matchesSearch = !term || [card.story_id, card.normalized_story, card.stakeholder, card.iteration, card.source_literal].join(' ').toLocaleLowerCase('es-MX').includes(term);
+    const matchesSearch = !term || [card.story_id, card.normalized_story, card.stakeholder, card.requested_by, card.source_attribution, card.iteration, card.source_literal].join(' ').toLocaleLowerCase('es-MX').includes(term);
     const status = reviewStatus(card);
-    return matchesSearch && (filter === 'todas' || (filter === 'pendientes' && status === 'pendiente') || (filter === 'progreso' && status === 'progreso') || (filter === 'verificadas' && status === 'verificada'));
+    const matchesAuthor = authorFilter === 'todas' || (card.requested_by || UNKNOWN_AUTHOR) === authorFilter;
+    return matchesSearch && matchesAuthor && (filter === 'todas' || (filter === 'pendientes' && status === 'pendiente') || (filter === 'progreso' && status === 'progreso') || (filter === 'verificadas' && status === 'verificada'));
   });
 
   useEffect(() => {
@@ -173,25 +179,25 @@ export function StoryCardReviewView({ token }: { token: string }) {
     {notice && <p role="status" className="story-review-notice">✓ {notice}</p>}
     <div className="story-review-layout">
       <section className="surface-card story-review-table-card">
-        <div className="story-review-controls"><label className="field"><span>Buscar tarjeta</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="ID, stakeholder, frase…"/></label><label className="field"><span>Estado</span><select value={filter} onChange={event => setFilter(event.target.value as typeof filter)}><option value="todas">Todas ({counts.total})</option><option value="pendientes">Pendientes ({counts.pendiente})</option><option value="progreso">En progreso ({counts.progreso})</option><option value="verificadas">Verificadas ({counts.verificadas})</option></select></label></div>
-        <div className="story-review-table-wrap"><table className="story-review-table"><thead><tr><th>Tarjeta</th><th>Stakeholder</th><th>Iteración / versión</th><th>Checklist</th><th>Estado</th></tr></thead><tbody>
+        <div className="story-review-controls"><label className="field"><span>Buscar tarjeta</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="ID, autor, frase…"/></label><label className="field"><span>Estado</span><select value={filter} onChange={event => setFilter(event.target.value as typeof filter)}><option value="todas">Todas ({counts.total})</option><option value="pendientes">Pendientes ({counts.pendiente})</option><option value="progreso">En progreso ({counts.progreso})</option><option value="verificadas">Verificadas ({counts.verificadas})</option></select></label><label className="field"><span>Solicitó</span><select aria-label="Filtrar por autor" value={authorFilter} onChange={event => setAuthorFilter(event.target.value)}><option value="todas">Todos los autores ({counts.total})</option>{authors.map(author => <option key={author} value={author}>{author} ({latestCards.filter(card => (card.requested_by || UNKNOWN_AUTHOR) === author).length})</option>)}</select></label></div>
+        <div className="story-review-table-wrap"><table className="story-review-table"><thead><tr><th>Tarjeta</th><th>Solicitó</th><th>Stakeholder</th><th>Iteración / versión</th><th>Checklist</th><th>Estado</th></tr></thead><tbody>
           {visibleCards.map(card => {
             const status = reviewStatus(card);
             const review = latestReviews.get(card.story_id);
             const sameVersion = review?.story_version === card.version;
             const done = sameVersion ? review!.checklist.filter(item => item.checked).length : 0;
             return <tr key={card.story_id} className={selected?.story_id === card.story_id ? 'selected' : ''} onClick={() => chooseCard(card.story_id)} tabIndex={0} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); chooseCard(card.story_id); } }}>
-              <td><b>{card.story_id}</b><small>{card.normalized_story}</small></td><td>{card.stakeholder}</td><td>{card.iteration}<small>v{card.version}</small></td><td>{sameVersion ? `${done}/${review!.checklist.length}` : `0/${card.acceptance_criteria.length}`}</td><td><span className={`story-review-status ${status}`}>{status === 'verificada' ? 'Verificada' : status === 'progreso' ? 'En progreso' : 'Pendiente'}</span></td>
+              <td><b>{card.story_id}</b><small>{card.normalized_story}</small></td><td>{card.requested_by || UNKNOWN_AUTHOR}</td><td>{card.stakeholder}</td><td>{card.iteration}<small>v{card.version}</small></td><td>{sameVersion ? `${done}/${review!.checklist.length}` : `0/${card.acceptance_criteria.length}`}</td><td><span className={`story-review-status ${status}`}>{status === 'verificada' ? 'Verificada' : status === 'progreso' ? 'En progreso' : 'Pendiente'}</span></td>
             </tr>;
           })}
-          {!loading && !visibleCards.length && <tr><td colSpan={5} className="story-review-empty">No hay tarjetas para este filtro.</td></tr>}
+          {!loading && !visibleCards.length && <tr><td colSpan={6} className="story-review-empty">No hay tarjetas para este filtro.</td></tr>}
         </tbody></table></div>
         <small className="story-review-table-foot">Selecciona una fila para ver el relato, criterios, observaciones e historial de validaciones.</small>
       </section>
       <section className="surface-card story-review-detail" aria-label="Detalle de revisión">
         {!selected ? <div className="story-review-empty-detail">{loading ? 'Cargando storycards…' : 'No hay tarjetas registradas.'}</div> : <>
-          <div className="story-review-detail-head"><div><span className="eyebrow">{selected.story_id} · VERSIÓN {selected.version}</span><h3>{selected.stakeholder}</h3><p>{selected.iteration}</p></div><span className={`story-review-status ${reviewStatus(selected)}`}>{reviewStatus(selected) === 'verificada' ? 'Verificada' : reviewStatus(selected) === 'progreso' ? 'En progreso' : 'Pendiente'}</span></div>
-          <div className="story-review-story"><small>HISTORIA</small><p>{selected.normalized_story}</p><details><summary>Ver relato original y procedencia</summary><blockquote>{selected.source_literal}</blockquote><small>{selected.source_attribution || selected.stakeholder} · {selected.source_type} · {selected.source_reference}</small>{selected.source_confidence && <small>Fidelidad: {selected.source_confidence}</small>}{selected.source_occurred_at && <small>Fecha de origen: {selected.source_occurred_at}</small>}</details></div>
+          <div className="story-review-detail-head"><div><span className="eyebrow">{selected.story_id} · VERSIÓN {selected.version}</span><h3>{selected.requested_by || UNKNOWN_AUTHOR}</h3><p>Solicitante · {selected.stakeholder} · {selected.iteration}</p></div><span className={`story-review-status ${reviewStatus(selected)}`}>{reviewStatus(selected) === 'verificada' ? 'Verificada' : reviewStatus(selected) === 'progreso' ? 'En progreso' : 'Pendiente'}</span></div>
+          <div className="story-review-story"><small>HISTORIA</small><p>{selected.normalized_story}</p><details><summary>Ver relato original y procedencia</summary><blockquote>{selected.source_literal}</blockquote><small>Atribución fuente: {selected.source_attribution || selected.stakeholder} · {selected.source_type} · {selected.source_reference}</small>{selected.source_confidence && <small>Fidelidad: {selected.source_confidence}</small>}{selected.source_occurred_at && <small>Fecha de origen: {selected.source_occurred_at}</small>}</details></div>
           <div className="story-review-section"><div><span className="eyebrow">CHECKLIST DE ACEPTACIÓN</span><b>{completedCriteria} de {selected.acceptance_criteria.length} confirmados</b></div>{selected.acceptance_criteria.length ? <ul className="story-review-checklist">{selected.acceptance_criteria.map((criterion, index) => <li key={`${index}-${criterion}`}><label><input type="checkbox" checked={checked[index] || false} onChange={() => toggleCriterion(index)}/><span>{criterion}</span></label></li>)}</ul> : <p className="story-review-muted">Esta tarjeta aún no tiene criterios registrados.</p>}</div>
           {selected.unresolved_questions.length > 0 && <div className="story-review-section"><span className="eyebrow">PREGUNTAS ABIERTAS / DEPENDENCIAS</span><ul className="story-review-open">{selected.unresolved_questions.map((question, index) => <li key={`${index}-${question}`}>{question}</li>)}</ul></div>}
           {selected.linked_cards.length > 0 && <p className="story-review-linked">Relacionada con: {selected.linked_cards.join(' · ')}</p>}

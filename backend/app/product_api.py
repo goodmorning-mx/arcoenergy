@@ -867,6 +867,7 @@ class HistoryCardInput(BaseModel):
     version: int = Field(ge=1)
     iteration: str = Field(min_length=1, max_length=80)
     stakeholder: str = Field(min_length=1, max_length=180)
+    requested_by: str = Field(default="", max_length=180)
     source_literal: str = Field(min_length=1)
     source_type: str = Field(min_length=1, max_length=40)
     source_reference: str = Field(min_length=1, max_length=1000)
@@ -895,6 +896,11 @@ class HistoryCardInput(BaseModel):
         if not value:
             raise ValueError("Registra una referencia durable al artefacto fuente.")
         return value
+
+    @field_validator("requested_by")
+    @classmethod
+    def normalize_requested_by(cls, value: str) -> str:
+        return value.strip()
 
 
 class HistoryCardReviewCheckInput(BaseModel):
@@ -999,6 +1005,7 @@ def append_history_card(data: HistoryCardInput, identity: AuthIdentity = Depends
         raise HTTPException(422, "Cada relación de fuente debe apuntar a un artefacto registrado.")
     values["source_artifact"] = {"artifacts": artifacts}
     values["source_links"] = links
+    values["requested_by"] = data.requested_by or "Por identificar"
     values["source_attribution"] = data.source_attribution or data.stakeholder
     row = HistoryCard(**values, recorded_by=identity.email)
     db.add(row)
