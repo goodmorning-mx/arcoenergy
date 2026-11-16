@@ -346,7 +346,18 @@ async function verifySurface(route) {
       latestRefreshToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || ''");
     } else if (isReviewRoute) {
       await waitFor("Boolean(document.querySelector('.story-review-page h2') && document.querySelector('.story-review-table tr.selected'))", 'story-card review route and selected card');
-      if (!await evaluate("document.body.innerText.includes('Revisión de user story cards') && document.body.innerText.includes('US-42') && document.body.innerText.includes('Elder Gonzalez')")) fail('The collaborative review route did not render the selected story card and stakeholder.');
+      if (!await evaluate("document.body.innerText.includes('Revisión de user story cards') && document.body.innerText.includes('US-42') && document.body.innerText.includes('Elder Gonzalez') && document.body.innerText.includes('Mario Groso')")) fail('The collaborative review route did not render the selected story card, requester and stakeholder.');
+      await evaluate(`(() => {
+        const filter = document.querySelector('[aria-label="Filtrar por autor"]');
+        filter.value = 'Mario Groso';
+        filter.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      await waitFor("document.querySelectorAll('.story-review-table tbody tr').length === 1 && document.body.innerText.includes('US-42')", 'filter story cards by requester');
+      await evaluate(`(() => {
+        const filter = document.querySelector('[aria-label="Filtrar por autor"]');
+        filter.value = 'todas';
+        filter.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
       await evaluate(`(() => {
         const checkbox = document.querySelector('.story-review-checklist input[type="checkbox"]');
         checkbox.click();
@@ -404,10 +415,16 @@ const installationFixture = {
 const inventoryFixture = { id: 'browser-check-item', name: 'Panel de verificación', category: 'Paneles', unit: 'pieza', quantity: 2, reserved_quantity: 0, available_quantity: 2, minimum_quantity: 0, unit_cost: 1, barcode: null };
 const reviewCardFixture = [{
   id: 'browser-check-card', story_id: 'US-42', version: 11, iteration: 'Iteración de Chrome', stakeholder: 'Elder Gonzalez',
+  requested_by: 'Mario Groso',
   source_literal: 'Conserva el relato original de la user story card.', source_type: 'WhatsApp', source_reference: 'history-cards.md#US-42',
   source_attribution: 'Elder Gonzalez', source_confidence: 'verbatim', normalized_story: 'Revisar las tarjetas con su stakeholder.',
   acceptance_criteria: ['El checklist aparece para revisión.', 'Las observaciones se conservan por iteración.'],
   unresolved_questions: ['La validación final corresponde al stakeholder.'], linked_cards: [], created_at: '2026-11-14T18:00:00Z',
+}, {
+  id: 'browser-check-card-other', story_id: 'US-40', version: 1, iteration: 'Iteración de Chrome', stakeholder: 'Equipo',
+  requested_by: 'Goito Profugo', source_literal: 'Otra solicitud.', source_type: 'WhatsApp', source_reference: 'history-cards.md#US-40',
+  source_attribution: 'Goito Profugo', source_confidence: 'verbatim', normalized_story: 'Tarjeta de otra persona solicitante.',
+  acceptance_criteria: ['No aparece al filtrar por Mario.'], unresolved_questions: [], linked_cards: [], created_at: '2026-11-14T18:00:00Z',
 }];
 
 function tokenResponse(sequence, route) {

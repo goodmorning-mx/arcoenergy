@@ -2110,3 +2110,14 @@ El cambio se integró en ArcoEnergy PR [#231](https://github.com/goodmorning-mx/
 | --- | --- | --- |
 | US-14 | DEV otorga `history_cards:review` a administrador, contador y marketing; las otras funciones no lo reciben | Validar el alcance visible con cada usuario en su sesión de negocio. |
 | US-42 | Funcional en DEV; schema 154, 43 tarjetas, tabla de revisión vacía y persistencia append-only verificadas | Stakeholders deben revisar tarjeta por tarjeta y dejar su checklist/observaciones; no hay aprobaciones de negocio registradas todavía. |
+
+
+## Iteración 153 — autor solicitante y filtro por persona en revisión (2026-11-16)
+
+Se incorpora `requested_by` como atributo explícito separado del stakeholder y de `source_attribution`. En CRM `/crm/story-cards/review`, la tabla y el panel de detalle identifican a quien pidió la tarjeta, y el selector “Solicitó” filtra por ese autor. El buscador también contempla autor y atribución de fuente. El formulario de registro append-only permite capturar el autor en nuevas tarjetas; si no se conoce, queda “Por identificar”.
+
+El backfill usa únicamente atribuciones nominales documentadas: US-1–US-14 se asignan a Goito Profugo; US-15–US-32 y US-35–US-38, a Mario Groso. US-33–US-34 (audios sin remitente confirmado) y US-39–US-43 (fuentes atribuidas al dueño del producto sin nombre explícito confirmado) permanecen “Por identificar”. No se infiere que sea Josué a partir de la cuenta de administrador. La pregunta de atribución queda abierta para validación con stakeholders. La migración `202611160155` agrega el campo y crea una nueva versión append-only de US-42; conserva el relato y la procedencia existentes.
+
+| Tarjeta | Estado de implementación | Validación / pendiente |
+| --- | --- | --- |
+| US-42 | CRM muestra solicitante y permite filtrar tarjetas por persona; autores no confirmados se marcan explícitamente | Confirmar con Josué y Mario quién originó las solicitudes sin nombre, especialmente US-33–US-34 y US-39–US-43; verificar el flujo en DEV. |

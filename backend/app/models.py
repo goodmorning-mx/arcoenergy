@@ -460,6 +460,7 @@ class HistoryCard(Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     iteration: Mapped[str] = mapped_column(String(80), nullable=False)
     stakeholder: Mapped[str] = mapped_column(String(180), nullable=False)
+    requested_by: Mapped[str] = mapped_column(String(180), nullable=False, default="Por identificar", server_default="Por identificar")
     source_literal: Mapped[str] = mapped_column(Text, nullable=False)
     source_type: Mapped[str] = mapped_column(String(40), nullable=False)
     source_reference: Mapped[str] = mapped_column(Text, default="")
