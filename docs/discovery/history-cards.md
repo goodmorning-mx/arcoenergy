@@ -2174,3 +2174,45 @@ La tarjeta se registra como US-44 v1 en `ae_history_cards`, vinculada a US-19, U
 | Tarjeta | Estado | Pendiente |
 | --- | --- | --- |
 | US-44 | Capturada en la iteración 156; source literal e imagen preservados | Confirmar fórmulas, umbrales, permisos y comportamiento del sistema legado; implementar el alcance del módulo de inventario. |
+
+## Iteración 157 — alcance integral del módulo de inventario (2026-11-17)
+
+**Fuente literal del stakeholder:** “mira estas imagenes, analiza sus estados, sus modelos, sus campos necesarios, sus funcionalidades, y vamos a convertir todo el inventario en un modulo, documentalo en el storycard para despues implementar el modulo de inventario”. El autor nominal no queda identificado en el registro disponible; `requested_by` permanece “Por identificar”. Las nueve capturas se conservan con sus hashes en [referencia detallada del módulo](sources/inventory-module-detail.md).
+
+### US-45 — Convertir el inventario en un módulo integral
+
+**Historia interpretada:** Como responsable de Arco Energy, quiero que el inventario funcione como un módulo integrado para administrar productos, existencias, entradas, salidas, kardex, escaneo, reportes, proveedores, proyectos y configuración, con trazabilidad entre movimientos y sus documentos de origen.
+
+**Alcance observado y modelos candidatos:**
+
+- **Productos:** catálogo por categoría; código, código de barras, imagen, nombre, subcategoría, unidad, existencia, nivel, costo, ubicación y estado. Búsqueda, filtros, selección, exportación PDF, alta y menú por producto.
+- **Entradas:** folio, producto, cantidad positiva, proveedor, factura, responsable y fecha; búsqueda y alta.
+- **Salidas:** folio, producto, cantidad negativa, proyecto, departamento, responsable y fecha; búsqueda y devolución trazable.
+- **Kardex:** consulta del historial seleccionando producto; detalle, saldo progresivo y columnas requieren definición.
+- **Escáner:** modos cámara/manual, permiso de cámara, detección automática y selección de acción; confirmar identidad del producto/cantidad antes de registrar.
+- **Reportes:** período y alcance, indicadores de productos/stock bajo/agotados/valor, distribución por categoría, top salidas e inventario general; reporte mensual.
+- **Proveedores:** nombre, contacto, email, teléfono y RFC; búsqueda, alta/edición y menú contextual. Preservar sus movimientos históricos.
+- **Proyectos/instalaciones:** folio, nombre, cliente, estado, prioridad, avance, responsable, fecha y resumen de monto, gastos, materiales y utilidad; agenda, alta y gasto vinculado.
+- **Configuración:** categorías con descripción y pestaña de empresa.
+- **Integridad del módulo:** saldos, dashboard, kardex, alertas y reportes comparten movimientos trazables. Vincular entradas con recepción/proveedor y salidas con venta/orden de trabajo/proyecto. Corregir con movimiento compensatorio y auditoría; no borrar movimientos contabilizados.
+
+Los modelos candidatos (Producto, Categoría, Movimiento, Entrada/Recepción, Salida/Entrega, Proveedor, Proyecto/Instalación, Gasto de proyecto, Cuenta/Empresa y Reporte) y sus campos iniciales, estados visibles y flujos entre módulos se detallan en el documento fuente. Se distinguen los campos visibles de los propuestos; las imágenes no prueban reglas del backend ni el esquema actual.
+
+**Criterios de aceptación:**
+
+- Consultar, buscar y filtrar productos por nombre/código/barras, categoría y estado; mostrar código, imagen, subcategoría, existencia, nivel, costo, unidad y ubicación; registrar y actualizar productos sin mutar el saldo sin movimiento.
+- Registrar entradas con folio, producto, cantidad, proveedor si aplica, factura, responsable y fecha; registrar salidas con folio, producto, cantidad, proyecto si aplica, departamento, responsable y fecha; localizar por folio/producto.
+- Consultar kardex por producto con tipo, folio/origen, cantidad, fecha, responsable y saldo resultante; vincular y auditar devoluciones.
+- Escanear por cámara o modo manual, resolver el producto y confirmar acción/cantidad antes de guardar.
+- Consultar reportes por período y alcance con totales, bajo stock, agotados, valuación, categorías, principales salidas e inventario general; generar reporte mensual.
+- Administrar y buscar proveedores sin perder historial asociado; ver proyectos con estado/prioridad/avance y resumen económico; registrar gastos vinculados.
+- Configurar categorías/datos de empresa; limitar operaciones y visibilidad de costos/utilidad por rol.
+- Alimentar dashboard, alertas, kardex y reportes desde los mismos movimientos persistentes; corregir movimientos con trazabilidad y preservar documentos de origen.
+
+**Preguntas abiertas:** definir campos requeridos, unidades, ubicación y categorías; método de valuación, moneda, mínimos y stock negativo; folios, clases de movimiento, autorización de ajustes/mermas y tratamiento de devoluciones; integración contable de compras y salidas; estados/transiciones y permisos por rol; fórmulas de reportes/proyectos; exportación/Drive y retención; funciones de menús contextuales; operación offline del escáner. Valores y folios visibles en las capturas son de referencia y no configuración aprobada.
+
+La migración `202611170159` registra US-45 v1 con solicitud literal, criterios, preguntas abiertas, relaciones a US-19, US-20, US-26–US-30, US-32, US-36, US-38 y US-44, y las nueve capturas originales. Esta iteración sólo documenta el descubrimiento; el módulo se implementará en una iteración posterior con las reglas de stakeholders.
+
+| Tarjeta | Estado | Pendiente |
+| --- | --- | --- |
+| US-45 | Descubrimiento capturado en la iteración 157; fuentes visuales y texto literal registrados | Validar modelos, campos, estados, permisos y reglas financieras/operativas con Josué, Mario y equipo de almacén; implementar módulo integral sin importar los datos de ejemplo. |
