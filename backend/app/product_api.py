@@ -33,10 +33,10 @@ from app.config import get_settings
 from app.database import create_database_engine
 from app.drive_storage import download_private_file, folder_status, save_private_file, save_quote_pdf
 from app.drive_archive import archive_business_snapshot
-from app.models import Activity, BusinessSnapshotRun, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, HistoryCardReview, Installation, InstallationAssignment, InventoryItem, InventoryMovement, OfflineOperation, Project, ProjectExpense, ProfitabilityAdjustment, Purchase, PurchaseCorrection, PurchaseLine, PushSubscription, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
+from app.models import Activity, BusinessSnapshotRun, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, HistoryCardReview, Installation, InstallationAssignment, InventoryCategory, InventoryItem, InventoryMovement, OfflineOperation, Project, ProjectExpense, ProfitabilityAdjustment, Purchase, PurchaseCorrection, PurchaseLine, PushSubscription, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
 from app.reminders import send_due_followup_pushes
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
-from app.time_utils import business_today
+from app.time_utils import BUSINESS_TIMEZONE, business_today
 from app.web_push import send_push, validate_push_endpoint, vapid_public_key
 
 settings = get_settings()
@@ -136,6 +136,98 @@ def _serialize_inventory_item(row: InventoryItem, identity: AuthIdentity) -> dic
     if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
         result.pop("unit_cost", None)
     return result
+
+
+def _inventory_category_key(name: str) -> str:
+    return " ".join(name.strip().casefold().split())[:120]
+
+
+def _resolve_inventory_category(
+    db: Session, identity: AuthIdentity, *, category_id: str | None, name: str, create: bool,
+) -> InventoryCategory | None:
+    if category_id:
+        category = db.get(InventoryCategory, category_id)
+        if category is None or not category.active:
+            raise HTTPException(422, "Selecciona una categoría activa del inventario.")
+        return category
+    normalized_name = " ".join(name.strip().split())
+    if not normalized_name:
+        return None
+    key = _inventory_category_key(normalized_name)
+    category = db.scalar(select(InventoryCategory).where(InventoryCategory.name_key == key))
+    if category is not None or not create:
+        return category
+    category = InventoryCategory(name=normalized_name, name_key=key, created_by=identity.email or "")
+    db.add(category)
+    db.flush()
+    return category
+
+
+@router.get("/inventory/categories")
+def list_inventory_categories(
+    include_inactive: bool = False,
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:read")),
+    db: Session = Depends(get_db),
+):
+    query = select(InventoryCategory).order_by(InventoryCategory.name)
+    if not include_inactive or "inventory:manage" not in identity.permissions:
+        query = query.where(InventoryCategory.active.is_(True))
+    categories = db.scalars(query).all()
+    return [{**_serialize(category), "product_count": db.scalar(
+        select(func.count()).select_from(InventoryItem).where(InventoryItem.category_id == category.id)
+    ) or 0} for category in categories]
+
+
+@router.post("/inventory/categories", status_code=201)
+def create_inventory_category(
+    data: InventoryCategoryInput,
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:manage")),
+    db: Session = Depends(get_db),
+):
+    name = " ".join(data.name.strip().split())
+    key = _inventory_category_key(name)
+    if db.scalar(select(InventoryCategory.id).where(InventoryCategory.name_key == key)):
+        raise HTTPException(409, "Ya existe una categoría con ese nombre.")
+    row = InventoryCategory(name=name, name_key=key, description=data.description.strip(), active=data.active, created_by=identity.email or "")
+    db.add(row)
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(409, "Ya existe una categoría con ese nombre.") from error
+    db.refresh(row)
+    return {**_serialize(row), "product_count": 0}
+
+
+@router.put("/inventory/categories/{category_id}")
+def update_inventory_category(
+    category_id: str,
+    data: InventoryCategoryUpdateInput,
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:manage")),
+    db: Session = Depends(get_db),
+):
+    row = db.scalar(select(InventoryCategory).where(InventoryCategory.id == category_id).with_for_update())
+    if row is None:
+        raise HTTPException(404, "Categoría de inventario no encontrada.")
+    name = " ".join(data.name.strip().split())
+    key = _inventory_category_key(name)
+    duplicate = db.scalar(select(InventoryCategory.id).where(InventoryCategory.name_key == key, InventoryCategory.id != category_id))
+    if duplicate:
+        raise HTTPException(409, "Ya existe una categoría con ese nombre.")
+    row.name = name
+    row.name_key = key
+    row.description = data.description.strip()
+    row.active = data.active
+    # Keep the legacy display value in sync for existing integrations.
+    db.query(InventoryItem).filter(InventoryItem.category_id == row.id).update({InventoryItem.category: name}, synchronize_session=False)
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise HTTPException(409, "Ya existe una categoría con ese nombre.") from error
+    db.refresh(row)
+    count = db.scalar(select(func.count()).select_from(InventoryItem).where(InventoryItem.category_id == row.id)) or 0
+    return {**_serialize(row), "product_count": count}
 
 
 def _serialize_inventory_movement(row: InventoryMovement | None, identity: AuthIdentity) -> dict | None:
@@ -604,7 +696,46 @@ class StockReceiptInput(BaseModel):
     item_id: str
     quantity: float = Field(gt=0)
     unit_cost: Decimal = Field(ge=0)
+    supplier_id: str | None = None
+    invoice_number: str = Field(default="", max_length=100)
     reason: str = "entrada de almacén"
+
+
+class InventoryDispatchInput(BaseModel):
+    item_id: str
+    quantity: Decimal = Field(gt=0)
+    installation_id: str | None = None
+    department: str = Field(default="", max_length=100)
+    document_reference: str = Field(default="", max_length=120)
+    reason: str = Field(default="Salida de almacén", min_length=3, max_length=180)
+
+
+class InventoryCategoryInput(BaseModel):
+    name: str = Field(min_length=2, max_length=100)
+    description: str = Field(default="", max_length=500)
+    active: bool = True
+
+    @field_validator("name")
+    @classmethod
+    def normalize_inventory_category_name(cls, value: str) -> str:
+        value = " ".join(value.strip().split())
+        if len(value) < 2:
+            raise ValueError("Escribe un nombre de categoría.")
+        return value
+
+
+class InventoryCategoryUpdateInput(BaseModel):
+    name: str = Field(min_length=2, max_length=100)
+    description: str = Field(default="", max_length=500)
+    active: bool = True
+
+    @field_validator("name")
+    @classmethod
+    def normalize_inventory_category_name(cls, value: str) -> str:
+        value = " ".join(value.strip().split())
+        if len(value) < 2:
+            raise ValueError("Escribe un nombre de categoría.")
+        return value
 
 
 class InventoryMovementCorrectionInput(BaseModel):
@@ -620,30 +751,46 @@ class InventoryMovementCorrectionInput(BaseModel):
 
 
 class InventoryItemInput(BaseModel):
+    code: str | None = Field(default=None, max_length=64)
     name: str = Field(min_length=2, max_length=180)
     description: str = Field(default="", max_length=1000)
     category: str = Field(default="", max_length=100)
+    category_id: str | None = None
     subcategory: str = Field(default="", max_length=100)
     brand: str = Field(default="", max_length=100)
     model: str = Field(default="", max_length=120)
     supplier_id: str | None = None
     barcode: str | None = Field(default=None, max_length=120)
+    image_url: str = Field(default="", max_length=1000)
+    location: str = Field(default="", max_length=120)
+    active: bool = True
     unit: str = Field(default="pieza", max_length=40)
     minimum_quantity: float = Field(default=0, ge=0)
     restock_responsible_email: str = Field(default="", max_length=180)
     initial_quantity: float = Field(default=0, ge=0)
     unit_cost: Decimal = Field(default=Decimal("0"), ge=0)
 
+    @field_validator("code")
+    @classmethod
+    def normalize_product_code(cls, value: str | None) -> str | None:
+        normalized = value.strip().upper() if value else None
+        return normalized or None
+
 
 class InventoryItemUpdateInput(BaseModel):
+    code: str | None = Field(default=None, max_length=64)
     name: str = Field(min_length=2, max_length=180)
     description: str = Field(default="", max_length=1000)
     category: str = Field(default="", max_length=100)
+    category_id: str | None = None
     subcategory: str = Field(default="", max_length=100)
     brand: str = Field(default="", max_length=100)
     model: str = Field(default="", max_length=120)
     supplier_id: str | None = None
     barcode: str | None = Field(default=None, max_length=120)
+    image_url: str = Field(default="", max_length=1000)
+    location: str = Field(default="", max_length=120)
+    active: bool = True
     unit: str = Field(default="pieza", max_length=40)
     minimum_quantity: float = Field(default=0, ge=0)
     restock_responsible_email: str = Field(default="", max_length=180)
@@ -656,6 +803,12 @@ class InventoryItemUpdateInput(BaseModel):
         if not value:
             raise ValueError("Este campo es obligatorio.")
         return value
+
+    @field_validator("code")
+    @classmethod
+    def normalize_product_code(cls, value: str | None) -> str | None:
+        normalized = value.strip().upper() if value else None
+        return normalized or None
 
 
 class PurchaseCatalogItemInput(BaseModel):
@@ -735,6 +888,7 @@ class CashTransferInput(BaseModel):
 
 class SupplierInput(BaseModel):
     name: str = Field(min_length=2, max_length=180)
+    contact_name: str = Field(default="", max_length=180)
     rfc: str = Field(default="", max_length=20)
     phone: str = Field(default="", max_length=40)
     email: str = Field(default="", max_length=180)
@@ -2134,8 +2288,26 @@ def list_installers():
 
 
 @router.get("/inventory")
-def list_inventory(identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:read")), db: Session = Depends(get_db)):
-    items = db.scalars(select(InventoryItem).order_by(InventoryItem.name)).all()
+def list_inventory(
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:read")),
+    db: Session = Depends(get_db),
+    q: str = "",
+    category_id: str | None = None,
+    active: bool | None = None,
+):
+    if active is False and "inventory:manage" not in identity.permissions:
+        raise HTTPException(403, "No tienes permiso para consultar artículos inactivos.")
+    query = select(InventoryItem).order_by(InventoryItem.name)
+    if q.strip():
+        pattern = f"%{q.strip()}%"
+        query = query.where(or_(InventoryItem.name.ilike(pattern), InventoryItem.code.ilike(pattern), InventoryItem.barcode.ilike(pattern), InventoryItem.category.ilike(pattern)))
+    if category_id:
+        query = query.where(InventoryItem.category_id == category_id)
+    if active is not None:
+        query = query.where(InventoryItem.active.is_(active))
+    elif "inventory:manage" not in identity.permissions:
+        query = query.where(InventoryItem.active.is_(True))
+    items = db.scalars(query).all()
     reserved = {row[0]: Decimal(row[1] or 0) for row in db.execute(
         select(WorkOrderMaterial.item_id, func.sum(WorkOrderMaterial.requested_quantity - WorkOrderMaterial.preissued_quantity))
         .join(Installation, Installation.id == WorkOrderMaterial.installation_id)
@@ -2147,6 +2319,186 @@ def list_inventory(identity: AuthIdentity = Depends(require_permissions(auth_ser
         held = reserved.get(row.id, Decimal("0"))
         rows.append({**_serialize_inventory_item(row, identity), "reserved_quantity": held, "available_quantity": max(Decimal(row.quantity) - held, Decimal("0"))})
     return rows
+
+
+@router.get("/inventory/report")
+def inventory_report(
+    month: str | None = None,
+    category_id: str | None = None,
+    identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:read")),
+    db: Session = Depends(get_db),
+):
+    selected_month = month or business_today().strftime("%Y-%m")
+    try:
+        report_year, report_month = (int(part) for part in selected_month.split("-", 1))
+        period_start = date(report_year, report_month, 1)
+    except (TypeError, ValueError):
+        raise HTTPException(422, "El periodo debe tener formato AAAA-MM.")
+    period_end = date(report_year + (report_month == 12), 1 if report_month == 12 else report_month + 1, 1)
+    start_at = datetime.combine(period_start, datetime.min.time(), tzinfo=timezone.utc)
+    end_at = datetime.combine(period_end, datetime.min.time(), tzinfo=timezone.utc)
+    cost_visible = bool({"inventory:costs:read", "inventory:manage"} & identity.permissions)
+    product_query = select(InventoryItem).where(InventoryItem.active.is_(True)).order_by(InventoryItem.name)
+    if category_id:
+        product_query = product_query.where(InventoryItem.category_id == category_id)
+    products = db.scalars(product_query).all()
+    reservations_query = select(
+        WorkOrderMaterial.item_id,
+        func.sum(WorkOrderMaterial.requested_quantity - WorkOrderMaterial.preissued_quantity),
+    ).join(Installation, Installation.id == WorkOrderMaterial.installation_id).where(
+        Installation.status.notin_(("closed", "cancelled")),
+    ).group_by(WorkOrderMaterial.item_id)
+    reserved = {item_id: Decimal(str(quantity or 0)) for item_id, quantity in db.execute(reservations_query).all()}
+    low_stock = []
+    out_of_stock = 0
+    inventory_value = Decimal("0")
+    categories: dict[str, dict] = {}
+    general = []
+    for item in products:
+        quantity = Decimal(str(item.quantity or 0))
+        available = max(quantity - reserved.get(item.id, Decimal("0")), Decimal("0"))
+        if available <= 0:
+            out_of_stock += 1
+        if available <= 0 or (item.minimum_quantity > 0 and available <= Decimal(str(item.minimum_quantity))):
+            low_stock.append({
+                "id": item.id, "code": item.code, "name": item.name, "unit": item.unit,
+                "quantity": quantity, "available_quantity": available,
+                "minimum_quantity": Decimal(str(item.minimum_quantity)),
+            })
+        value = quantity * Decimal(str(item.unit_cost or 0))
+        inventory_value += value
+        key = item.category_id or f"legacy:{item.category or 'sin-categoria'}"
+        group = categories.setdefault(key, {"category_id": item.category_id, "category": item.category or "Sin categoría", "product_count": 0, "quantity": Decimal("0"), "value": Decimal("0")})
+        group["product_count"] += 1
+        group["quantity"] += quantity
+        group["value"] += value
+        general.append({
+            "id": item.id, "code": item.code, "name": item.name, "category": item.category,
+            "category_id": item.category_id, "quantity": quantity, "unit": item.unit,
+            "location": item.location, "active": item.active,
+            **({"unit_cost": Decimal(str(item.unit_cost or 0)), "value": value} if cost_visible else {}),
+        })
+    event_rows = db.execute(select(
+        InventoryMovement.created_at,
+        InventoryMovement.movement_type,
+        InventoryMovement.item_id,
+        InventoryMovement.quantity,
+        InventoryMovement.unit_cost,
+    ).join(InventoryItem, InventoryItem.id == InventoryMovement.item_id).where(
+        InventoryMovement.created_at >= start_at,
+        InventoryMovement.created_at < end_at,
+        *( [InventoryItem.category_id == category_id] if category_id else [] ),
+    )).all()
+    entries = 0
+    exits = 0
+    exit_totals: dict[str, Decimal] = {}
+    item_by_id = {item.id: item for item in products}
+    for created_at, movement_type_value, item_id, quantity, _unit_cost in event_rows:
+        if movement_type_value in {"in", "purchase", "return"}:
+            entries += 1
+        elif movement_type_value in {"out", "damage", "waste", "receipt_reversal", "purchase_reversal"}:
+            exits += 1
+            exit_totals[item_id] = exit_totals.get(item_id, Decimal("0")) + Decimal(str(quantity or 0))
+    max_month_day = period_end - timedelta(days=1)
+    today = business_today()
+    daily_start = today - timedelta(days=6)
+    daily_query_start = datetime.combine(daily_start, datetime.min.time(), tzinfo=timezone.utc)
+    movement_days = db.execute(select(
+        InventoryMovement.created_at, InventoryMovement.movement_type,
+    ).join(InventoryItem, InventoryItem.id == InventoryMovement.item_id).where(
+        InventoryMovement.created_at >= daily_query_start,
+        *( [InventoryItem.category_id == category_id] if category_id else [] ),
+    )).all()
+    entries_today = 0
+    exits_today = 0
+    daily = {daily_start + timedelta(days=offset): {"entries": 0, "exits": 0} for offset in range(7)}
+    for created_at, movement_type_value in movement_days:
+        if isinstance(created_at, datetime):
+            instant = created_at if created_at.tzinfo else created_at.replace(tzinfo=timezone.utc)
+            day = instant.astimezone(BUSINESS_TIMEZONE).date()
+        else:
+            day = date.fromisoformat(str(created_at)[:10])
+        if day not in daily:
+            continue
+        if movement_type_value in {"in", "purchase", "return"}:
+            daily[day]["entries"] += 1
+            if day == today:
+                entries_today += 1
+        elif movement_type_value in {"out", "damage", "waste", "receipt_reversal", "purchase_reversal"}:
+            daily[day]["exits"] += 1
+            if day == today:
+                exits_today += 1
+    top_out = [
+        {"item_id": item_id, "code": item_by_id[item_id].code, "name": item_by_id[item_id].name, "quantity": quantity, "unit": item_by_id[item_id].unit}
+        for item_id, quantity in sorted(exit_totals.items(), key=lambda row: (-row[1], row[0]))
+        if item_id in item_by_id
+    ][:10]
+    return {
+        "period": selected_month, "category_id": category_id,
+        "totals": {
+            "total_products": len(products), "low_stock": len(low_stock), "out_of_stock": out_of_stock,
+            "entries": entries, "exits": exits,
+            "entries_today": entries_today, "exits_today": exits_today,
+            "inventory_value": inventory_value if cost_visible else None,
+        },
+        "low_stock_items": low_stock,
+        "activity_7d": [{"date": day.isoformat(), **daily[day]} for day in daily],
+        "category_distribution": [
+            {**group, "value": group["value"] if cost_visible else None}
+            for group in sorted(categories.values(), key=lambda value: value["category"].casefold())
+        ],
+        "top_outgoing": top_out,
+        "inventory_general": general,
+        "costs_visible": cost_visible,
+        "period_start": period_start.isoformat(), "period_end": max_month_day.isoformat(),
+    }
+
+
+@router.post("/inventory/dispatch", status_code=201, dependencies=[Depends(require_permissions(auth_service, "inventory:manage"))])
+def dispatch_inventory(data: InventoryDispatchInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
+    item = db.scalar(select(InventoryItem).where(InventoryItem.id == data.item_id).with_for_update())
+    if item is None or not item.active:
+        raise HTTPException(404, "Artículo activo no encontrado.")
+    installation = None
+    if data.installation_id:
+        installation = db.scalar(select(Installation).where(Installation.id == data.installation_id).with_for_update())
+        if installation is None:
+            raise HTTPException(404, "Orden de trabajo no encontrada.")
+        if installation.status in {"closed", "cancelled"}:
+            raise HTTPException(409, "No se puede entregar material a una orden cerrada o cancelada.")
+    reserved_query = (
+        select(func.coalesce(func.sum(WorkOrderMaterial.requested_quantity - WorkOrderMaterial.preissued_quantity), 0))
+        .join(Installation, Installation.id == WorkOrderMaterial.installation_id)
+        .where(WorkOrderMaterial.item_id == item.id, Installation.status.notin_(("closed", "cancelled")))
+    )
+    if installation is not None:
+        reserved_query = reserved_query.where(WorkOrderMaterial.installation_id != installation.id)
+    reserved_elsewhere = db.scalar(reserved_query) or 0
+    available = Decimal(str(item.quantity)) - Decimal(str(reserved_elsewhere))
+    if data.quantity > available:
+        raise HTTPException(409, f"Existencia disponible: {max(available, Decimal('0'))} {item.unit}.")
+    material = db.scalar(select(WorkOrderMaterial).where(
+        WorkOrderMaterial.installation_id == data.installation_id,
+        WorkOrderMaterial.item_id == item.id,
+    ).with_for_update()) if data.installation_id else None
+    if material is not None:
+        remaining = Decimal(str(material.requested_quantity)) - Decimal(str(material.preissued_quantity))
+        if data.quantity > remaining:
+            raise HTTPException(409, f"La salida excede lo solicitado. Restante: {remaining} {item.unit}.")
+        material.preissued_quantity = Decimal(str(material.preissued_quantity)) + data.quantity
+    item.quantity = Decimal(str(item.quantity)) - data.quantity
+    movement = InventoryMovement(
+        item_id=item.id, installation_id=installation.id if installation else None,
+        work_order_material_id=material.id if material else None,
+        quantity=data.quantity, movement_type="out", unit_cost=item.unit_cost,
+        source_type="work_order" if installation else "manual",
+        source_reference=(data.document_reference.strip() or (installation.folio if installation else "")),
+        department=data.department.strip(), reason=data.reason.strip(), created_by=identity.email or "",
+    )
+    db.add(movement)
+    _queue_low_stock_alert(db, background_tasks, item)
+    db.commit(); db.refresh(movement)
+    return {"movement": _serialize_inventory_movement(movement, identity), "item": _serialize_inventory_item(item, identity)}
 
 
 @router.post("/inventory/issue", status_code=201)
@@ -2214,9 +2566,14 @@ def create_inventory_item(data: InventoryItemInput, identity: AuthIdentity = Dep
     barcode = data.barcode.strip() if data.barcode else None
     if barcode and db.scalar(select(InventoryItem.id).where(InventoryItem.barcode == barcode)):
         raise HTTPException(409, "Ese código ya está asignado a otro artículo.")
+    code = data.code or f"AE-{uuid4().hex[:10].upper()}"
+    if db.scalar(select(InventoryItem.id).where(func.upper(InventoryItem.code) == code.upper())):
+        raise HTTPException(409, "Ese código de producto ya está asignado.")
+    category = _resolve_inventory_category(db, identity, category_id=data.category_id, name=data.category, create=True)
     responsible = _validate_restock_responsible(data.restock_responsible_email, db)
-    row = InventoryItem(name=data.name.strip(), description=data.description.strip(), category=data.category.strip(),
+    row = InventoryItem(code=code, name=data.name.strip(), description=data.description.strip(), category=category.name if category else data.category.strip(), category_id=category.id if category else None,
         subcategory=data.subcategory.strip(), brand=data.brand.strip(), model=data.model.strip(), supplier_id=data.supplier_id, barcode=barcode,
+        image_url=data.image_url.strip(), location=data.location.strip(), active=data.active,
         unit=data.unit.strip(), quantity=data.initial_quantity, minimum_quantity=data.minimum_quantity,
         restock_responsible_email=responsible, unit_cost=data.unit_cost)
     db.add(row); db.flush()
@@ -2235,8 +2592,9 @@ def create_purchase_catalog_item(data: PurchaseCatalogItemInput, identity: AuthI
     barcode = data.barcode.strip() if data.barcode else None
     if barcode and db.scalar(select(InventoryItem.id).where(InventoryItem.barcode == barcode)):
         raise HTTPException(409, "Ese código ya está asignado a otro artículo.")
+    category = _resolve_inventory_category(db, identity, category_id=None, name=data.category, create=False)
     row = InventoryItem(
-        name=data.name.strip(), category=data.category.strip(), subcategory=data.subcategory.strip(),
+        code=f"AE-{uuid4().hex[:10].upper()}", name=data.name.strip(), category=category.name if category else data.category.strip(), category_id=category.id if category else None, subcategory=data.subcategory.strip(),
         brand=data.brand.strip(), model=data.model.strip(), supplier_id=data.supplier_id,
         barcode=barcode, unit=data.unit.strip(), quantity=0, minimum_quantity=0, unit_cost=0,
     )
@@ -2266,15 +2624,24 @@ def update_inventory_item(item_id: str, data: InventoryItemUpdateInput,
         InventoryItem.barcode == barcode, InventoryItem.id != item_id,
     )):
         raise HTTPException(409, "Ese código ya está asignado a otro artículo.")
+    code = data.code or row.code or f"AE-{uuid4().hex[:10].upper()}"
+    if db.scalar(select(InventoryItem.id).where(func.upper(InventoryItem.code) == code.upper(), InventoryItem.id != item_id)):
+        raise HTTPException(409, "Ese código de producto ya está asignado.")
+    category = _resolve_inventory_category(db, identity, category_id=data.category_id, name=data.category, create=True)
 
+    row.code = code
     row.name = data.name.strip()
     row.description = data.description.strip()
-    row.category = data.category.strip()
+    row.category = category.name if category else data.category.strip()
+    row.category_id = category.id if category else None
     row.subcategory = data.subcategory.strip()
     row.brand = data.brand.strip()
     row.model = data.model.strip()
     row.supplier_id = data.supplier_id
     row.barcode = barcode
+    row.image_url = data.image_url.strip()
+    row.location = data.location.strip()
+    row.active = data.active
     row.unit = data.unit.strip()
     row.minimum_quantity = data.minimum_quantity
     row.restock_responsible_email = responsible
@@ -2361,9 +2728,11 @@ def consume_inventory(data: StockInput, identity: AuthIdentity = Depends(require
 def receive_inventory(data: StockReceiptInput, identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:manage")), db: Session = Depends(get_db), background_tasks: BackgroundTasks = None):
     item = db.scalar(select(InventoryItem).where(InventoryItem.id == data.item_id).with_for_update())
     if not item: raise HTTPException(404, "Artículo no encontrado.")
+    if data.supplier_id and db.get(Supplier, data.supplier_id) is None:
+        raise HTTPException(422, "Selecciona un proveedor registrado.")
     item.quantity = float(item.quantity) + data.quantity
     item.unit_cost = data.unit_cost
-    movement = InventoryMovement(item_id=data.item_id, quantity=data.quantity, movement_type="in", unit_cost=data.unit_cost, reason=data.reason, created_by=identity.email)
+    movement = InventoryMovement(item_id=data.item_id, supplier_id=data.supplier_id, invoice_reference=data.invoice_number.strip(), quantity=data.quantity, movement_type="in", unit_cost=data.unit_cost, reason=data.reason, created_by=identity.email)
     db.add(movement); _queue_low_stock_alert(db, background_tasks, item); db.commit(); db.refresh(movement)
     return {"movement": _serialize(movement), "item": _serialize_inventory_item(item, identity)}
 
@@ -2506,8 +2875,11 @@ def return_inventory(data: InventoryReturnInput, identity: AuthIdentity = Depend
 @router.get("/inventory/movements")
 def list_inventory_movements(
     item_id: str | None = None,
+    movement_type: str | None = None,
     from_date: date | None = None,
     to_date: date | None = None,
+    q: str = "",
+    department: str | None = None,
     limit: int = 500,
     offset: int = 0,
     identity: AuthIdentity = Depends(require_permissions(auth_service, "inventory:read")),
@@ -2517,6 +2889,9 @@ def list_inventory_movements(
         raise HTTPException(422, "La página debe tener entre 1 y 500 movimientos y un desplazamiento no negativo.")
     if from_date and to_date and from_date > to_date:
         raise HTTPException(422, "La fecha inicial debe ser anterior a la fecha final.")
+    supported_types = {"in", "purchase", "out", "return", "damage", "waste", "receipt_reversal", "purchase_reversal", "consumption", "consumption_return"}
+    if movement_type and movement_type not in supported_types:
+        raise HTTPException(422, "El tipo de movimiento no es válido.")
     return_rows = aliased(InventoryMovement)
     returned_total = select(func.coalesce(func.sum(return_rows.quantity), 0)).where(
         return_rows.related_movement_id == InventoryMovement.id,
@@ -2533,17 +2908,34 @@ def list_inventory_movements(
         later_rows.created_at > InventoryMovement.created_at,
         later_rows.reason != "existencia inicial",
     ).correlate(InventoryMovement).exists()
+    purchase_supplier = aliased(Supplier)
+    direct_supplier = aliased(Supplier)
     query = select(
         InventoryMovement,
         InventoryItem.name,
         InventoryItem.unit,
         returned_total.label("returned_quantity"),
         InventoryItem.quantity.label("current_quantity"),
+        func.coalesce(direct_supplier.name, purchase_supplier.name, "").label("supplier_name"),
+        func.coalesce(func.nullif(InventoryMovement.invoice_reference, ""), Purchase.invoice_number, "").label("invoice_reference"),
     ).join(
         InventoryItem, InventoryItem.id == InventoryMovement.item_id
-    )
+    ).outerjoin(PurchaseLine, PurchaseLine.id == InventoryMovement.purchase_line_id
+    ).outerjoin(Purchase, Purchase.id == PurchaseLine.purchase_id
+    ).outerjoin(purchase_supplier, purchase_supplier.id == Purchase.supplier_id
+    ).outerjoin(direct_supplier, direct_supplier.id == InventoryMovement.supplier_id)
     if item_id:
         query = query.where(InventoryMovement.item_id == item_id)
+    if movement_type:
+        query = query.where(InventoryMovement.movement_type == movement_type)
+    if q.strip():
+        pattern = f"%{q.strip()}%"
+        query = query.where(or_(
+            InventoryMovement.folio.ilike(pattern), InventoryMovement.reason.ilike(pattern),
+            InventoryMovement.source_reference.ilike(pattern), InventoryItem.name.ilike(pattern),
+        ))
+    if department:
+        query = query.where(InventoryMovement.department.ilike(f"%{department.strip()}%"))
     if from_date:
         query = query.where(InventoryMovement.created_at >= datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc))
     if to_date:
@@ -2559,9 +2951,13 @@ def list_inventory_movements(
     query = query.order_by(InventoryMovement.created_at.desc(), InventoryMovement.id.desc()).limit(limit).offset(offset)
     rows = db.execute(query).all()
     result = []
-    for movement, item_name, unit, returned_quantity, current_quantity in rows:
+    for movement, item_name, unit, returned_quantity, current_quantity, supplier_name, invoice_reference in rows:
         line = _serialize(movement)
-        line.update({"item_name": item_name, "unit": unit, "signed_quantity": -float(movement.quantity) if movement.movement_type in {"out", "waste", "purchase_reversal", "receipt_reversal"} else (0.0 if movement.movement_type in {"consumption", "consumption_return", "damage"} else float(movement.quantity))})
+        line.update({
+            "item_name": item_name, "unit": unit,
+            "signed_quantity": -float(movement.quantity) if movement.movement_type in {"out", "waste", "purchase_reversal", "receipt_reversal"} else (0.0 if movement.movement_type in {"consumption", "consumption_return", "damage"} else float(movement.quantity)),
+            "supplier_name": supplier_name or "", "invoice_reference": invoice_reference or "",
+        })
         is_manual_receipt = bool(
             movement.movement_type == "in"
             and not movement.installation_id

@@ -59,6 +59,26 @@ La lista siguiente traduce las pantallas a entidades y campos candidatos. No afi
 - ¿El escáner debe funcionar sin conexión? ¿Qué comportamiento se espera si no existe el código o hay varias coincidencias?
 - ¿Quién es el autor solicitante de esta tarjeta? El nombre visible de la sesión/screenshot no se utiliza para inferirlo.
 
+## Implementación v1 — iteración 160
+
+La captura se conserva como referencia visual; la app no copia números, productos ni usuarios de las imágenes. En el CRM, `/crm/` abre un módulo con navegación interna oscura, barra superior y secciones propias:
+
+- **Dashboard:** métricas conectadas a movimientos/artículos reales, gráfica de siete días, stock bajo o agotado y actividad reciente.
+- **Inventario:** catálogo por categoría, búsqueda por nombre/código/barcode, estado, filtros, ficha editable, imagen URL, unidad, ubicación, mínimo, costo sujeto a permiso y exportación mediante impresión.
+- **Entradas:** historial con folio, artículo, cantidad, proveedor/fuente, factura, responsable y fecha. Las compras se capturan desde Compras/CxP para conservar sus enlaces de factura, proveedor y pagos; la recepción manual bajo permiso de inventario también conserva proveedor/factura en el movimiento.
+- **Salidas:** historial con folio, artículo, cantidad, proyecto/orden, departamento, autor y fecha. La devolución se registra contra la salida original e identifica si el material es reutilizable o dañado.
+- **Kardex:** selector de producto y búsqueda histórica de movimientos.
+- **Escáner:** cámara trasera con detección compatible cuando el navegador ofrece `BarcodeDetector`, y fallback por código/barcode escrito.
+- **Reportes:** período mensual, artículos totales, stock bajo/agotado, valor protegido por permiso, distribución por categoría, productos con más salidas y tabla general. La acción de reporte abre el diálogo de impresión del navegador.
+- **Configuración:** categorías persistentes con descripción, contador de artículos y estado activo/inactivo. La edición/desactivación conserva productos e historial. La pestaña Empresa se muestra informativa mientras se acuerdan campos y fuente de datos.
+- **Relaciones:** proveedor y costos se enlazan con el catálogo/compras existentes; movimientos enlazan artículo, instalación/orden, línea de compra y material de la orden. Actor se mantiene como identidad/email en el mismo patrón de auditoría existente; cada movimiento recibe folio único.
+
+Las reglas financieras de compras, pagos, saldos, proyectos y gastos continúan perteneciendo a sus módulos existentes. Se protege consulta de costos y artículos inactivos con permisos del servidor; la UI refleja estos permisos. No se eliminan movimientos ni proveedores con dependencias.
+
+**Verificación local:** `crm npm run build`; pruebas de backend en `backend/tests/test_inventory_module_foundation.py`, `test_inventory_catalog.py`, `test_inventory_kardex.py`, `test_inventory_work_order_issue.py` y `test_inventory_returns.py`. Capturas visuales con el browser integrado están pendientes porque no hay browser conectado en este entorno.
+
+**Pendiente de stakeholders:** confirmar valuación/método de costo, límites y permisos definitivos, reglas de stock negativo, períodos/umbrales, campos de Empresa, política de exportación/Drive, múltiples almacenes y ciclo real de recepción/entrega. Esta entrega no marca US-44/US-45 como `Finished`; queda para revisión del usuario en History Cards.
+
 ## Alcance y cautelas
 
-US-45 documenta el módulo integral a construir posteriormente. Las capturas sirven para descubrir pantallas/campos y flujos; no contienen autorización para copiar datos del sistema de referencia como registros productivos. US-44 sigue siendo el detalle del dashboard y alertas. Las reglas contables/operativas previas de US-19, US-20, US-26–US-30, US-32, US-36 y US-38 se mantienen como dependencias, no se redefinen por inferencia visual.
+Las capturas sirven para descubrir pantallas/campos y flujos; no contienen autorización para copiar datos del sistema de referencia como registros productivos. US-44 sigue siendo el detalle del dashboard y alertas. Las reglas contables/operativas previas de US-19, US-20, US-26–US-30, US-32, US-36 y US-38 se mantienen como dependencias, no se redefinen por inferencia visual.

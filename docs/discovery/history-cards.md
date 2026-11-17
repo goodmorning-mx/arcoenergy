@@ -2169,11 +2169,11 @@ La migración `202611170157` agrega `solution_proposed` a `ae_history_card_revie
 
 **Preguntas abiertas:** confirmar con el responsable de inventario las fórmulas y períodos exactos de los indicadores, la valuación del almacén, los umbrales de stock bajo y qué roles pueden consultar costos, proveedores, proyectos, usuarios y configuración desde el menú. La captura sirve como referencia visual; sus valores no son datos reales ni parámetros aprobados.
 
-La tarjeta se registra como US-44 v1 en `ae_history_cards`, vinculada a US-19, US-20, US-26, US-27, US-28, US-29, US-30 y US-32. La migración `202611170158` conserva el mensaje literal, la captura y su hash como fuentes. Esta iteración registra el alcance solicitado; su implementación se hará al trabajar el módulo de inventario.
+La tarjeta se registra como US-44 v1 en `ae_history_cards`, vinculada a US-19, US-20, US-26, US-27, US-28, US-29, US-30 y US-32. La migración `202611170158` conserva el mensaje literal, la captura y su hash como fuentes. En la iteración 160 se implementa en el nuevo shell CRM de inventario: indicadores conectados a API, comparación de actividad de siete días, lista de stock bajo/agotado y movimientos recientes. Las cifras del tablero proceden del almacén, no de datos de demostración.
 
 | Tarjeta | Estado | Pendiente |
 | --- | --- | --- |
-| US-44 | Capturada en la iteración 156; source literal e imagen preservados | Confirmar fórmulas, umbrales, permisos y comportamiento del sistema legado; implementar el alcance del módulo de inventario. |
+| US-44 | Implementación v1 en iteración 160; captura y source literal preservados | Josué/Mario/equipo de almacén deben confirmar umbrales, valuación y métricas del dashboard. |
 
 ## Iteración 157 — alcance integral del módulo de inventario (2026-11-17)
 
@@ -2211,8 +2211,12 @@ Los modelos candidatos (Producto, Categoría, Movimiento, Entrada/Recepción, Sa
 
 **Preguntas abiertas:** definir campos requeridos, unidades, ubicación y categorías; método de valuación, moneda, mínimos y stock negativo; folios, clases de movimiento, autorización de ajustes/mermas y tratamiento de devoluciones; integración contable de compras y salidas; estados/transiciones y permisos por rol; fórmulas de reportes/proyectos; exportación/Drive y retención; funciones de menús contextuales; operación offline del escáner. Valores y folios visibles en las capturas son de referencia y no configuración aprobada.
 
-La migración `202611170159` registra US-45 v1 con solicitud literal, criterios, preguntas abiertas, relaciones a US-19, US-20, US-26–US-30, US-32, US-36, US-38 y US-44, y las nueve capturas originales. Esta iteración sólo documenta el descubrimiento; el módulo se implementará en una iteración posterior con las reglas de stakeholders.
+La migración `202611170159` registra US-45 v1 con solicitud literal, criterios, preguntas abiertas, relaciones a US-19, US-20, US-26–US-30, US-32, US-36, US-38 y US-44, y las nueve capturas originales. La implementación v1 se registra en la iteración 160 y agrega código/fuentes al modelo actual sin borrar historial: categorías persistentes, códigos de producto, folios de movimiento, origen/documento, departamento y vínculos a artículos, instalaciones, compras y órdenes de material. Los campos contables no reemplazan los modelos de compras, cuentas por pagar, ventas, gastos ni proyectos.
+
+El CRM abre el inventario en una interfaz propia según la captura: navegación oscura interna y topbar del módulo. Incluye dashboard, catálogo agrupado, entradas, salidas/devoluciones, kardex, escáner y reportes; Configuración conserva las pestañas Categorías y Empresa. Las categorías se editan/desactivan sin borrar productos relacionados. Costos y registros inactivos se protegen en API por permisos vigentes; movimientos conservan actor, folio, fecha y origen. Las acciones de compra enlazan con Compras/CxP y los movimientos de instalación/proyecto reutilizan las entidades existentes. El escáner ofrece cámara (si el navegador soporta `BarcodeDetector`) y búsqueda manual.
+
+La integración deja a stakeholders la revisión de valuación/costo, stock negativo, umbrales, permisos definitivos, campos de empresa, documentos/Drive, almacenes múltiples y corte contable. “Empresa” se muestra como pestaña informativa porque sus campos y fuente de escritura no están definidos. La exportación utiliza impresión del navegador; el almacenamiento en Drive de reportes y los datos de referencia de Base44 no se implementan como datos ni operaciones reales.
 
 | Tarjeta | Estado | Pendiente |
 | --- | --- | --- |
-| US-45 | Descubrimiento capturado en la iteración 157; fuentes visuales y texto literal registrados | Validar modelos, campos, estados, permisos y reglas financieras/operativas con Josué, Mario y equipo de almacén; implementar módulo integral sin importar los datos de ejemplo. |
+| US-45 | Implementación v1 en iteración 160 sobre el descubrimiento de iteración 157; fuentes visuales y texto literal intactos | Revisar en `/crm/` por portal: flujos, permisos, valuación, stock negativo, umbrales, costos, empresa, Drive y casos reales con Josué, Mario y equipo de almacén. La tarjeta queda sin Finished hasta esa revisión. |
