@@ -492,5 +492,6 @@ class HistoryCardReview(Base):
     review_version: Mapped[int] = mapped_column(Integer, nullable=False)
     checklist: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     observations: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    finished: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     reviewed_by: Mapped[str] = mapped_column(String(180), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
