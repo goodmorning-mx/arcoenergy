@@ -359,7 +359,7 @@ async function verifySurface(route) {
         filter.value = 'todas';
         filter.dispatchEvent(new Event('change', { bubbles: true }));
       })()`);
-      await evaluate("Array.from(document.querySelectorAll('.finish-radios input[type=radio]')).find(input => input.parentElement.innerText.includes('Terminada'))?.click()");
+      await evaluate("Array.from(document.querySelector('.story-review-table tbody tr:last-child .finish-radios').querySelectorAll('input[type=radio]')).find(input => input.parentElement.innerText.includes('Terminada'))?.click()");
       const radioClick = await evaluate(`(() => { const input = Array.from(document.querySelectorAll('.finish-radios input[type=radio]')).find(item => item.parentElement.innerText.includes('Terminada')); if (!input) return 'missing'; input.click(); return JSON.stringify({checked:input.checked, disabled:input.disabled, label:input.parentElement.innerText}); })()`);
       const reviewDeadline = Date.now() + 8_000;
       while (reviewPosts.length < 1 && Date.now() < reviewDeadline) await new Promise(resolve => setTimeout(resolve, 100));
