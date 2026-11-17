@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, Text, UniqueConstraint, event
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from app.time_utils import business_today
 
 
@@ -144,6 +144,9 @@ class Installation(Base):
     material_request_filename: Mapped[str] = mapped_column(String(255), default="")
     material_request_content_type: Mapped[str] = mapped_column(String(100), default="")
     material_request_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    inventory_movements: Mapped[list["InventoryMovement"]] = relationship(
+        back_populates="installation", foreign_keys="InventoryMovement.installation_id",
+    )
 
 
 class InstallationAssignment(Base):
@@ -207,19 +210,37 @@ class WorkOrderMaterial(Base):
     unit_cost: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
     created_by: Mapped[str] = mapped_column(String(180), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    inventory_movements: Mapped[list["InventoryMovement"]] = relationship(back_populates="work_order_material")
+
+
+class InventoryCategory(Base):
+    __tablename__ = "ae_inventory_categories"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    name_key: Mapped[str] = mapped_column(String(120), nullable=False, unique=True, index=True)
+    description: Mapped[str] = mapped_column(Text, default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(180), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    items: Mapped[list["InventoryItem"]] = relationship(back_populates="category_record")
 
 
 class InventoryItem(Base):
     __tablename__ = "ae_inventory"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(180), nullable=False)
     description: Mapped[str] = mapped_column(Text, default="")
     category: Mapped[str] = mapped_column(String(100), default="")
+    category_id: Mapped[str | None] = mapped_column(ForeignKey("ae_inventory_categories.id", ondelete="RESTRICT"), nullable=True, index=True)
     subcategory: Mapped[str] = mapped_column(String(100), default="")
     brand: Mapped[str] = mapped_column(String(100), default="")
     model: Mapped[str] = mapped_column(String(120), default="")
     supplier_id: Mapped[str | None] = mapped_column(ForeignKey("ae_suppliers.id"), nullable=True, index=True)
     barcode: Mapped[str | None] = mapped_column(String(120), nullable=True, unique=True)
+    image_url: Mapped[str] = mapped_column(Text, default="")
+    location: Mapped[str] = mapped_column(String(120), default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     unit: Mapped[str] = mapped_column(String(40), default="pieza")
     quantity: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     minimum_quantity: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
@@ -227,22 +248,61 @@ class InventoryItem(Base):
     low_stock_alert_active: Mapped[bool] = mapped_column(Boolean, default=False)
     unit_cost: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+    category_record: Mapped[InventoryCategory | None] = relationship(back_populates="items")
+    supplier: Mapped["Supplier | None"] = relationship(back_populates="inventory_items")
+    movements: Mapped[list["InventoryMovement"]] = relationship(back_populates="item")
+
+
+@event.listens_for(InventoryItem, "before_insert")
+def assign_inventory_product_code(_mapper, _connection, item: InventoryItem) -> None:
+    if not item.code:
+        item.code = f"AE-{uuid4().hex[:10].upper()}"
 
 
 class InventoryMovement(Base):
     __tablename__ = "ae_inventory_movements"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    item_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    installation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # The deployment migration makes this required after backfilling old ledger rows.
+    # Keep metadata nullable so earlier data migrations can insert and backfill movements.
+    folio: Mapped[str | None] = mapped_column(String(40), nullable=True, unique=True, index=True)
+    item_id: Mapped[str] = mapped_column(ForeignKey("ae_inventory.id", ondelete="RESTRICT"), nullable=False, index=True)
+    installation_id: Mapped[str | None] = mapped_column(ForeignKey("ae_installations.id", ondelete="RESTRICT"), nullable=True, index=True)
     quantity: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     movement_type: Mapped[str] = mapped_column(String(20), default="in", nullable=False)
     unit_cost: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
-    related_movement_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    related_movement_id: Mapped[str | None] = mapped_column(ForeignKey("ae_inventory_movements.id", ondelete="RESTRICT"), nullable=True, index=True)
+    supplier_id: Mapped[str | None] = mapped_column(ForeignKey("ae_suppliers.id", ondelete="RESTRICT"), nullable=True, index=True)
+    invoice_reference: Mapped[str] = mapped_column(String(100), default="", server_default="", nullable=False)
     purchase_line_id: Mapped[str | None] = mapped_column(ForeignKey("ae_purchase_lines.id"), nullable=True, index=True)
     work_order_material_id: Mapped[str | None] = mapped_column(ForeignKey("ae_work_order_materials.id", name="fk_ae_inv_movements_work_order_material"), nullable=True, index=True)
+    source_type: Mapped[str] = mapped_column(String(24), default="manual", server_default="manual", nullable=False)
+    source_reference: Mapped[str] = mapped_column(String(180), default="", server_default="", nullable=False)
+    department: Mapped[str] = mapped_column(String(100), default="", server_default="", nullable=False)
     reason: Mapped[str] = mapped_column(String(180), default="")
     created_by: Mapped[str] = mapped_column(String(180), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    item: Mapped[InventoryItem] = relationship(back_populates="movements")
+    installation: Mapped[Installation | None] = relationship(back_populates="inventory_movements", foreign_keys=[installation_id])
+    purchase_line: Mapped["PurchaseLine | None"] = relationship(back_populates="inventory_movements")
+    supplier: Mapped["Supplier | None"] = relationship(back_populates="inventory_movements", foreign_keys=[supplier_id])
+    work_order_material: Mapped[WorkOrderMaterial | None] = relationship(back_populates="inventory_movements")
+
+
+@event.listens_for(InventoryMovement, "before_insert")
+def assign_inventory_movement_references(_mapper, _connection, movement: InventoryMovement) -> None:
+    """Give every ledger row a stable human-readable folio and origin label."""
+    movement_type = movement.movement_type or "in"
+    prefix = {
+        "in": "ENT", "purchase": "ENT", "out": "SAL", "return": "DEV",
+        "damage": "MER", "waste": "MER", "receipt_reversal": "COR",
+        "purchase_reversal": "COR", "consumption": "CON", "consumption_return": "COR",
+    }.get(movement_type, "MOV")
+    if not movement.folio:
+        movement.folio = f"{prefix}-{datetime.now(timezone.utc):%y%m%d}-{uuid4().hex[:8].upper()}"
+    if not movement.source_type or movement.source_type == "manual":
+        movement.source_type = "purchase" if movement.purchase_line_id else "work_order" if movement.work_order_material_id or movement.installation_id else "manual"
+    if not movement.source_reference:
+        movement.source_reference = (movement.reason or "")[:180]
 
 
 class OfflineOperation(Base):
@@ -328,6 +388,7 @@ class Supplier(Base):
     __tablename__ = "ae_suppliers"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     name: Mapped[str] = mapped_column(String(180), nullable=False)
+    contact_name: Mapped[str] = mapped_column(String(180), default="")
     rfc: Mapped[str] = mapped_column(String(20), default="")
     phone: Mapped[str] = mapped_column(String(40), default="")
     email: Mapped[str] = mapped_column(String(180), default="")
@@ -336,6 +397,8 @@ class Supplier(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_by: Mapped[str] = mapped_column(String(180), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    inventory_items: Mapped[list[InventoryItem]] = relationship(back_populates="supplier")
+    inventory_movements: Mapped[list[InventoryMovement]] = relationship(back_populates="supplier", foreign_keys="InventoryMovement.supplier_id")
 
 
 class Purchase(Base):
@@ -378,6 +441,7 @@ class PurchaseLine(Base):
     unit_cost: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     line_total: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False)
     previous_unit_cost: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    inventory_movements: Mapped[list[InventoryMovement]] = relationship(back_populates="purchase_line")
 
 
 class SupplierPayment(Base):
