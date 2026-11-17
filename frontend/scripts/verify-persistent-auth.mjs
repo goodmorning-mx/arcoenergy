@@ -346,7 +346,8 @@ async function verifySurface(route) {
       latestRefreshToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || ''");
     } else if (isReviewRoute) {
       await waitFor("Boolean(document.querySelector('.story-review-page h2') && document.querySelector('.story-review-table tbody tr'))", 'story-card review table');
-      if (!await evaluate("document.body.innerText.includes('Storycards') && document.body.innerText.includes('N.º storycard') && document.body.innerText.includes('Storycard real') && document.body.innerText.includes('Storycard interpretado') && document.body.innerText.includes('Finished') && document.body.innerText.includes('Comments') && document.body.innerText.includes('US-42') && document.body.innerText.includes('Mario Groso')")) fail('The collaborative review route did not render the requested storycard columns and author.');
+      const tableState = await evaluate("({text:document.body.innerText.slice(-1800),headers:Array.from(document.querySelectorAll('.story-review-table th')).map(node=>node.innerText),rows:document.querySelectorAll('.story-review-table tbody tr').length})");
+      if (!tableState.headers.includes('N.º storycard') || !tableState.headers.includes('Storycard real') || !tableState.headers.includes('Storycard interpretado') || !tableState.headers.includes('Finished') || !tableState.headers.includes('Comments') || !tableState.text.includes('US-42') || !tableState.text.includes('Mario Groso')) fail(`The collaborative review route did not render the requested storycard columns and author: ${JSON.stringify(tableState)}`);
       await evaluate(`(() => {
         const filter = document.querySelector('[aria-label="Filtrar por autor"]');
         filter.value = 'Mario Groso';
