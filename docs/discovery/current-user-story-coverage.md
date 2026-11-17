@@ -1,6 +1,6 @@
 # Cobertura vigente de las user story cards
 
-Fecha de corte: 2026-11-14. Esta matriz resume el último registro encontrado por tarjeta en [history-cards.md](history-cards.md). El registro es append-only: cada fila apunta al último estado/evidencia registrado, no modifica el relato original ni implica validación del stakeholder. “Funcional básico” significa que hay código y evidencia técnica para el alcance descrito; las verificaciones de negocio/dispositivo se indican aparte.
+Fecha de corte: 2026-11-17. Esta matriz resume el último registro encontrado por tarjeta en [history-cards.md](history-cards.md). El registro es append-only: cada fila apunta al último estado/evidencia registrado, no modifica el relato original ni implica validación del stakeholder. “Funcional básico” significa que hay código y evidencia técnica para el alcance descrito; las verificaciones de negocio/dispositivo se indican aparte.
 
 | Tarjeta | Última iteración registrada | Estado registrado y trabajo que falta |
 | --- | --- | --- |
@@ -49,6 +49,7 @@ Fecha de corte: 2026-11-14. Esta matriz resume el último registro encontrado po
 | US-42 | 154 · tabla, Finished, comentarios y alta modal | Desplegado en DEV: relato literal e interpretación lado a lado, autor, radio Pendiente/Terminada persistido y bitácora append-only en modal; alta de historycard en modal. API reporta schema 202611170156. Validación del contenido por stakeholders pendiente. |
 | US-42 | 155 · solución propuesta por storycard | Campo en tabla para documentar la pantalla, campo, flujo u otro cambio implementado; modal de alta/edición e historial versionado con autor y fecha. |
 | US-44 | 156 · conservar funciones del módulo de inventario | Capturada desde la solicitud literal y la captura visual: indicadores, gráfica de siete días, alertas, movimientos recientes y navegación. Implementación pendiente; validar fórmulas, mínimos, permisos y alcance del legado. |
+| US-45 | 157 · alcance integral del módulo de inventario | Capturada desde la solicitud literal y nueve capturas: catálogo, entradas, salidas, kardex, escáner, reportes, proveedores, proyectos y configuración; documenta campos/modelos candidatos, estados visibles y flujos. Falta validar reglas, permisos, valuación, folios e integración contable; implementar después de validar. |
 | US-43 | 148 · verificación del agente CRM en DEV | Funcional en DEV: el CRM agenda seguimientos con vista previa, confirmación explícita, autorización vigente e idempotencia; API `/version` reporta el commit `42c590f50c3db48a61574a310aa60286a629a6a9` y schema 153; web, CRM y PWA responden HTTP 200. CI valida Docker, OCR, render, sesiones y login offline. Faltan priorizar las demás operaciones y decidir el alcance de datos procesados por el modelo. |
 
 ## Dependencias para continuar
