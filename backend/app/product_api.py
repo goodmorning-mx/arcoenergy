@@ -921,10 +921,16 @@ class HistoryCardReviewInput(BaseModel):
     checklist: list[HistoryCardReviewCheckInput] = Field(max_length=100)
     observations: str = Field(default="", max_length=5000)
     finished: bool | None = None
+    solution_proposed: str = Field(default="", max_length=5000)
 
     @field_validator("observations")
     @classmethod
     def trim_observations(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("solution_proposed")
+    @classmethod
+    def trim_solution_proposed(cls, value: str) -> str:
         return value.strip()
 
 
@@ -959,7 +965,7 @@ def append_history_card_review(
     submitted_criteria = [item.criterion for item in data.checklist]
     if submitted_criteria != expected_criteria:
         raise HTTPException(422, "El checklist debe corresponder exactamente con los criterios de la versión actual.")
-    if data.finished is None and not data.observations and not any(item.checked for item in data.checklist):
+    if data.finished is None and not data.observations and not data.solution_proposed and not any(item.checked for item in data.checklist):
         raise HTTPException(422, "Marca al menos un criterio o registra una observación para guardar la revisión.")
     latest_review_version = db.scalar(
         select(func.max(HistoryCardReview.review_version)).where(HistoryCardReview.story_id == story_id)
@@ -969,6 +975,7 @@ def append_history_card_review(
         review_version=latest_review_version + 1,
         checklist=[item.model_dump() for item in data.checklist], observations=data.observations,
         finished=data.finished if data.finished is not None else bool(data.checklist) and all(item.checked for item in data.checklist),
+        solution_proposed=data.solution_proposed,
         reviewed_by=identity.email,
     )
     db.add(row)

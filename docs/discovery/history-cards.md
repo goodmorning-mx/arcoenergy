@@ -2136,3 +2136,16 @@ La migración `202611170156` agrega el campo persistente `finished`, conserva la
 | Tarjeta | Estado de implementación | Validación / pendiente |
 | --- | --- | --- |
 | US-42 | Iteración 154: tabla y filtros, radios persistidos, comentarios append-only y alta en modal | Desplegado en DEV con ArcoEnergy commit `73e9ed0b127a3c3afad3d9435235963ed5f4806a` y schema `202611170156`; `/api/health`, `/api/version`, `/`, `/crm/`, `/crm/story-cards/review`, `/app/` y `/crm/version.json` responden HTTP 200. Stakeholders deben confirmar el texto interpretado y marcar la revisión como terminada; autor de esta solicitud por identificar. |
+
+
+## Iteración 155 — solución propuesta por storycard (2026-11-17)
+
+**Fuente literal del stakeholder:** “si me gusto la revision de storycards podrias poner el campo de solucion propuesta como que se agrego el campo o la pantalla etc para como resolvimos ese storycard”. El autor nominal no queda identificado en el registro disponible; se conserva como stakeholder Arco Energy por identificar.
+
+La tabla `/crm/story-cards/review` incorpora la columna **Solución propuesta** para documentar qué se construyó para atender cada storycard (pantallas, campos, flujos y otros cambios). El equipo agrega o corrige el texto desde un modal; cada guardado crea una revisión append-only identificada con autor y fecha. Guardar una solución conserva el estado Finished, los criterios y los comentarios. Las demás acciones conservan la solución documentada.
+
+La migración `202611170157` agrega `solution_proposed` a `ae_history_card_reviews` y registra esta iteración como una nueva versión append-only de US-42. La solución propuesta documenta la implementación; no equivale a la confirmación del stakeholder.
+
+| Tarjeta | Estado de implementación | Validación / pendiente |
+| --- | --- | --- |
+| US-42 | Iteración 155: columna de solución propuesta, edición modal e historial con autor/fecha | Completar la solución de cada tarjeta y revisar su precisión con los stakeholders. |
