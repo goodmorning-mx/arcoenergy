@@ -360,7 +360,12 @@ async function verifySurface(route) {
         filter.dispatchEvent(new Event('change', { bubbles: true }));
       })()`);
       await evaluate("Array.from(document.querySelectorAll('.finish-radios input[type=radio]')).find(input => input.parentElement.innerText.includes('Terminada'))?.click()");
-      await waitFor("document.body.innerText.includes('Se guardó US-42 · revisión 1.')", 'saved finished status');
+      const radioClick = await evaluate(`(() => { const input = Array.from(document.querySelectorAll('.finish-radios input[type=radio]')).find(item => item.parentElement.innerText.includes('Terminada')); if (!input) return 'missing'; input.click(); return JSON.stringify({checked:input.checked, disabled:input.disabled, label:input.parentElement.innerText}); })()`);
+      const reviewDeadline = Date.now() + 8_000;
+      while (reviewPosts.length < 1 && Date.now() < reviewDeadline) await new Promise(resolve => setTimeout(resolve, 100));
+      if (!reviewPosts.length) fail(`Finished radio did not post a review: ${radioClick}; UI=${await evaluate("document.body.innerText.slice(-500)")}`);
+      await waitFor("document.body.innerText.includes('Se guardó US-42 · revisión 1.') || Boolean(document.querySelector('.story-review-alert'))", 'finished status save response');
+      if (!await evaluate("document.body.innerText.includes('Se guardó US-42 · revisión 1.')")) fail(`Finished status save returned an error: ${await evaluate("document.body.innerText.slice(-500)")}`);
       await evaluate("Array.from(document.querySelectorAll('.story-review-table tbody tr')).find(row => row.innerText.includes('US-42'))?.querySelector('.comment-cell .text-button')?.click()");
       await waitFor("document.querySelector('.review-modal textarea')", 'storycard comments modal');
       await evaluate(`(() => {
