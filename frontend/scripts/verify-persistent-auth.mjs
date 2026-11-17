@@ -380,7 +380,7 @@ async function verifySurface(route) {
       if (reviewPosts.length !== 2 || reviewPosts[0].finished !== true || reviewPosts[1].observations !== 'Validado en la sesión Chrome de revisión.' || reviewPosts[1].finished !== true) fail(`Unexpected review payloads: ${JSON.stringify(reviewPosts)}.`);
       await send('Page.reload');
       await waitFor("document.querySelector('.story-review-page') && document.body.innerText.includes('Validado en la sesión Chrome de revisión.')", 'persisted status and comments after reload');
-      const restored = await evaluate("({finished:Array.from(document.querySelectorAll('.finish-radios input[type=radio]')).find(input => input.parentElement.innerText.includes('Terminada'))?.checked, comment:document.body.innerText.includes('Validado en la sesión Chrome de revisión.'), reviewer:document.body.innerText.includes('elder.gonzalez@arcoenergy.mx')})");
+      const restored = await evaluate("({finished:Array.from(document.querySelector('.story-review-table tbody tr:last-child .finish-radios').querySelectorAll('input[type=radio]')).find(input => input.parentElement.innerText.includes('Terminada'))?.checked, comment:document.body.innerText.includes('Validado en la sesión Chrome de revisión.'), reviewer:document.body.innerText.includes('elder.gonzalez@arcoenergy.mx')})");
       if (!restored?.finished || !restored.comment || !restored.reviewer) fail(`Review state did not persist after reload: ${JSON.stringify(restored)}.`);
       latestRefreshToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || ''");
     }
