@@ -171,7 +171,7 @@ async function verifySurface(route) {
         const saved = {
           id: `browser-check-review-${reviewRecords.length + 1}`, story_id: 'US-42', history_card_id: 'browser-check-card',
           story_version: payload.story_version, review_version: reviewRecords.length + 1,
-          checklist: payload.checklist, observations: payload.observations, reviewed_by: 'elder.gonzalez@arcoenergy.mx',
+          checklist: payload.checklist, observations: payload.observations, finished: payload.finished ?? false, reviewed_by: 'elder.gonzalez@arcoenergy.mx',
           created_at: '2026-11-14T18:00:00Z',
         };
         reviewRecords.push(saved);
@@ -345,8 +345,8 @@ async function verifySurface(route) {
       if (agentChatRequests !== 1 || savedChat.includes('browser-check-secret-token')) fail('Reload lost the conversation or persisted a confirmation credential.');
       latestRefreshToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || ''");
     } else if (isReviewRoute) {
-      await waitFor("Boolean(document.querySelector('.story-review-page h2') && document.querySelector('.story-review-table tr.selected'))", 'story-card review route and selected card');
-      if (!await evaluate("document.body.innerText.includes('Revisión de user story cards') && document.body.innerText.includes('US-42') && document.body.innerText.includes('Elder Gonzalez') && document.body.innerText.includes('Mario Groso')")) fail('The collaborative review route did not render the selected story card, requester and stakeholder.');
+      await waitFor("Boolean(document.querySelector('.story-review-page h2') && document.querySelector('.story-review-table tbody tr'))", 'story-card review table');
+      if (!await evaluate("document.body.innerText.includes('Storycards') && document.body.innerText.includes('N.º storycard') && document.body.innerText.includes('Storycard real') && document.body.innerText.includes('Storycard interpretado') && document.body.innerText.includes('Finished') && document.body.innerText.includes('Comments') && document.body.innerText.includes('US-42') && document.body.innerText.includes('Elder Gonzalez') && document.body.innerText.includes('Mario Groso')")) fail('The collaborative review route did not render the requested storycard columns and author.');
       await evaluate(`(() => {
         const filter = document.querySelector('[aria-label="Filtrar por autor"]');
         filter.value = 'Mario Groso';
@@ -358,22 +358,24 @@ async function verifySurface(route) {
         filter.value = 'todas';
         filter.dispatchEvent(new Event('change', { bubbles: true }));
       })()`);
+      await evaluate("Array.from(document.querySelectorAll('.finish-radios input[type=radio]')).find(input => input.parentElement.innerText.includes('Terminada'))?.click()");
+      await waitFor("document.body.innerText.includes('Se guardó US-42 · revisión 1.')", 'saved finished status');
+      await evaluate("Array.from(document.querySelectorAll('.story-review-table tbody tr')).find(row => row.innerText.includes('US-42'))?.querySelector('.comment-cell .text-button')?.click()");
+      await waitFor("document.querySelector('.review-modal textarea')", 'storycard comments modal');
       await evaluate(`(() => {
-        const checkbox = document.querySelector('.story-review-checklist input[type="checkbox"]');
-        checkbox.click();
-        const textarea = document.querySelector('.story-review-observations textarea');
+        const textarea = document.querySelector('.review-modal textarea');
         const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
         setter.call(textarea, 'Validado en la sesión Chrome de revisión.');
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
         textarea.dispatchEvent(new Event('change', { bubbles: true }));
-        document.querySelector('.story-review-save button')?.click();
+        document.querySelector('.review-modal form button.button-primary')?.click();
       })()`);
-      await waitFor("document.body.innerText.includes('Revisión 1 guardada para US-42.')", 'saved append-only stakeholder review');
-      if (reviewPosts.length !== 1 || reviewPosts[0].story_version !== 11 || reviewPosts[0].checklist[0].checked !== true || reviewPosts[0].observations !== 'Validado en la sesión Chrome de revisión.') fail(`Unexpected review payload: ${JSON.stringify(reviewPosts)}.`);
+      await waitFor("document.body.innerText.includes('Se guardó US-42 · revisión 2.')", 'saved append-only stakeholder comment');
+      if (reviewPosts.length !== 2 || reviewPosts[0].finished !== true || reviewPosts[1].observations !== 'Validado en la sesión Chrome de revisión.' || reviewPosts[1].finished !== true) fail(`Unexpected review payloads: ${JSON.stringify(reviewPosts)}.`);
       await send('Page.reload');
-      await waitFor("document.querySelector('.story-review-page') && document.body.innerText.includes('En progreso')", 'persisted checklist state after review page reload');
-      const restored = await evaluate("({checked:document.querySelector('.story-review-checklist input[type=checkbox]')?.checked, observation:document.querySelector('.story-review-observations textarea')?.value, reviewer:document.body.innerText.includes('elder.gonzalez@arcoenergy.mx')})");
-      if (!restored?.checked || restored.observation !== 'Validado en la sesión Chrome de revisión.' || !restored.reviewer) fail(`Review state did not persist after reload: ${JSON.stringify(restored)}.`);
+      await waitFor("document.querySelector('.story-review-page') && document.body.innerText.includes('Validado en la sesión Chrome de revisión.')", 'persisted status and comments after reload');
+      const restored = await evaluate("({finished:Array.from(document.querySelectorAll('.finish-radios input[type=radio]')).find(input => input.parentElement.innerText.includes('Terminada'))?.checked, comment:document.body.innerText.includes('Validado en la sesión Chrome de revisión.'), reviewer:document.body.innerText.includes('elder.gonzalez@arcoenergy.mx')})");
+      if (!restored?.finished || !restored.comment || !restored.reviewer) fail(`Review state did not persist after reload: ${JSON.stringify(restored)}.`);
       latestRefreshToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || ''");
     }
     const failedRefreshExpected = refreshCount + 1;
@@ -447,6 +449,6 @@ for (const route of ['/app', '/crm', '/crm-review']) {
   console.log(route === '/app'
     ? '/app login, saved-session and expired-access field-action checks passed.'
     : route === '/crm-review'
-      ? '/crm/story-cards/review login, checklist, observation, append-only review and reload checks passed.'
+      ? '/crm/story-cards/review table, author filter, finished radio, comment modal and persistence checks passed.'
       : '/crm login and saved-session browser checks passed.');
 }
