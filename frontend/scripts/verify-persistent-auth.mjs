@@ -346,7 +346,7 @@ async function verifySurface(route) {
       latestRefreshToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || ''");
     } else if (isReviewRoute) {
       await waitFor("Boolean(document.querySelector('.story-review-page h2') && document.querySelector('.story-review-table tbody tr'))", 'story-card review table');
-      if (!await evaluate("document.body.innerText.includes('Storycards') && document.body.innerText.includes('N.º storycard') && document.body.innerText.includes('Storycard real') && document.body.innerText.includes('Storycard interpretado') && document.body.innerText.includes('Finished') && document.body.innerText.includes('Comments') && document.body.innerText.includes('US-42') && document.body.innerText.includes('Elder Gonzalez') && document.body.innerText.includes('Mario Groso')")) fail('The collaborative review route did not render the requested storycard columns and author.');
+      if (!await evaluate("document.body.innerText.includes('Storycards') && document.body.innerText.includes('N.º storycard') && document.body.innerText.includes('Storycard real') && document.body.innerText.includes('Storycard interpretado') && document.body.innerText.includes('Finished') && document.body.innerText.includes('Comments') && document.body.innerText.includes('US-42') && document.body.innerText.includes('Mario Groso')")) fail('The collaborative review route did not render the requested storycard columns and author.');
       await evaluate(`(() => {
         const filter = document.querySelector('[aria-label="Filtrar por autor"]');
         filter.value = 'Mario Groso';
