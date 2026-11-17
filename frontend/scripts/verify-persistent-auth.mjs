@@ -367,7 +367,7 @@ async function verifySurface(route) {
       await waitFor("document.body.innerText.includes('Se guardó US-42 · revisión 1.') || Boolean(document.querySelector('.story-review-alert'))", 'finished status save response');
       if (!await evaluate("document.body.innerText.includes('Se guardó US-42 · revisión 1.')")) fail(`Finished status save returned an error: ${await evaluate("document.body.innerText.slice(-500)")}`);
       await evaluate("Array.from(document.querySelectorAll('.story-review-table tbody tr')).find(row => row.innerText.includes('US-42'))?.querySelector('.comment-cell .text-button')?.click()");
-      await waitFor("document.querySelector('.review-modal textarea')", 'storycard comments modal');
+      await waitFor("Boolean(document.querySelector('.review-modal textarea'))", 'storycard comments modal');
       await evaluate(`(() => {
         const textarea = document.querySelector('.review-modal textarea');
         const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
