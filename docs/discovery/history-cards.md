@@ -2149,3 +2149,28 @@ La migración `202611170157` agrega `solution_proposed` a `ae_history_card_revie
 | Tarjeta | Estado de implementación | Validación / pendiente |
 | --- | --- | --- |
 | US-42 | Iteración 155: columna de solución propuesta, edición modal e historial con autor/fecha | Completar la solución de cada tarjeta y revisar su precisión con los stakeholders. |
+
+## Iteración 156 — conservar las funciones del módulo de inventario (2026-11-17)
+
+**Fuente literal del stakeholder:** “Mira ahora vamos a trabajar por modulos; entonces vas a agregar historycards que yo mismo fui agregando; entonces la siguiente storycard que necesito es que dentro del modulo de inventario dejes todas estas funcionalidades que ya tiene el sistema de inventario.” El autor nominal no queda identificado en el mensaje; se conserva como “Por identificar”. La fuente visual se conserva en [inventory-module-reference.md](sources/inventory-module-reference.md) y [`inventory-module-reference.png`](sources/inventory-module-reference.png).
+
+### US-44 — Mantener el dashboard y las funciones visibles del módulo de inventario
+
+**Historia interpretada:** Como responsable del inventario de Arco Energy, quiero conservar y disponer desde el módulo de inventario las funciones y el resumen operativo que aparecen en la captura de referencia, para controlar existencias, movimientos y alertas desde un solo espacio.
+
+**Criterios de aceptación:**
+
+- El dashboard muestra productos totales, artículos con stock bajo, entradas de hoy, salidas de hoy, valor del inventario y movimientos de los últimos siete días.
+- Una gráfica compara entradas y salidas durante los últimos siete días.
+- El panel de alertas de stock bajo identifica cada producto y muestra la existencia actual frente al mínimo configurado; las cantidades críticas se distinguen visualmente.
+- Los movimientos recientes muestran artículo, tipo o folio del movimiento, cantidad y fecha.
+- La navegación conserva accesos a Dashboard, Inventario, Entradas, Salidas, Kardex, Escáner, Reportes, Proveedores, Proyectos, Usuarios y Configuración, conforme a los permisos de cada rol.
+- Los resúmenes, alertas y movimientos representan los registros existentes y no usan datos de demostración.
+
+**Preguntas abiertas:** confirmar con el responsable de inventario las fórmulas y períodos exactos de los indicadores, la valuación del almacén, los umbrales de stock bajo y qué roles pueden consultar costos, proveedores, proyectos, usuarios y configuración desde el menú. La captura sirve como referencia visual; sus valores no son datos reales ni parámetros aprobados.
+
+La tarjeta se registra como US-44 v1 en `ae_history_cards`, vinculada a US-19, US-20, US-26, US-27, US-28, US-29, US-30 y US-32. La migración `202611170158` conserva el mensaje literal, la captura y su hash como fuentes. Esta iteración registra el alcance solicitado; su implementación se hará al trabajar el módulo de inventario.
+
+| Tarjeta | Estado | Pendiente |
+| --- | --- | --- |
+| US-44 | Capturada en la iteración 156; source literal e imagen preservados | Confirmar fórmulas, umbrales, permisos y comportamiento del sistema legado; implementar el alcance del módulo de inventario. |
