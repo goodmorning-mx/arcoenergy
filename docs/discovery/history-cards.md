@@ -2135,4 +2135,4 @@ La migración `202611170156` agrega el campo persistente `finished`, conserva la
 
 | Tarjeta | Estado de implementación | Validación / pendiente |
 | --- | --- | --- |
-| US-42 | Iteración 154: tabla y filtros, radios persistidos, comentarios append-only y alta en modal | Stakeholders deben confirmar el texto interpretado y marcar la revisión como terminada; autor de esta solicitud por identificar. |
+| US-42 | Iteración 154: tabla y filtros, radios persistidos, comentarios append-only y alta en modal | Desplegado en DEV con ArcoEnergy commit `73e9ed0b127a3c3afad3d9435235963ed5f4806a` y schema `202611170156`; `/api/health`, `/api/version`, `/`, `/crm/`, `/crm/story-cards/review`, `/app/` y `/crm/version.json` responden HTTP 200. Stakeholders deben confirmar el texto interpretado y marcar la revisión como terminada; autor de esta solicitud por identificar. |
