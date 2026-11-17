@@ -7,7 +7,7 @@
 /* Docked CRM agent: a real workspace column beside the active screen. */
 .crm-workspace{min-width:0;min-height:100vh;margin-left:246px}
 .crm-workspace>.crm-main{min-width:0;margin-left:0}
-.crm-workspace.with-agent{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,370px);align-items:start;gap:16px;padding:16px;background:#f5f6f2}
+.crm-workspace.with-agent{display:grid;grid-template-columns:minmax(0,1fr) minmax(390px,460px);align-items:start;gap:16px;padding:16px;background:#f5f6f2}
 .crm-workspace.with-agent>.crm-main{grid-column:1;grid-row:1}
 .crm-workspace.with-agent>.agent-panel{grid-column:2;grid-row:1}
 .agent-panel{position:sticky;top:16px;z-index:1;display:flex;width:auto;height:calc(100vh - 32px);min-width:0;flex-direction:column;overflow:hidden;border:1px solid #dce9df;border-radius:18px;background:linear-gradient(180deg,#fff 0%,#fbfdfb 100%);box-shadow:0 12px 34px #183b2c12}
@@ -27,7 +27,8 @@
 .agent-launcher-arrow{display:grid;place-items:center;width:27px;height:27px;flex:none;border:1px solid #ffffff22;border-radius:9px;color:#d7e9da;font-size:13px;transition:transform .2s,background .2s}
 .agent-launcher:hover .agent-launcher-arrow{transform:translate(2px,-2px);background:#ffffff12}
 .agent-launcher:focus-visible,.agent-panel-head button:focus-visible{outline:3px solid #f0c66f;outline-offset:3px}
-@media(max-width:1050px){.crm-workspace{margin-left:205px}.crm-workspace.with-agent{grid-template-columns:minmax(0,1fr) minmax(280px,34vw);gap:12px;padding:12px}.agent-panel{top:12px;height:calc(100vh - 24px)}}
+@media(max-width:1050px){.crm-workspace{margin-left:205px}.crm-workspace.with-agent{grid-template-columns:minmax(0,1fr) minmax(390px,430px);gap:12px;padding:12px}.agent-panel{top:12px;height:calc(100vh - 24px)}}
+@media(max-width:950px) and (min-width:721px){.crm-workspace.with-agent{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto}.crm-workspace.with-agent>.crm-main{grid-column:1;grid-row:1}.crm-workspace.with-agent>.agent-panel{grid-column:1;grid-row:2}.agent-panel{position:relative;top:auto;height:min(52dvh,440px)}}
 @media(max-width:720px){.crm-workspace{margin-left:0}.crm-workspace.with-agent{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;gap:12px;padding:10px 12px 74px}.crm-workspace.with-agent>.crm-main{grid-column:1;grid-row:1}.crm-workspace.with-agent>.agent-panel{grid-column:1;grid-row:2}.agent-panel{position:relative;top:auto;height:min(52dvh,440px);min-height:320px}.agent-launcher{right:14px;bottom:74px;min-width:205px;height:58px;padding:7px 12px 7px 8px;border-radius:18px}.agent-launcher-icon{width:40px;height:40px}.agent-launcher-label{font-size:12px}.agent-launcher-arrow{width:25px;height:25px}}
 
 /* Calm, editorial conversation surface inspired by focused AI workspaces. */
