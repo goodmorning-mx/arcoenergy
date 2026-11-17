@@ -606,7 +606,7 @@ export default function App() {
 
     <div className={`crm-workspace ${agentOpen ? 'with-agent' : ''}`}>
     {agentOpen && <aside className="agent-panel" aria-label="Asistente de IA">
-      <div className="agent-panel-head"><div><span className="agent-spark">✦</span><div><b>Asistente Arco</b><small>Consultas y acciones con confirmación</small></div></div><button onClick={() => setAgentOpen(false)} aria-label="Cerrar asistente">×</button></div>
+      <div className="agent-panel-head"><div><span className="agent-spark">✦</span><div><b>ArcoEnergy - AI</b><small>Consultas y acciones con confirmación</small></div></div><button onClick={() => setAgentOpen(false)} aria-label="Cerrar asistente">×</button></div>
       <AgentChat key={identity?.user_id || 'public'} persistenceKey={identity ? `arcoenergy-agent:${identity.user_id}` : undefined} title="¿Qué necesitas resolver?" client={async (prompt, conversationId, confirmation) => request<{ conversationId: string; content?: string; confirmation?: { tool: string; arguments: Record<string, unknown>; summary?: string; details?: string[]; intent_id?: string; confirmation_token?: string; idempotency_key?: string; expires_at?: string } }>(accessToken ? '/agent/chat' : '/public/agent/chat', accessToken || undefined, { method: 'POST', body: JSON.stringify({ prompt, conversation_id: conversationId, confirmation }) })} initialMessages={[{ role: 'assistant', content: 'Puedo consultar resúmenes y paquetes comerciales aprobados, además de programar seguimientos con confirmación.' }]} />
       <div className="agent-safety">Las acciones de escritura requieren confirmación y respetan los permisos de tu cuenta.</div>
     </aside>}
@@ -643,7 +643,7 @@ export default function App() {
     </main>
     </div>
 
-    {!agentOpen && <button className="agent-launcher" onClick={() => setAgentOpen(true)} aria-label="Abrir asistente de IA" title="Abrir asistente de IA">✦</button>}
+    {!agentOpen && <button className="agent-launcher" onClick={() => setAgentOpen(true)} aria-label="Abrir ArcoEnergy - AI" title="Abrir ArcoEnergy - AI"><span className="agent-launcher-icon" aria-hidden="true">✦</span><span className="agent-launcher-label">ArcoEnergy - AI</span><span className="agent-launcher-arrow" aria-hidden="true">↗</span></button>}
 
     {customerOpen && <Modal title="Agregar cliente" subtitle="Guarda los datos de contacto y ubicación del prospecto." onClose={() => setCustomerOpen(false)}><form className="form-grid" onSubmit={createCustomer}><Field label="Nombre completo" name="name" required placeholder="Ej. Andrea García"/><Field label="Teléfono / WhatsApp" name="phone" placeholder="833 000 0000"/><Field label="Correo" name="email" type="email" placeholder="nombre@empresa.com"/><Field label="Ciudad" name="city" required placeholder="Tampico"/><Field label="Domicilio de instalación" name="address" className="span-two" placeholder="Calle, colonia y referencias"/><div className="modal-actions span-two"><button type="button" className="button button-outline" onClick={() => setCustomerOpen(false)}>Cancelar</button><button className="button button-primary">Guardar cliente</button></div></form></Modal>}
     {quoteOpen && <QuoteComposer packages={catalog?.packages.filter(item => item.enabled) || []} customers={customers} onClose={() => setQuoteOpen(false)} onSubmit={createQuote} onNewCustomer={() => { setQuoteOpen(false); setCustomerOpen(true); }} />}
