@@ -359,8 +359,8 @@ async function verifySurface(route) {
         filter.value = 'todas';
         filter.dispatchEvent(new Event('change', { bubbles: true }));
       })()`);
-      await evaluate("Array.from(document.querySelector('.story-review-table tbody tr:last-child .finish-radios').querySelectorAll('input[type=radio]')).find(input => input.parentElement.innerText.includes('Terminada'))?.click()");
-      const radioClick = await evaluate(`(() => { const input = Array.from(document.querySelectorAll('.finish-radios input[type=radio]')).find(item => item.parentElement.innerText.includes('Terminada')); if (!input) return 'missing'; input.click(); return JSON.stringify({checked:input.checked, disabled:input.disabled, label:input.parentElement.innerText}); })()`);
+      await evaluate("Array.from(document.querySelectorAll('.story-review-table tbody tr')).find(row => row.innerText.includes('US-42'))?.querySelectorAll('.finish-radios input[type=radio]').length && Array.from(Array.from(document.querySelectorAll('.story-review-table tbody tr')).find(row => row.innerText.includes('US-42')).querySelectorAll('.finish-radios input[type=radio]')).find(input => input.parentElement.innerText.includes('Terminada'))?.click()");
+      const radioClick = await evaluate(`(() => { const row = Array.from(document.querySelectorAll('.story-review-table tbody tr')).find(item => item.innerText.includes('US-42')); const input = Array.from(row?.querySelectorAll('.finish-radios input[type=radio]') || []).find(item => item.parentElement.innerText.includes('Terminada')); if (!input) return 'missing'; input.click(); return JSON.stringify({checked:input.checked, disabled:input.disabled, label:input.parentElement.innerText}); })()`);
       const reviewDeadline = Date.now() + 8_000;
       while (reviewPosts.length < 1 && Date.now() < reviewDeadline) await new Promise(resolve => setTimeout(resolve, 100));
       if (!reviewPosts.length) fail(`Finished radio did not post a review: ${radioClick}; UI=${await evaluate("document.body.innerText.slice(-500)")}`);
@@ -380,7 +380,7 @@ async function verifySurface(route) {
       if (reviewPosts.length !== 2 || reviewPosts[0].finished !== true || reviewPosts[1].observations !== 'Validado en la sesión Chrome de revisión.' || reviewPosts[1].finished !== true) fail(`Unexpected review payloads: ${JSON.stringify(reviewPosts)}.`);
       await send('Page.reload');
       await waitFor("document.querySelector('.story-review-page') && document.body.innerText.includes('Validado en la sesión Chrome de revisión.')", 'persisted status and comments after reload');
-      const restored = await evaluate("({finished:Array.from(document.querySelector('.story-review-table tbody tr:last-child .finish-radios').querySelectorAll('input[type=radio]')).find(input => input.parentElement.innerText.includes('Terminada'))?.checked, comment:document.body.innerText.includes('Validado en la sesión Chrome de revisión.'), reviewer:document.body.innerText.includes('elder.gonzalez@arcoenergy.mx')})");
+      const restored = await evaluate("(() => { const row = Array.from(document.querySelectorAll('.story-review-table tbody tr')).find(item => item.innerText.includes('US-42')); return {finished:Array.from(row?.querySelectorAll('.finish-radios input[type=radio]') || []).find(input => input.parentElement.innerText.includes('Terminada'))?.checked, comment:document.body.innerText.includes('Validado en la sesión Chrome de revisión.'), reviewer:document.body.innerText.includes('elder.gonzalez@arcoenergy.mx')}; })()");
       if (!restored?.finished || !restored.comment || !restored.reviewer) fail(`Review state did not persist after reload: ${JSON.stringify(restored)}.`);
       latestRefreshToken = await evaluate("JSON.parse(localStorage.getItem('arcoenergy-auth-tokens') || 'null')?.refresh_token || ''");
     }
