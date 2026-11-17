@@ -920,6 +920,7 @@ class HistoryCardReviewInput(BaseModel):
     story_version: int = Field(ge=1)
     checklist: list[HistoryCardReviewCheckInput] = Field(max_length=100)
     observations: str = Field(default="", max_length=5000)
+    finished: bool | None = None
 
     @field_validator("observations")
     @classmethod
@@ -958,7 +959,7 @@ def append_history_card_review(
     submitted_criteria = [item.criterion for item in data.checklist]
     if submitted_criteria != expected_criteria:
         raise HTTPException(422, "El checklist debe corresponder exactamente con los criterios de la versión actual.")
-    if not data.observations and not any(item.checked for item in data.checklist):
+    if data.finished is None and not data.observations and not any(item.checked for item in data.checklist):
         raise HTTPException(422, "Marca al menos un criterio o registra una observación para guardar la revisión.")
     latest_review_version = db.scalar(
         select(func.max(HistoryCardReview.review_version)).where(HistoryCardReview.story_id == story_id)
@@ -967,6 +968,7 @@ def append_history_card_review(
         story_id=story_id, history_card_id=latest_card.id, story_version=latest_card.version,
         review_version=latest_review_version + 1,
         checklist=[item.model_dump() for item in data.checklist], observations=data.observations,
+        finished=data.finished if data.finished is not None else bool(data.checklist) and all(item.checked for item in data.checklist),
         reviewed_by=identity.email,
     )
     db.add(row)

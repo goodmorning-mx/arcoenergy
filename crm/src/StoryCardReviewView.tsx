@@ -1,211 +1,34 @@
-import { useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import './story-card-review.css';
 
-type StoryCard = {
-  id: string;
-  story_id: string;
-  version: number;
-  iteration: string;
-  stakeholder: string;
-  requested_by: string;
-  source_literal: string;
-  source_type: string;
-  source_reference: string;
-  source_attribution?: string | null;
-  source_confidence?: string | null;
-  source_occurred_at?: string | null;
-  normalized_story: string;
-  acceptance_criteria: string[];
-  unresolved_questions: string[];
-  linked_cards: string[];
-  created_at: string;
-};
-type ChecklistItem = { criterion: string; checked: boolean };
-type StoryReview = {
-  id: string;
-  story_id: string;
-  history_card_id: string;
-  story_version: number;
-  review_version: number;
-  checklist: ChecklistItem[];
-  observations: string;
-  reviewed_by: string;
-  created_at: string;
-};
+type StoryCard = { id:string; story_id:string; version:number; iteration:string; stakeholder:string; requested_by:string; source_literal:string; source_type:string; source_reference:string; source_attribution?:string|null; source_confidence?:string|null; source_occurred_at?:string|null; normalized_story:string; acceptance_criteria:string[]; unresolved_questions:string[]; linked_cards:string[]; created_at:string };
+type ChecklistItem = { criterion:string; checked:boolean };
+type StoryReview = { id:string; story_id:string; history_card_id:string; story_version:number; review_version:number; checklist:ChecklistItem[]; observations:string; finished:boolean; reviewed_by:string; created_at:string };
+const apiBase='/api/v1'; const UNKNOWN_AUTHOR='Por identificar';
+async function api<T>(path:string,token:string,init:RequestInit={}):Promise<T>{const headers=new Headers(init.headers);headers.set('Authorization',`Bearer ${token}`);if(init.body&&!headers.has('Content-Type'))headers.set('Content-Type','application/json');const response=await fetch(`${apiBase}${path}`,{...init,headers});if(!response.ok){const body=await response.json().catch(()=>({}));throw new Error(body.detail||'No se pudo guardar la revisión.');}return response.json() as Promise<T>;}
+const dateLabel=(value:string)=>new Date(value).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'});
 
-const apiBase = '/api/v1';
-const UNKNOWN_AUTHOR = 'Por identificar';
-async function api<T>(path: string, token: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  headers.set('Authorization', `Bearer ${token}`);
-  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  const response = await fetch(`${apiBase}${path}`, { ...init, headers });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.detail || 'No se pudo guardar la revisión.');
-  }
-  return response.json() as Promise<T>;
-}
-const displayDate = (value: string) => new Date(value).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' });
-
-export function StoryCardReviewView({ token }: { token: string }) {
-  const [cards, setCards] = useState<StoryCard[]>([]);
-  const [reviews, setReviews] = useState<StoryReview[]>([]);
-  const [selectedId, setSelectedId] = useState('');
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<'todas' | 'pendientes' | 'progreso' | 'verificadas'>('todas');
-  const [authorFilter, setAuthorFilter] = useState('todas');
-  const [checked, setChecked] = useState<boolean[]>([]);
-  const [observations, setObservations] = useState('');
-  const [dirty, setDirty] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-
-  const load = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const [cardRows, reviewRows] = await Promise.all([
-        api<StoryCard[]>('/history-cards', token),
-        api<StoryReview[]>('/history-card-reviews', token),
-      ]);
-      setCards(cardRows);
-      setReviews(reviewRows);
-      if (!selectedId && cardRows.length) setSelectedId(cardRows[0].story_id);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'No se pudieron cargar las storycards.');
-    } finally { setLoading(false); }
-  };
-  useEffect(() => { void load(); }, [token]);
-
-  const latestCards = useMemo(() => {
-    const latest = new Map<string, StoryCard>();
-    for (const card of cards) {
-      const current = latest.get(card.story_id);
-      if (!current || card.version > current.version) latest.set(card.story_id, card);
-    }
-    return [...latest.values()].sort((a, b) => Number(a.story_id.replace(/\D/g, '')) - Number(b.story_id.replace(/\D/g, '')));
-  }, [cards]);
-  const authors = useMemo(() => [...new Set(latestCards.map(card => card.requested_by || UNKNOWN_AUTHOR))]
-    .sort((a, b) => a.localeCompare(b, 'es-MX')), [latestCards]);
-  const latestReviews = useMemo(() => {
-    const latest = new Map<string, StoryReview>();
-    for (const review of reviews) {
-      const current = latest.get(review.story_id);
-      if (!current || review.review_version > current.review_version) latest.set(review.story_id, review);
-    }
-    return latest;
-  }, [reviews]);
-  const selected = latestCards.find(card => card.story_id === selectedId) || latestCards[0] || null;
-  const selectedReview = selected ? latestReviews.get(selected.story_id) : undefined;
-  const selectedHistory = selected ? reviews.filter(review => review.story_id === selected.story_id).sort((a, b) => b.review_version - a.review_version) : [];
-
-  function reviewStatus(card: StoryCard) {
-    const review = latestReviews.get(card.story_id);
-    if (!review || review.story_version !== card.version) return 'pendiente';
-    const completed = review.checklist.filter(item => item.checked).length;
-    if (review.checklist.length > 0 && completed === review.checklist.length) return 'verificada';
-    return 'progreso';
-  }
-  const counts = useMemo(() => {
-    const values = latestCards.map(reviewStatus);
-    return { total: values.length, pendiente: values.filter(v => v === 'pendiente').length, progreso: values.filter(v => v === 'progreso').length, verificadas: values.filter(v => v === 'verificada').length };
-  }, [latestCards, latestReviews]);
-  const visibleCards = latestCards.filter(card => {
-    const term = search.trim().toLocaleLowerCase('es-MX');
-    const matchesSearch = !term || [card.story_id, card.normalized_story, card.stakeholder, card.requested_by, card.source_attribution, card.iteration, card.source_literal].join(' ').toLocaleLowerCase('es-MX').includes(term);
-    const status = reviewStatus(card);
-    const matchesAuthor = authorFilter === 'todas' || (card.requested_by || UNKNOWN_AUTHOR) === authorFilter;
-    return matchesSearch && matchesAuthor && (filter === 'todas' || (filter === 'pendientes' && status === 'pendiente') || (filter === 'progreso' && status === 'progreso') || (filter === 'verificadas' && status === 'verificada'));
-  });
-
-  useEffect(() => {
-    if (!selected) { setChecked([]); setObservations(''); setDirty(false); return; }
-    const sameVersion = selectedReview?.story_version === selected.version;
-    const saved = new Map((sameVersion ? selectedReview?.checklist : [])?.map(item => [item.criterion, item.checked]) || []);
-    setChecked(selected.acceptance_criteria.map(criterion => saved.get(criterion) || false));
-    setObservations(sameVersion ? selectedReview?.observations || '' : '');
-    setDirty(false);
-  }, [selected?.id, selected?.version, selectedReview?.id]);
-
-  function chooseCard(storyId: string) {
-    if (dirty && !window.confirm('Tienes cambios sin guardar. ¿Descartarlos y abrir otra tarjeta?')) return;
-    setDirty(false);
-    setSelectedId(storyId);
-  }
-  function toggleCriterion(index: number) {
-    setChecked(values => values.map((value, itemIndex) => itemIndex === index ? !value : value));
-    setDirty(true);
-    setNotice('');
-  }
-  async function saveReview() {
-    if (!selected) return;
-    setSaving(true);
-    setError('');
-    setNotice('');
-    try {
-      const created = await api<StoryReview>(`/history-cards/${encodeURIComponent(selected.story_id)}/reviews`, token, {
-        method: 'POST',
-        body: JSON.stringify({
-          story_version: selected.version,
-          checklist: selected.acceptance_criteria.map((criterion, index) => ({ criterion, checked: checked[index] || false })),
-          observations,
-        }),
-      });
-      setReviews(rows => [...rows, created]);
-      setDirty(false);
-      setNotice(`Revisión ${created.review_version} guardada para ${selected.story_id}.`);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'No se pudo guardar la revisión.');
-    } finally { setSaving(false); }
-  }
-  const completedCriteria = checked.filter(Boolean).length;
-  const canSave = Boolean(selected && dirty && (completedCriteria > 0 || observations.trim()) && !saving);
-
-  return <div className="story-review-page">
-    <section className="story-review-heading">
-      <div><span className="eyebrow">DISCOVERY · VALIDACIÓN COLABORATIVA</span><h2>Revisión de user story cards</h2><p>Revisa la historia con cada stakeholder, confirma criterios y deja las observaciones registradas por iteración.</p></div>
-      <button className="button button-outline" onClick={() => void load()} disabled={loading || saving}>{loading ? 'Actualizando…' : 'Actualizar tarjetas'}</button>
-    </section>
-    <section className="story-review-summary" aria-label="Resumen de revisión">
-      <article><small>TARJETAS</small><strong>{counts.total}</strong><span>Versiones vigentes</span></article>
-      <article><small>PENDIENTES</small><strong>{counts.pendiente}</strong><span>Sin revisión de esta versión</span></article>
-      <article><small>EN PROGRESO</small><strong>{counts.progreso}</strong><span>Checklist parcial</span></article>
-      <article><small>VERIFICADAS</small><strong>{counts.verificadas}</strong><span>Criterios marcados</span></article>
-    </section>
-    {error && <p role="alert" className="error-message story-review-alert">{error}</p>}
-    {notice && <p role="status" className="story-review-notice">✓ {notice}</p>}
-    <div className="story-review-layout">
-      <section className="surface-card story-review-table-card">
-        <div className="story-review-controls"><label className="field"><span>Buscar tarjeta</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="ID, autor, frase…"/></label><label className="field"><span>Estado</span><select value={filter} onChange={event => setFilter(event.target.value as typeof filter)}><option value="todas">Todas ({counts.total})</option><option value="pendientes">Pendientes ({counts.pendiente})</option><option value="progreso">En progreso ({counts.progreso})</option><option value="verificadas">Verificadas ({counts.verificadas})</option></select></label><label className="field"><span>Solicitó</span><select aria-label="Filtrar por autor" value={authorFilter} onChange={event => setAuthorFilter(event.target.value)}><option value="todas">Todos los autores ({counts.total})</option>{authors.map(author => <option key={author} value={author}>{author} ({latestCards.filter(card => (card.requested_by || UNKNOWN_AUTHOR) === author).length})</option>)}</select></label></div>
-        <div className="story-review-table-wrap"><table className="story-review-table"><thead><tr><th>Tarjeta</th><th>Solicitó</th><th>Stakeholder</th><th>Iteración / versión</th><th>Checklist</th><th>Estado</th></tr></thead><tbody>
-          {visibleCards.map(card => {
-            const status = reviewStatus(card);
-            const review = latestReviews.get(card.story_id);
-            const sameVersion = review?.story_version === card.version;
-            const done = sameVersion ? review!.checklist.filter(item => item.checked).length : 0;
-            return <tr key={card.story_id} className={selected?.story_id === card.story_id ? 'selected' : ''} onClick={() => chooseCard(card.story_id)} tabIndex={0} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); chooseCard(card.story_id); } }}>
-              <td><b>{card.story_id}</b><small>{card.normalized_story}</small></td><td>{card.requested_by || UNKNOWN_AUTHOR}</td><td>{card.stakeholder}</td><td>{card.iteration}<small>v{card.version}</small></td><td>{sameVersion ? `${done}/${review!.checklist.length}` : `0/${card.acceptance_criteria.length}`}</td><td><span className={`story-review-status ${status}`}>{status === 'verificada' ? 'Verificada' : status === 'progreso' ? 'En progreso' : 'Pendiente'}</span></td>
-            </tr>;
-          })}
-          {!loading && !visibleCards.length && <tr><td colSpan={6} className="story-review-empty">No hay tarjetas para este filtro.</td></tr>}
-        </tbody></table></div>
-        <small className="story-review-table-foot">Selecciona una fila para ver el relato, criterios, observaciones e historial de validaciones.</small>
-      </section>
-      <section className="surface-card story-review-detail" aria-label="Detalle de revisión">
-        {!selected ? <div className="story-review-empty-detail">{loading ? 'Cargando storycards…' : 'No hay tarjetas registradas.'}</div> : <>
-          <div className="story-review-detail-head"><div><span className="eyebrow">{selected.story_id} · VERSIÓN {selected.version}</span><h3>{selected.requested_by || UNKNOWN_AUTHOR}</h3><p>Solicitante · {selected.stakeholder} · {selected.iteration}</p></div><span className={`story-review-status ${reviewStatus(selected)}`}>{reviewStatus(selected) === 'verificada' ? 'Verificada' : reviewStatus(selected) === 'progreso' ? 'En progreso' : 'Pendiente'}</span></div>
-          <div className="story-review-story"><small>HISTORIA</small><p>{selected.normalized_story}</p><details><summary>Ver relato original y procedencia</summary><blockquote>{selected.source_literal}</blockquote><small>Atribución fuente: {selected.source_attribution || selected.stakeholder} · {selected.source_type} · {selected.source_reference}</small>{selected.source_confidence && <small>Fidelidad: {selected.source_confidence}</small>}{selected.source_occurred_at && <small>Fecha de origen: {selected.source_occurred_at}</small>}</details></div>
-          <div className="story-review-section"><div><span className="eyebrow">CHECKLIST DE ACEPTACIÓN</span><b>{completedCriteria} de {selected.acceptance_criteria.length} confirmados</b></div>{selected.acceptance_criteria.length ? <ul className="story-review-checklist">{selected.acceptance_criteria.map((criterion, index) => <li key={`${index}-${criterion}`}><label><input type="checkbox" checked={checked[index] || false} onChange={() => toggleCriterion(index)}/><span>{criterion}</span></label></li>)}</ul> : <p className="story-review-muted">Esta tarjeta aún no tiene criterios registrados.</p>}</div>
-          {selected.unresolved_questions.length > 0 && <div className="story-review-section"><span className="eyebrow">PREGUNTAS ABIERTAS / DEPENDENCIAS</span><ul className="story-review-open">{selected.unresolved_questions.map((question, index) => <li key={`${index}-${question}`}>{question}</li>)}</ul></div>}
-          {selected.linked_cards.length > 0 && <p className="story-review-linked">Relacionada con: {selected.linked_cards.join(' · ')}</p>}
-          <label className="field story-review-observations"><span>Observaciones de la revisión</span><textarea value={observations} maxLength={5000} onChange={event => { setObservations(event.target.value); setDirty(true); setNotice(''); }} placeholder="Acuerdos, dudas del stakeholder, contexto de la verificación…"/><small>{observations.length}/5000 · Cada guardado crea una versión de revisión y conserva las anteriores.</small></label>
-          <div className="story-review-save"><span>{dirty ? 'Cambios sin guardar' : selectedReview ? `Última revisión por ${selectedReview.reviewed_by}` : 'Aún no se ha registrado una revisión'}</span><button className="button button-primary" onClick={() => void saveReview()} disabled={!canSave}>{saving ? 'Guardando…' : 'Guardar revisión'}</button></div>
-          <div className="story-review-history"><span className="eyebrow">HISTORIAL DE REVISIONES · {selectedHistory.length}</span>{selectedHistory.length ? selectedHistory.map(review => <article key={review.id}><div><b>Revisión {review.review_version} · tarjeta v{review.story_version}</b><small>{review.reviewed_by} · {displayDate(review.created_at)}</small></div><p>{review.observations || 'Sin observaciones en esta revisión.'}</p><small>{review.checklist.filter(item => item.checked).length} de {review.checklist.length} criterios confirmados</small></article>) : <p className="story-review-muted">Las observaciones y checklist que guardes aparecerán aquí.</p>}</div>
-        </>}
-      </section>
-    </div>
-  </div>;
+export function StoryCardReviewView({token,canCreate=true}:{token:string;canCreate?:boolean}){
+ const [cards,setCards]=useState<StoryCard[]>([]),[reviews,setReviews]=useState<StoryReview[]>([]),[search,setSearch]=useState(''),[author,setAuthor]=useState('todas'),[status,setStatus]=useState<'todas'|'pendiente'|'terminada'>('todas');
+ const [loading,setLoading]=useState(true),[saving,setSaving]=useState(''),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const [commentCard,setCommentCard]=useState<StoryCard|null>(null),[comment,setComment]=useState(''),[newCard,setNewCard]=useState(false);
+ async function load(){setLoading(true);setError('');try{const [c,r]=await Promise.all([api<StoryCard[]>('/history-cards',token),api<StoryReview[]>('/history-card-reviews',token)]);setCards(c);setReviews(r);}catch(e){setError(e instanceof Error?e.message:'No se pudieron cargar las storycards.');}finally{setLoading(false);}}
+ useEffect(()=>{void load();},[token]);
+ const latestCards=useMemo(()=>{const m=new Map<string,StoryCard>();for(const c of cards){const x=m.get(c.story_id);if(!x||c.version>x.version)m.set(c.story_id,c);}return [...m.values()].sort((a,b)=>Number(a.story_id.replace(/\D/g,''))-Number(b.story_id.replace(/\D/g,'')));},[cards]);
+ const latestReviews=useMemo(()=>{const m=new Map<string,StoryReview>();for(const r of reviews){const x=m.get(r.story_id);if(!x||r.review_version>x.review_version)m.set(r.story_id,r);}return m;},[reviews]);
+ const authors=[...new Set(latestCards.map(c=>c.requested_by||UNKNOWN_AUTHOR))].sort((a,b)=>a.localeCompare(b,'es-MX'));
+ const filtered=latestCards.filter(c=>{const q=search.trim().toLocaleLowerCase('es-MX'),r=latestReviews.get(c.story_id),done=Boolean(r?.story_version===c.version&&r.finished);return(!q||[c.story_id,c.source_literal,c.normalized_story,c.requested_by,c.stakeholder].join(' ').toLocaleLowerCase('es-MX').includes(q))&&(author==='todas'||(c.requested_by||UNKNOWN_AUTHOR)===author)&&(status==='todas'||(status==='terminada'?done:!done));});
+ const finishedCount=latestCards.filter(c=>{const r=latestReviews.get(c.story_id);return r?.story_version===c.version&&r.finished;}).length;
+ async function save(card:StoryCard,values:{finished:boolean;observations?:string}){const existing=latestReviews.get(card.story_id),same=existing?.story_version===card.version;setSaving(card.story_id);setError('');setNotice('');try{const row=await api<StoryReview>(`/history-cards/${encodeURIComponent(card.story_id)}/reviews`,token,{method:'POST',body:JSON.stringify({story_version:card.version,checklist:same?existing!.checklist:card.acceptance_criteria.map(criterion=>({criterion,checked:false})),observations:values.observations??(same?existing!.observations:''),finished:values.finished})});setReviews(v=>[...v,row]);setNotice(`Se guardó ${card.story_id} · revisión ${row.review_version}.`);return true;}catch(e){setError(e instanceof Error?e.message:'No se pudo guardar.');return false;}finally{setSaving('');}}
+ async function addComment(event:FormEvent<HTMLFormElement>){event.preventDefault();if(!commentCard||!comment.trim())return;const r=latestReviews.get(commentCard.story_id);const ok=await save(commentCard,{finished:Boolean(r?.story_version===commentCard.version&&r.finished),observations:comment.trim()});if(ok){setComment('');setCommentCard(null);}}
+ async function addHistoryCard(event:FormEvent<HTMLFormElement>){event.preventDefault();const form=new FormData(event.currentTarget),id=String(form.get('story_id')).trim(),versions=cards.filter(c=>c.story_id===id).map(c=>c.version),sourceType=String(form.get('source_type')),sourceRef=String(form.get('source_reference'));const payload={story_id:id,version:Math.max(0,...versions)+1,iteration:String(form.get('iteration')),stakeholder:String(form.get('stakeholder')),requested_by:String(form.get('requested_by')||''),source_literal:String(form.get('source_literal')),source_type:sourceType,source_reference:sourceRef,source_artifacts:[{artifact_type:sourceType,reference:sourceRef,channel:sourceType,location:'',sha256:null}],source_links:[{artifact_index:0,relation:'literal',location:''}],source_language:'es',source_attribution:String(form.get('requested_by')||form.get('stakeholder')),source_confidence:'needs_validation',normalized_story:String(form.get('normalized_story')),acceptance_criteria:String(form.get('acceptance_criteria')).split('\n').map(x=>x.trim()).filter(Boolean),unresolved_questions:[],linked_cards:[]};setSaving('new');setError('');try{await api('/history-cards',token,{method:'POST',body:JSON.stringify(payload)});setNewCard(false);setNotice(`Se agregó una nueva versión de ${id}.`);await load();}catch(e){setError(e instanceof Error?e.message:'No se pudo guardar la historycard.');}finally{setSaving('');}}
+ return <div className="story-review-page">
+  <header className="story-review-heading"><div><span className="eyebrow">DISCOVERY · VALIDACIÓN COLABORATIVA</span><h2>Storycards</h2><p>Compara lo que pidió cada stakeholder con la historia interpretada, registra comentarios y marca su revisión.</p></div><div className="story-review-actions"><button className="button button-outline" onClick={()=>void load()} disabled={loading}>↻ Actualizar</button>{canCreate&&<button className="button button-primary" onClick={()=>setNewCard(true)}>＋ Nueva historycard</button>}</div></header>
+  <section className="story-review-summary"><article><small>STORYCARDS</small><strong>{latestCards.length}</strong><span>Versiones vigentes</span></article><article><small>TERMINADAS</small><strong>{finishedCount}</strong><span>Marcadas por el equipo</span></article><article><small>PENDIENTES</small><strong>{latestCards.length-finishedCount}</strong><span>Requieren revisión</span></article></section>
+  {error&&<p role="alert" className="error-message story-review-alert">{error}</p>}{notice&&<p role="status" className="story-review-notice">✓ {notice}</p>}
+  <section className="surface-card story-review-table-card"><div className="story-review-controls"><label className="field"><span>Buscar storycard</span><input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Número, relato, interpretación o autor…"/></label><label className="field"><span>Autor</span><select aria-label="Filtrar por autor" value={author} onChange={e=>setAuthor(e.target.value)}><option value="todas">Todos los autores</option>{authors.map(a=><option key={a}>{a}</option>)}</select></label><label className="field"><span>Estado</span><select value={status} onChange={e=>setStatus(e.target.value as typeof status)}><option value="todas">Todos</option><option value="pendiente">Pendientes</option><option value="terminada">Terminadas</option></select></label></div>
+   <div className="story-review-table-wrap"><table className="story-review-table"><thead><tr><th>N.º storycard</th><th>Storycard real</th><th>Storycard interpretado</th><th>Autor</th><th>Finished</th><th>Comments</th></tr></thead><tbody>{filtered.map(card=>{const r=latestReviews.get(card.story_id),same=r?.story_version===card.version,done=Boolean(same&&r!.finished),commentHistory=reviews.filter(x=>x.story_id===card.story_id&&x.story_version===card.version&&x.observations.trim());return <tr key={card.id}><td><b>{card.story_id}</b><small>v{card.version}</small></td><td><p className="literal-story">{card.source_literal}</p><details className="source-meta"><summary>Procedencia</summary><small>{card.source_type} · {card.source_reference}</small></details></td><td><p className="interpreted-story">{card.normalized_story}</p></td><td>{card.requested_by||UNKNOWN_AUTHOR}</td><td><fieldset className="finish-radios" disabled={saving===card.story_id}><legend className="sr-only">Estado de {card.story_id}</legend><label><input type="radio" name={`finished-${card.story_id}`} checked={!done} onChange={()=>void save(card,{finished:false})}/> Pendiente</label><label><input type="radio" name={`finished-${card.story_id}`} checked={done} onChange={()=>void save(card,{finished:true})}/> Terminada</label></fieldset></td><td><div className="comment-cell">{commentHistory.length?<><p>{commentHistory[commentHistory.length-1].observations}</p><small>{commentHistory.length} comentario{commentHistory.length===1?'':'s'} · {commentHistory[commentHistory.length-1].reviewed_by}</small></>:<span className="no-comment">Sin comentarios</span>}<button className="text-button" onClick={()=>{setCommentCard(card);setComment('');}}>＋ Agregar comentario</button></div></td></tr>;})}{!loading&&!filtered.length&&<tr><td colSpan={6} className="story-review-empty">No hay tarjetas para estos filtros.</td></tr>}</tbody></table></div><small className="story-review-table-foot">El relato real se conserva tal como fue registrado. Los cambios de estado y comentarios quedan en el historial.</small></section>
+  {commentCard&&<div className="review-modal-scrim" onMouseDown={e=>{if(e.target===e.currentTarget)setCommentCard(null);}}><section className="review-modal" role="dialog" aria-modal="true" aria-label={`Comentarios de ${commentCard.story_id}`}><header><div><span className="eyebrow">BITÁCORA · {commentCard.story_id}</span><h3>Comentarios de la storycard</h3><p>Los comentarios anteriores se conservan con autor y fecha.</p></div><button className="review-close" onClick={()=>setCommentCard(null)} aria-label="Cerrar">×</button></header><div className="comment-history">{reviews.filter(x=>x.story_id===commentCard.story_id&&x.observations.trim()).sort((a,b)=>b.review_version-a.review_version).map(x=><article key={x.id}><p>{x.observations}</p><small>{x.reviewed_by} · {dateLabel(x.created_at)}</small></article>)}{!reviews.some(x=>x.story_id===commentCard.story_id&&x.observations.trim())&&<p className="no-comment">Todavía no hay comentarios.</p>}</div><form onSubmit={e=>void addComment(e)}><label className="field"><span>Agregar comentario</span><textarea value={comment} onChange={e=>setComment(e.target.value)} maxLength={5000} required placeholder="Escribe la observación del stakeholder…"/></label><footer><button type="button" className="button button-outline" onClick={()=>setCommentCard(null)}>Cancelar</button><button className="button button-primary" disabled={!comment.trim()||Boolean(saving)}>{saving?'Guardando…':'Guardar comentario'}</button></footer></form></section></div>}
+  {newCard&&<div className="review-modal-scrim" onMouseDown={e=>{if(e.target===e.currentTarget)setNewCard(false);}}><section className="review-modal review-modal-wide" role="dialog" aria-modal="true" aria-label="Nueva historycard"><header><div><span className="eyebrow">DISCOVERY · NUEVA ITERACIÓN</span><h3>Agregar historycard</h3><p>El relato literal y la interpretación se guardan por separado.</p></div><button className="review-close" onClick={()=>setNewCard(false)} aria-label="Cerrar">×</button></header><form onSubmit={e=>void addHistoryCard(e)} className="new-history-form"><label className="field"><span>Número de storycard</span><input name="story_id" required placeholder="US-44" pattern="US-[0-9]+"/></label><label className="field"><span>Iteración</span><input name="iteration" required placeholder="Iteración 155 · 2026-11-17"/></label><label className="field"><span>Stakeholder</span><input name="stakeholder" required/></label><label className="field"><span>Autor solicitante</span><input name="requested_by" placeholder="Por identificar"/></label><label className="field"><span>Tipo de fuente</span><select name="source_type" required><option value="">Selecciona…</option>{['WhatsApp','Documento','Audio transcrito','Imagen','Entrevista','Validación'].map(x=><option key={x}>{x}</option>)}</select></label><label className="field"><span>Referencia de la fuente</span><input name="source_reference" required placeholder="Archivo, mensaje o referencia"/></label><label className="field span-two"><span>Storycard real · relato literal</span><textarea name="source_literal" required minLength={3}/></label><label className="field span-two"><span>Storycard interpretado</span><textarea name="normalized_story" required/></label><label className="field span-two"><span>Criterios de aceptación · uno por línea</span><textarea name="acceptance_criteria"/></label><footer className="span-two"><button type="button" className="button button-outline" onClick={()=>setNewCard(false)}>Cancelar</button><button className="button button-primary" disabled={saving==='new'}>{saving==='new'?'Guardando…':'Guardar historycard'}</button></footer></form></section></div>}
+ </div>;
 }
