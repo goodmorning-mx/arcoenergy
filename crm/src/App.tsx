@@ -593,10 +593,6 @@ export default function App() {
   const nav: Array<[View, string, string]> = [['inicio', '◫', 'Resumen'], ['clientes', '♙', 'Clientes'], ['cotizaciones', '▤', 'Cotizaciones'], ...(can('sales:read') ? [['ventas', '▣', 'Ventas / OT']] as Array<[View, string, string]> : []), ['seguimientos', '◷', 'Seguimientos'], ...(can('installations:read') ? [['proyectos','▧','Proyectos'], ['instalaciones', '⌂', 'Instalaciones']] as Array<[View, string, string]> : []), ...(can('inventory:read') ? [['inventario', '▦', 'Inventario']] as Array<[View, string, string]> : []), ...(can('expenses:read') ? [['gastos', '$', 'Gastos']] as Array<[View, string, string]> : []), ...(can('receivables:read') ? [['cobranza', '↙', 'Cobranza']] as Array<[View, string, string]> : []), ...(can('accounts:read') ? [['cuentas', '▤', 'Caja / bancos']] as Array<[View, string, string]> : []), ...(can('suppliers:read') ? [['proveedores', '♧', 'Proveedores']] as Array<[View, string, string]> : []), ...(can('purchases:read') ? [['compras', '▤', 'Compras / CxP']] as Array<[View, string, string]> : []), ...(can('reports:read') ? [['reportes', '▥', 'Reportes']] as Array<[View, string, string]> : []), ...(can('team:manage') ? [['catalogo', '⊞', 'Catálogo'], ['equipo', '♧', 'Equipo'], ['integraciones', '☁', 'Drive / integraciones'], ['historial', '↺', 'History cards']] as Array<[View, string, string]> : []), ...(can('history_cards:review') ? [['revisiones', '☷', 'Revisión storycards']] as Array<[View, string, string]> : [])];
   const visibleCustomers = customers.filter(item => `${item.name} ${item.city} ${item.email} ${item.phone}`.toLowerCase().includes(search.toLowerCase()));
 
-  useEffect(() => {
-    document.querySelector<HTMLElement>('.sidebar-link.selected')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [view]);
-
   return <div className="crm-app">
     <aside className="crm-sidebar">
       <a className="crm-brand" href="/"><span className="brand-mark">A</span><span>arco<span>energy</span><small>GESTIÓN SOLAR</small></span></a>
