@@ -4,3 +4,24 @@
 .inventory-nav-user{display:flex;align-items:center;gap:9px;padding:12px 4px 0;border-top:1px solid #2c3341;color:#eaf0f7}.inventory-nav-user>span{display:grid;place-items:center;width:31px;height:31px;border-radius:50%;background:#eaf0fc;color:#2459c7;font-weight:700}.inventory-nav-user div{min-width:0}.inventory-nav-user b,.inventory-nav-user small{display:block;max-width:165px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.inventory-nav-user b{font-size:11px}.inventory-nav-user small{margin-top:3px;color:#9ba5b4;font-size:9px}.inventory-nav-logout{margin-top:auto;margin-bottom:10px;padding:8px 10px;border:0;background:none;color:#aeb8c7;text-align:left;font-size:11px}@media(max-width:820px){.inventory-nav-user,.inventory-nav-logout{display:none}}
 .im-company-pending p{max-width:720px;color:#68768b;font-size:13px;line-height:1.6}.im-return-button{padding:5px 7px;border:0;background:transparent;color:#009775;font-size:11px;font-weight:600;white-space:nowrap}.im-return-button:hover{text-decoration:underline}.im-stock-pill.low{background:#fff0ef;color:#ed3434}
 .im-select-checkbox{width:16px;height:16px;accent-color:#2459c7;vertical-align:middle}.im-selection-bar{display:flex;align-items:center;justify-content:space-between;margin:-8px 0 14px;padding:10px 13px;border:1px solid #cfdaf1;border-radius:9px;background:#eff4ff;color:#2459c7;font-size:12px}.im-selection-bar button{border:0;background:none;color:#2459c7;font-size:11px;font-weight:700}
+
+/* Inventory is a CRM module: keep the shared shell and present its sections inside the center workspace. */
+.inventory-module{display:block;min-height:0;overflow:hidden;border:1px solid #d9dfe7;border-radius:14px;background:#f5f6f8;box-shadow:0 2px 8px #182b3f08}
+.inventory-module-nav{position:static;inset:auto;height:auto;display:flex;flex-direction:row;align-items:center;gap:0;padding:10px 12px 0;background:#fff;color:#243247;border-bottom:1px solid #e1e6ec;z-index:auto}
+.inventory-module-brand,.inventory-nav-logout,.inventory-nav-user{display:none!important}
+.inventory-module-nav nav{display:flex;flex-direction:row;align-items:center;gap:5px;min-width:0;overflow-x:auto;overflow-y:hidden;padding:4px;background:#eef1f4;border-radius:10px;scrollbar-width:thin}
+.inventory-module-nav nav button{height:36px;flex:none;gap:7px;padding:0 11px;border:0;border-radius:8px;background:transparent;color:#526174;font-size:12px;white-space:nowrap}
+.inventory-module-nav nav button:hover{background:#e4e9ee;color:#26384a}
+.inventory-module-nav nav button.active{background:#208e6d;color:#fff;box-shadow:0 2px 5px #12634426}
+.inventory-module-nav nav button.inventory-cross-nav{background:#fff;color:#536276;border:1px solid #e0e5eb}
+.inventory-module-nav nav button.inventory-cross-nav:hover{background:#f7f9fa}
+.inventory-module-nav nav i{width:1px;height:22px;flex:none;margin:0 3px;background:#cdd4dc}
+.inventory-module-main{min-width:0}
+.inventory-module-top{display:none}
+.inventory-module-content{max-width:none;margin:0;padding:20px 18px 24px}
+.inventory-page-title{margin-bottom:18px}
+.inventory-page-title h2{margin:0 0 4px;font-size:19px;line-height:1.25;font-weight:750;letter-spacing:-.25px}
+.inventory-module .im-dashboard-grid{grid-template-columns:minmax(0,2fr) minmax(260px,1fr)}
+.inventory-module .im-table-card{border-radius:10px}
+@media(max-width:1100px){.inventory-module .im-dashboard-grid{grid-template-columns:minmax(0,1.5fr) minmax(240px,1fr)}}
+@media(max-width:820px){.inventory-module-nav{position:static;inset:auto;height:auto;padding:9px 8px 0}.inventory-module-nav nav{height:auto;justify-content:flex-start;overflow-x:auto;overflow-y:hidden}.inventory-module-nav nav button{height:36px;min-width:max-content;flex:0 0 auto;flex-direction:row;gap:7px;padding:0 10px;font-size:11px}.inventory-module-nav nav button span{font-size:15px}.inventory-module-nav nav i{display:block}.inventory-module-content{padding:16px 11px 20px}.inventory-module .im-dashboard-grid,.inventory-module .im-report-grid{grid-template-columns:1fr}.inventory-module .im-recent{grid-column:auto}}
