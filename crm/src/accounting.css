@@ -27,3 +27,20 @@
 .accounting-income-line{display:grid;grid-template-columns:minmax(220px,1fr) minmax(105px,.46fr) 70px minmax(105px,.46fr) 70px;align-items:center;gap:10px;min-width:690px;padding:7px 10px;border-bottom:1px solid #edf0ee}
 .accounting-income-line>span{color:#26372e}.accounting-income-line>b,.accounting-income-line>small{text-align:right;white-space:nowrap}.accounting-income-line>small{color:#718078;font-size:11px}.accounting-income-head{background:#f3f8f6;border-bottom:2px solid #91a298;color:#59685f;font-weight:750;text-transform:uppercase;font-size:10px;letter-spacing:.06em}.accounting-income-head span{font-weight:750}.accounting-income-section{padding:11px 10px 5px;font-weight:800;font-style:italic;letter-spacing:.12em;color:#34483d}.accounting-income-subsection{padding:7px 10px 3px 20px;color:#58685e;font-size:11px;font-weight:750;text-transform:uppercase;letter-spacing:.06em}.accounting-income-line.indent{padding-left:24px}.accounting-income-line.emphasis{border-top:1px solid #aab7af;font-weight:800}.accounting-income-line.emphasis>b{border-bottom:2px solid #34483d;padding-bottom:3px}.accounting-income-line:last-child{margin-top:9px;padding-top:12px;border-top:2px solid #34483d;color:#12261c;font-weight:850;font-size:14px}
 @media(max-width:700px){.accounting-income-sheet{padding:16px}.accounting-income-table{margin:0 -4px}.accounting-income-line{gap:7px;padding-left:7px;padding-right:7px}.accounting-formal-title b{font-size:17px}}
+
+/* Vista limpia de Balance General: el reporte ocupa el panel central completo. */
+.accounting-balance-sheet{padding:14px 18px}
+.accounting-formal-title{padding:8px 12px 10px;margin-bottom:12px}
+.accounting-formal-title strong{font-size:10px}
+.accounting-formal-title b{font-size:17px}
+.accounting-formal-title span{font-size:11px}
+.accounting-balance-columns{gap:22px}
+.accounting-balance-column>h3{padding:8px 10px;font-size:11px}
+.accounting-balance-column .accounting-account{min-height:31px;padding-top:4px;padding-bottom:4px;gap:7px;font-size:11px}
+.accounting-balance-column .accounting-link{font-size:11px}
+.accounting-balance-column .accounting-link small{font-size:9px;margin-top:1px}
+.accounting-balance-column .accounting-account.group{font-size:11px}
+.accounting-formal-total{padding:8px 10px;font-size:11px}
+.accounting-balance-check{margin-top:10px;padding-top:8px;font-size:10px}
+.page-content.balance-report-only{padding-top:12px}
+@media(max-width:760px){.accounting-balance-sheet{padding:12px}.accounting-balance-columns{gap:14px}.accounting-balance-column>h3{font-size:10px}.accounting-balance-column .accounting-account{min-height:29px;padding-top:3px;padding-bottom:3px;font-size:10px}.accounting-balance-column .accounting-link{font-size:10px}.accounting-formal-title b{font-size:15px}.page-content.balance-report-only{padding-top:12px}}
