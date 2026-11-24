@@ -2290,3 +2290,5 @@ La integración deja a stakeholders la revisión de valuación/costo, stock nega
 **Fundamento:** consulta de IAS 1 e IAS 7 en IFRS. IAS 1 presenta el estado de situación financiera y el estado de resultados para una fecha/periodo; IAS 7 presenta los flujos del periodo clasificados en operación, inversión y financiamiento. Ver [docs/accounting-model.md](../accounting-model.md).
 
 **Validación pendiente del stakeholder:** el contador debe confirmar clasificación de gastos, saldos de apertura de pasivos/capital, costo contable al consumir inventario, compra de materiales, tratamiento de impuestos y vínculo de las facturas. Las tarjetas se insertan sin marcar Finished.
+
+**Aclaración de formato solicitada por stakeholder (2026-11-24):** “el balance general debe tener este formato, 2 columas 1 para activo y otra para pasivo + capital”. La referencia visual compartida presenta Activo en la columna izquierda y Pasivo + Capital en la derecha, con fecha de corte, agrupaciones, subtotales y totales enfrentados. Se conserva como precisión de US-47; la vista CRM aplica dos columnas adaptables y mantiene accesibles los mayores de cada cuenta.
