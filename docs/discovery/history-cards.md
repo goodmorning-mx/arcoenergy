@@ -2248,4 +2248,45 @@ La integración deja a stakeholders la revisión de valuación/costo, stock nega
 
 **Solución implementada:** submenú de Inventario en el sidebar común y módulo dentro del panel central; nuevos campos de proyecto y vínculo de movimientos con proyecto; folio no único e identificador de origen único; tabla de lotes de importación; importador versionado que consume el ZIP en runtime y crea los productos históricos faltantes como inactivos. La migración agrega la tarjeta a `ae_history_cards` y su checklist/solución a `ae_history_card_reviews`. La storycard queda sin Finished hasta la verificación de stakeholders.
 
-**Pruebas:** backend completo (336); CRM build y pruebas (4); importación en SQLite temporal: 38 productos de catálogo, cinco históricos, 332 movimientos, un folio con varios renglones, stock estable y valor reconciliado. La importación en DEV queda pendiente del merge/despliegue de esta iteración.
+**Pruebas:** backend completo (339); CRM build y pruebas (4); migración contable en SQLite; pólizas balanceadas y reconciliación de estados. Importación DEV: 43 artículos totales (38 de catálogo y cinco históricos inactivos), 332 movimientos, 24 proyectos, cinco proveedores, 1,290 unidades y $388,474.66; un folio incluye varios renglones. El stock actual no se volvió a sumar ni restar.
+
+**Despliegue e importación DEV:** ArcoEnergy PR [#246](https://github.com/goodmorning-mx/arcoenergy/pull/246), merge `19cd9b5fcb10f70f4183ec7b363ad96689cbb057`; CI completó las pruebas de CRM, frontend, backend, Next.js e imágenes Docker. API `/version` reporta schema `202611240161`; Coolify marcó healthcheck saludable y terminó el rolling update. La importación creó un único lote idempotente y se verificaron conteos, stock y valor desde PostgreSQL.
+
+## Contabilidad · iteración de estados financieros
+
+### US-47 · Balance general, subcuentas de clientes y calendario de cobranza
+
+**Autor:** stakeholder Arco Energy; nombre por confirmar.
+**Fuente literal:** “necesito que agregues para el modulo de contabilidad una hoja con forma de balance general; este balance general va a poder agregar secciones; cuentas; y subcuentas. en donde vamos a ser capaces de agregar la cuenta de cuentas por cobrar y subcuentas que serian los nombres de los clientes. despues cuando damos click a las subcuentas se abre los modals con el reporte de movimientos de ese cliente. [...] agregar un calendario al modulo de cobranza donde vemos los clientes y vemos cuando es el siguiente pago, su saldo actual, su reporte de movimientos.”
+
+**Interpretación:** Contabilidad presenta activos, pasivos, patrimonio y subcuentas configurables. Cuentas por cobrar se desglosa por cliente, y cada subcuenta abre un mayor. Cobranza suma una agenda mensual de pagos con saldo y acceso a detalle.
+
+**Solución de esta iteración:** vista contable en el panel central, árbol de cuentas, subcuentas relacionadas a clientes, mayor por cuenta, calendario mensual con cuotas y modal de cargos/abonos de cada cliente. Cuotas y pagos actuales se conservan en el módulo operativo y se muestran por separado del mayor contable.
+
+**Criterios:** crear secciones/cuentas/subcuentas; ligar clientes a CxC; abrir detalle de cliente; navegar meses y días de vencimiento; consultar saldo y pagos; balance cuadra con activos contra pasivo, patrimonio y resultado.
+
+### US-48 · Bancos, cargos, abonos y estados financieros desde pólizas
+
+**Autor:** stakeholder Arco Energy; nombre por confirmar.
+**Fuente literal:** “tambien vamos a tener las subcuentas de tarjetas que seria santander, banco azteca, etc. esa iria en la cuenta bancos y tambien ya deberia estar en el balance general; las cuentas y subcuentas se agregan directamente desde el balance general en el modulo contabilidad. y como un sistema contable tienen que tener igualmente cargos y abonos.”
+
+**Interpretación:** La sección Caja y bancos contiene subcuentas por institución, y el sistema exige doble partida para capturar movimientos que alimentan los reportes financieros sin reescribir registros operativos.
+
+**Solución de esta iteración:** pólizas append-only, folios, fecha, referencia, cuenta, proyecto opcional, cargos y abonos balanceados; las cuentas de bancos/caja se vinculan al módulo de cuentas. El balance general, resultados y flujo se calculan desde el mismo libro. Los saldos previos de caja/banco, cartera abierta e inventario se registran como apertura financiera.
+
+**Criterios:** mínimo dos renglones por póliza; cada renglón es cargo o abono; cargos y abonos cuadran; el mayor acumula cargos/abonos; flujo clasifica operación/inversión/financiamiento; transferencias entre bancos no cambian el efectivo total.
+
+### US-49 · Proyectos y estado de resultados por operación
+
+**Autor:** Mario Groso · contador.
+**Fuente literal:** “a su vamos a necesitar el modulod de proyectos, donde cada proyecto tiene relacionado pues su factura; sus ventas; sus gastos que es lo mas importante >GASTOS FINANCIEROS: Intereses y comisiones bancarias >GASTO PERSONALE Y OTROS: Son aquellos que no tienen nada que ver con la operación, estos no entran en los estados financieros si no hasta el final, como quien dice se restan ya despues del resultado [...] luego luego empezando quiero mi botonsote de \"REGISTRAR MOVIMIENTO y asi vamos a poder tener el segundo estado financiero que seria el estado de resultados en forma de reporte tambien” (WhatsApp, 5/11/2026).
+
+**Interpretación:** Las pólizas deben poder asociarse a un proyecto y el reporte por periodo debe separar costo de venta, operación, gastos financieros y personales/otros después del resultado operativo.
+
+**Solución de esta iteración:** acción visible **Registrar movimiento**, selector opcional de proyecto, estado de resultados por mes/proyecto y sección de flujo. Venta nueva y cobranza nueva producen pólizas vinculadas al proyecto; gastos, compras y consumos anteriores no se convierten automáticamente hasta confirmar con el contador sus cuentas y momento de reconocimiento.
+
+**Criterios:** seleccionar periodo y proyecto; identificar ventas e ingresos; mostrar costo de venta y gastos operativos; separar intereses/comisiones y gastos personales/otros; mostrar resultado operativo y resultado del periodo; mantener pólizas balanceadas.
+
+**Fundamento:** consulta de IAS 1 e IAS 7 en IFRS. IAS 1 presenta el estado de situación financiera y el estado de resultados para una fecha/periodo; IAS 7 presenta los flujos del periodo clasificados en operación, inversión y financiamiento. Ver [docs/accounting-model.md](../accounting-model.md).
+
+**Validación pendiente del stakeholder:** el contador debe confirmar clasificación de gastos, saldos de apertura de pasivos/capital, costo contable al consumir inventario, compra de materiales, tratamiento de impuestos y vínculo de las facturas. Las tarjetas se insertan sin marcar Finished.

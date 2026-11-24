@@ -33,7 +33,7 @@ from app.config import get_settings
 from app.database import create_database_engine
 from app.drive_storage import download_private_file, folder_status, save_private_file, save_quote_pdf
 from app.drive_archive import archive_business_snapshot
-from app.models import Activity, BusinessSnapshotRun, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, HistoryCardReview, Installation, InstallationAssignment, InventoryCategory, InventoryItem, InventoryMovement, OfflineOperation, Project, ProjectExpense, ProfitabilityAdjustment, Purchase, PurchaseCorrection, PurchaseLine, PushSubscription, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
+from app.models import AccountingAccount, AccountingEntry, AccountingLine, Activity, BusinessSnapshotRun, CashMovement, Customer, CustomerPayment, FinancialAccount, FollowUp, HistoryCard, HistoryCardReview, Installation, InstallationAssignment, InventoryCategory, InventoryItem, InventoryMovement, OfflineOperation, Project, ProjectExpense, ProfitabilityAdjustment, Purchase, PurchaseCorrection, PurchaseLine, PushSubscription, Quote, QuotePackage, Receivable, Sale, SaleCorrection, Supplier, SupplierPayment, WorkOrderMaterial
 from app.reminders import send_due_followup_pushes
 from app.roles import ROLE_LABELS, ROLE_PERMISSIONS, canonical_role
 from app.time_utils import BUSINESS_TIMEZONE, business_today
@@ -886,6 +886,47 @@ class CashTransferInput(BaseModel):
     amount: Decimal = Field(gt=0, max_digits=14, decimal_places=2)
     description: str = Field(min_length=2, max_length=2000)
     occurred_on: date = Field(default_factory=business_today)
+
+
+class AccountingAccountInput(BaseModel):
+    code: str = Field(min_length=1, max_length=40)
+    name: str = Field(min_length=2, max_length=180)
+    account_type: Literal["asset", "liability", "equity", "income", "expense"]
+    parent_id: str | None = None
+    linked_customer_id: str | None = None
+    linked_financial_account_id: str | None = None
+    cash_flow_activity: Literal["operating", "investing", "financing", "exclude"] = "operating"
+    is_group: bool = False
+
+
+class AccountingLineInput(BaseModel):
+    account_id: str
+    customer_id: str | None = None
+    memo: str = Field(default="", max_length=240)
+    debit: Decimal = Field(default=Decimal("0"), ge=0, max_digits=14, decimal_places=2)
+    credit: Decimal = Field(default=Decimal("0"), ge=0, max_digits=14, decimal_places=2)
+
+    @model_validator(mode="after")
+    def one_side_only(self):
+        if (self.debit > 0) == (self.credit > 0):
+            raise ValueError("Cada renglón debe tener un cargo o un abono, pero no ambos.")
+        return self
+
+
+class AccountingEntryInput(BaseModel):
+    occurred_on: date = Field(default_factory=business_today)
+    description: str = Field(min_length=3, max_length=500)
+    reference: str = Field(default="", max_length=180)
+    project_id: str | None = None
+    lines: list[AccountingLineInput] = Field(min_length=2, max_length=40)
+
+    @model_validator(mode="after")
+    def balanced(self):
+        debit = sum((line.debit for line in self.lines), Decimal("0"))
+        credit = sum((line.credit for line in self.lines), Decimal("0"))
+        if debit <= 0 or debit != credit:
+            raise ValueError("Los cargos y abonos deben ser iguales y mayores a cero.")
+        return self
 
 
 class SupplierInput(BaseModel):
@@ -1872,6 +1913,15 @@ def reverse_sale(sale_id: str, data: PaymentCorrectionInput, identity: AuthIdent
         sale_id=sale.id, cash_movement_id=reversal.id if reversal else None, amount=sale.total,
         reason=data.reason, created_by=identity.email or "",
     ))
+    accounting_sale = db.scalar(select(AccountingEntry).where(AccountingEntry.source_type == "sale", AccountingEntry.source_id == sale.id))
+    if accounting_sale:
+        original_lines = db.scalars(select(AccountingLine).where(AccountingLine.entry_id == accounting_sale.id)).all()
+        db.add(_make_accounting_entry(
+            description=f"Reversa contable de venta {sale.folio}: {data.reason}", occurred_on=business_today(),
+            reference=sale.folio, source_type="sale_reversal", source_id=sale.id,
+            project_id=accounting_sale.project_id, created_by=identity.email or "",
+            lines=[AccountingLine(account_id=line.account_id, customer_id=line.customer_id, memo=f"Reversa · {line.memo}" if line.memo else "Reversa de venta", debit=line.credit, credit=line.debit) for line in original_lines],
+        ))
     installation.status = "cancelled"
     for material in materials:
         item = db.get(InventoryItem, material.item_id)
@@ -1986,8 +2036,24 @@ def create_sale(data: SaleInput, identity: AuthIdentity = Depends(identity_depen
         db.add(CashMovement(account_id=account.id, direction="in", amount=quote.total,
             category="Venta de contado", description=f"{customer.name} · {sale_folio}",
             occurred_on=business_today(), source_type="sale", source_id=sale.id, created_by=identity.email or ""))
+        bank_ledger = _ensure_accounting_bank_account(db, account, identity.email or "")
+        revenue_ledger = _ensure_accounting_revenue_account(db, identity.email or "")
+        if bank_ledger and revenue_ledger:
+            db.add(_make_accounting_entry(
+                description=f"Venta de contado · {customer.name}", occurred_on=business_today(), reference=sale_folio,
+                source_type="sale", source_id=sale.id, project_id=project.id, created_by=identity.email or "",
+                lines=[AccountingLine(account_id=bank_ledger.id, debit=quote.total, credit=0), AccountingLine(account_id=revenue_ledger.id, debit=0, credit=quote.total)],
+            ))
     elif data.due_date is not None:
+        receivable_ledger = _ensure_accounting_customer_account(db, customer, identity.email or "")
+        revenue_ledger = _ensure_accounting_revenue_account(db, identity.email or "")
         total_due = Decimal(quote.total).quantize(Decimal("0.01"))
+        if receivable_ledger and revenue_ledger:
+            db.add(_make_accounting_entry(
+                description=f"Venta a crédito · {customer.name}", occurred_on=business_today(), reference=sale_folio,
+                source_type="sale", source_id=sale.id, project_id=project.id, created_by=identity.email or "",
+                lines=[AccountingLine(account_id=receivable_ledger.id, customer_id=customer.id, debit=total_due, credit=0), AccountingLine(account_id=revenue_ledger.id, debit=0, credit=total_due)],
+            ))
         regular_amount = (total_due / data.installment_count).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
         for installment_number in range(1, data.installment_count + 1):
             amount = regular_amount if installment_number < data.installment_count else total_due - regular_amount * (data.installment_count - 1)
@@ -3221,10 +3287,323 @@ def list_financial_accounts(db: Session = Depends(get_db)):
     return result
 
 
+def _accounting_account_row(account: AccountingAccount, accounts_by_id: dict[str, AccountingAccount]):
+    parent = accounts_by_id.get(account.parent_id or "")
+    return {
+        **_serialize(account),
+        "parent_name": parent.name if parent else None,
+        "customer_name": None,
+        "financial_account_name": None,
+    }
+
+
+def _ensure_accounting_customer_account(db: Session, customer: Customer, email: str) -> AccountingAccount | None:
+    parent = db.scalar(select(AccountingAccount).where(AccountingAccount.code == "1120"))
+    if parent is None:
+        return None
+    existing = db.scalar(select(AccountingAccount).where(AccountingAccount.linked_customer_id == customer.id))
+    if existing:
+        return existing
+    account = AccountingAccount(
+        code=f"1120-{customer.id[:12]}", name=customer.name, account_type="asset",
+        parent_id=parent.id, linked_customer_id=customer.id, cash_flow_activity="operating",
+        created_by=email,
+    )
+    db.add(account)
+    db.flush()
+    return account
+
+
+def _ensure_accounting_bank_account(db: Session, account: FinancialAccount, email: str) -> AccountingAccount | None:
+    existing = db.scalar(select(AccountingAccount).where(AccountingAccount.linked_financial_account_id == account.id))
+    if existing:
+        return existing
+    parent = db.scalar(select(AccountingAccount).where(AccountingAccount.code == "1110"))
+    if parent is None:
+        return None
+    row = AccountingAccount(
+        code=f"1110-{account.id[:12]}", name=account.name, account_type="asset", parent_id=parent.id,
+        linked_financial_account_id=account.id, cash_flow_activity="exclude", created_by=email,
+    )
+    db.add(row); db.flush()
+    return row
+
+
+def _ensure_accounting_revenue_account(db: Session, email: str) -> AccountingAccount | None:
+    existing = db.scalar(select(AccountingAccount).where(AccountingAccount.code == "4100"))
+    if existing:
+        return existing
+    parent = db.scalar(select(AccountingAccount).where(AccountingAccount.code == "4000"))
+    if parent is None:
+        return None
+    row = AccountingAccount(code="4100", name="Ventas de sistemas solares", account_type="income", parent_id=parent.id, cash_flow_activity="operating", created_by=email)
+    db.add(row); db.flush()
+    return row
+
+
+def _make_accounting_entry(*, description: str, occurred_on: date, reference: str, source_type: str, source_id: str, project_id: str | None, created_by: str, lines: list[AccountingLine]) -> AccountingEntry:
+    return AccountingEntry(
+        folio=f"ASI-{occurred_on:%y%m%d}-{uuid4().hex[:6].upper()}", occurred_on=occurred_on,
+        description=description, reference=reference, source_type=source_type, source_id=source_id,
+        project_id=project_id, created_by=created_by, lines=lines,
+    )
+
+
+@router.get("/accounting/accounts", dependencies=[Depends(require_permissions(auth_service, "accounts:read"))])
+def list_accounting_accounts(db: Session = Depends(get_db)):
+    rows = db.scalars(select(AccountingAccount).where(AccountingAccount.active.is_(True)).order_by(AccountingAccount.code)).all()
+    by_id = {row.id: row for row in rows}
+    customer_ids = {row.linked_customer_id for row in rows if row.linked_customer_id}
+    financial_ids = {row.linked_financial_account_id for row in rows if row.linked_financial_account_id}
+    customers = {row.id: row.name for row in db.scalars(select(Customer).where(Customer.id.in_(customer_ids))).all()} if customer_ids else {}
+    financials = {row.id: row.name for row in db.scalars(select(FinancialAccount).where(FinancialAccount.id.in_(financial_ids))).all()} if financial_ids else {}
+    result = []
+    for row in rows:
+        payload = _accounting_account_row(row, by_id)
+        payload["customer_name"] = customers.get(row.linked_customer_id)
+        payload["financial_account_name"] = financials.get(row.linked_financial_account_id)
+        result.append(payload)
+    return result
+
+
+@router.post("/accounting/accounts", status_code=201, dependencies=[Depends(require_permissions(auth_service, "accounts:manage"))])
+def create_accounting_account(data: AccountingAccountInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    parent = db.get(AccountingAccount, data.parent_id) if data.parent_id else None
+    if data.parent_id and parent is None:
+        raise HTTPException(404, "La cuenta superior no existe.")
+    if parent and (not parent.is_group or parent.account_type != data.account_type):
+        raise HTTPException(422, "El padre debe ser una sección del mismo tipo contable.")
+    if not data.is_group and not parent:
+        raise HTTPException(422, "Selecciona la sección donde se agregará la cuenta.")
+    if data.is_group and (data.linked_customer_id or data.linked_financial_account_id):
+        raise HTTPException(422, "Una sección no puede vincularse a cliente ni cuenta bancaria.")
+    if data.linked_customer_id and db.get(Customer, data.linked_customer_id) is None:
+        raise HTTPException(404, "El cliente relacionado no existe.")
+    if data.linked_financial_account_id and db.get(FinancialAccount, data.linked_financial_account_id) is None:
+        raise HTTPException(404, "La cuenta de caja o banco relacionada no existe.")
+    if data.linked_customer_id and data.account_type != "asset":
+        raise HTTPException(422, "Las subcuentas de clientes por cobrar deben ser de activo.")
+    if db.scalar(select(AccountingAccount.id).where(AccountingAccount.code == data.code.strip())):
+        raise HTTPException(409, "El código contable ya está en uso.")
+    if data.linked_financial_account_id and db.scalar(select(AccountingAccount.id).where(AccountingAccount.linked_financial_account_id == data.linked_financial_account_id)):
+        raise HTTPException(409, "Esta cuenta de caja o banco ya está vinculada a una subcuenta contable.")
+    account_values = {**data.model_dump(), "code": data.code.strip(), "name": data.name.strip()}
+    if data.linked_financial_account_id:
+        account_values["cash_flow_activity"] = "exclude"
+    row = AccountingAccount(**account_values, created_by=identity.email or "")
+    db.add(row)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "No se pudo agregar la cuenta por un conflicto con otra cuenta.")
+    db.refresh(row)
+    all_accounts = {item.id: item for item in db.scalars(select(AccountingAccount)).all()}
+    return _accounting_account_row(row, all_accounts)
+
+
+@router.get("/accounting/accounts/{account_id}/movements", dependencies=[Depends(require_permissions(auth_service, "accounts:read"))])
+def accounting_account_movements(account_id: str, customer_id: str | None = None, db: Session = Depends(get_db)):
+    account = db.get(AccountingAccount, account_id)
+    if account is None:
+        raise HTTPException(404, "Cuenta contable no encontrada.")
+    if account.linked_customer_id and customer_id and account.linked_customer_id != customer_id:
+        raise HTTPException(422, "El cliente no corresponde a esta subcuenta.")
+    effective_customer = account.linked_customer_id or customer_id
+    query = select(AccountingLine, AccountingEntry).join(AccountingEntry, AccountingEntry.id == AccountingLine.entry_id).where(
+        AccountingLine.account_id == account_id, AccountingEntry.status == "posted",
+    )
+    if effective_customer:
+        query = query.where(AccountingLine.customer_id == effective_customer)
+    rows = db.execute(query.order_by(AccountingEntry.occurred_on, AccountingEntry.created_at, AccountingEntry.folio)).all()
+    running = Decimal("0")
+    natural_debit = account.account_type in ("asset", "expense")
+    movements = []
+    for line, entry in rows:
+        running += Decimal(line.debit) - Decimal(line.credit) if natural_debit else Decimal(line.credit) - Decimal(line.debit)
+        movements.append({"folio": entry.folio, "entry_id": entry.id, "occurred_on": entry.occurred_on, "description": entry.description, "reference": entry.reference, "debit": line.debit, "credit": line.credit, "balance": running, "memo": line.memo, "project_id": entry.project_id})
+    customer = db.get(Customer, effective_customer) if effective_customer else None
+    return {"account": {"id": account.id, "code": account.code, "name": account.name}, "customer": {"id": customer.id, "name": customer.name} if customer else None, "balance": running, "movements": movements}
+
+
+@router.get("/accounting/entries", dependencies=[Depends(require_permissions(auth_service, "accounts:read"))])
+def list_accounting_entries(limit: int = Query(default=100, ge=1, le=500), db: Session = Depends(get_db)):
+    entries = db.scalars(select(AccountingEntry).where(AccountingEntry.status == "posted").order_by(AccountingEntry.occurred_on.desc(), AccountingEntry.created_at.desc()).limit(limit)).all()
+    result = []
+    for entry in entries:
+        lines = db.scalars(select(AccountingLine).where(AccountingLine.entry_id == entry.id)).all()
+        result.append({**_serialize(entry), "debit_total": sum((Decimal(line.debit) for line in lines), Decimal("0")), "credit_total": sum((Decimal(line.credit) for line in lines), Decimal("0")), "line_count": len(lines)})
+    return result
+
+
+@router.post("/accounting/entries", status_code=201, dependencies=[Depends(require_permissions(auth_service, "accounts:write"))])
+def create_accounting_entry(data: AccountingEntryInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    accounts = {row.id: row for row in db.scalars(select(AccountingAccount).where(AccountingAccount.active.is_(True))).all()}
+    if any(line.account_id not in accounts or accounts[line.account_id].is_group for line in data.lines):
+        raise HTTPException(422, "Selecciona únicamente cuentas contables activas que permitan registrar movimientos.")
+    for line in data.lines:
+        account = accounts[line.account_id]
+        if line.customer_id and db.get(Customer, line.customer_id) is None:
+            raise HTTPException(404, "Un cliente de la póliza no existe.")
+        if account.linked_customer_id and line.customer_id != account.linked_customer_id:
+            raise HTTPException(422, "Selecciona el cliente asociado a la subcuenta por cobrar.")
+        if line.customer_id and account.account_type != "asset":
+            raise HTTPException(422, "El cliente solo puede asociarse a una cuenta de activo.")
+    if data.project_id and db.get(Project, data.project_id) is None:
+        raise HTTPException(404, "El proyecto relacionado no existe.")
+    entry = AccountingEntry(
+        folio=f"ASI-{data.occurred_on:%y%m%d}-{uuid4().hex[:6].upper()}",
+        occurred_on=data.occurred_on, description=data.description.strip(), reference=data.reference.strip(),
+        project_id=data.project_id, source_type="manual", created_by=identity.email or "",
+        lines=[AccountingLine(**line.model_dump()) for line in data.lines],
+    )
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    return {**_serialize(entry), "lines": [_serialize(line) for line in entry.lines]}
+
+
+def _account_root_code(account: AccountingAccount, by_id: dict[str, AccountingAccount]) -> str:
+    current = account
+    while current.parent_id and current.parent_id in by_id:
+        current = by_id[current.parent_id]
+    return current.code
+
+
+@router.get("/accounting/statements", dependencies=[Depends(require_permissions(auth_service, "accounts:read"))])
+def accounting_statements(from_date: date | None = None, to_date: date | None = None, project_id: str | None = None, db: Session = Depends(get_db)):
+    end_date = to_date or business_today()
+    start_date = from_date or end_date.replace(day=1)
+    if start_date > end_date:
+        raise HTTPException(422, "La fecha inicial debe ser anterior o igual a la final.")
+    accounts = db.scalars(select(AccountingAccount).where(AccountingAccount.active.is_(True)).order_by(AccountingAccount.code)).all()
+    by_id = {account.id: account for account in accounts}
+    all_rows = db.execute(
+        select(AccountingLine, AccountingEntry).join(AccountingEntry, AccountingEntry.id == AccountingLine.entry_id)
+        .where(AccountingEntry.status == "posted", AccountingEntry.occurred_on <= end_date)
+    ).all()
+    period_rows = [(line, entry) for line, entry in all_rows if entry.occurred_on >= start_date and (project_id is None or entry.project_id == project_id)]
+    activity_totals = {key: {"inflows": Decimal("0"), "outflows": Decimal("0")} for key in ("operating", "investing", "financing")}
+    account_period: dict[str, dict[str, Decimal]] = {}
+    for line, entry in all_rows:
+        totals = account_period.setdefault(line.account_id, {"debit": Decimal("0"), "credit": Decimal("0")})
+        totals["debit"] += Decimal(line.debit)
+        totals["credit"] += Decimal(line.credit)
+    account_period_scope: dict[str, dict[str, Decimal]] = {}
+    for line, entry in period_rows:
+        totals = account_period_scope.setdefault(line.account_id, {"debit": Decimal("0"), "credit": Decimal("0")})
+        totals["debit"] += Decimal(line.debit)
+        totals["credit"] += Decimal(line.credit)
+    cash_accounts = {account.id for account in accounts if account.account_type == "asset" and not account.is_group and _has_ancestor_code(account, by_id, "1110")}
+    entries: dict[str, list[AccountingLine]] = {}
+    for line, entry in period_rows:
+        # Opening balances establish the starting position; they are not period cash flows.
+        if entry.source_type == "financial_account_opening":
+            continue
+        entries.setdefault(entry.id, []).append(line)
+    for lines in entries.values():
+        cash_lines = [line for line in lines if line.account_id in cash_accounts]
+        counterpart_lines = [line for line in lines if line.account_id not in cash_accounts]
+        if not cash_lines or not counterpart_lines:
+            continue
+        counterpart_debit = sum((Decimal(line.debit) for line in counterpart_lines), Decimal("0"))
+        counterpart_credit = sum((Decimal(line.credit) for line in counterpart_lines), Decimal("0"))
+        for line in counterpart_lines:
+            account = by_id[line.account_id]
+            if account.cash_flow_activity not in activity_totals:
+                continue
+            weight_debit = Decimal(line.debit) / counterpart_debit if counterpart_debit else Decimal("0")
+            weight_credit = Decimal(line.credit) / counterpart_credit if counterpart_credit else Decimal("0")
+            cash_in = sum((Decimal(item.debit) for item in cash_lines), Decimal("0"))
+            cash_out = sum((Decimal(item.credit) for item in cash_lines), Decimal("0"))
+            activity_totals[account.cash_flow_activity]["inflows"] += cash_in * weight_credit
+            activity_totals[account.cash_flow_activity]["outflows"] += cash_out * weight_debit
+    def normalized_balance(account: AccountingAccount, totals: dict[str, Decimal]) -> Decimal:
+        return totals["debit"] - totals["credit"] if account.account_type in ("asset", "expense") else totals["credit"] - totals["debit"]
+    account_rows = []
+    for account in accounts:
+        totals = account_period.get(account.id, {"debit": Decimal("0"), "credit": Decimal("0")})
+        balance = normalized_balance(account, totals)
+        if not account.is_group and balance:
+            account_rows.append({"id": account.id, "code": account.code, "name": account.name, "account_type": account.account_type, "parent_id": account.parent_id, "balance": balance})
+    totals_by_type = {key: sum((row["balance"] for row in account_rows if row["account_type"] == key), Decimal("0")) for key in ("asset", "liability", "equity", "income", "expense")}
+    net_result = totals_by_type["income"] - totals_by_type["expense"]
+    period_account_rows = []
+    for account in accounts:
+        totals = account_period_scope.get(account.id, {"debit": Decimal("0"), "credit": Decimal("0")})
+        balance = normalized_balance(account, totals)
+        if not account.is_group and balance and account.account_type in ("income", "expense"):
+            period_account_rows.append({"id": account.id, "code": account.code, "name": account.name, "account_type": account.account_type, "parent_id": account.parent_id, "balance": balance})
+    result_by_class = {key: Decimal("0") for key in ("income", "cost_of_sales", "operating_expenses", "financial_expenses", "personal_other")}
+    for row in period_account_rows:
+        account = by_id[row["id"]]
+        root = _account_root_code(account, by_id)
+        if account.account_type == "income":
+            result_by_class["income"] += row["balance"]
+        elif account.account_type == "expense":
+            bucket = {"5000": "cost_of_sales", "6100": "financial_expenses", "6200": "personal_other"}.get(root, "operating_expenses")
+            result_by_class[bucket] += row["balance"]
+    operating_result = result_by_class["income"] - result_by_class["cost_of_sales"] - result_by_class["operating_expenses"]
+    period_result = operating_result - result_by_class["financial_expenses"] - result_by_class["personal_other"]
+    cash_opening = Decimal("0")
+    cash_closing = Decimal("0")
+    for account_id in cash_accounts:
+        end_totals = account_period.get(account_id, {"debit": Decimal("0"), "credit": Decimal("0")})
+        start_totals = {"debit": Decimal("0"), "credit": Decimal("0")}
+        for line, entry in all_rows:
+            if line.account_id == account_id and (
+                entry.occurred_on < start_date
+                or (entry.source_type == "financial_account_opening" and entry.occurred_on <= end_date)
+            ):
+                start_totals["debit"] += Decimal(line.debit)
+                start_totals["credit"] += Decimal(line.credit)
+        cash_opening += normalized_balance(by_id[account_id], start_totals)
+        cash_closing += normalized_balance(by_id[account_id], end_totals)
+    return {
+        "from_date": start_date, "to_date": end_date, "project_id": project_id,
+        "balance_sheet": {"assets": totals_by_type["asset"], "liabilities": totals_by_type["liability"], "equity_accounts": totals_by_type["equity"], "retained_result": net_result, "liabilities_and_equity": totals_by_type["liability"] + totals_by_type["equity"] + net_result, "rows": [row for row in account_rows if row["account_type"] in ("asset", "liability", "equity")]},
+        "income_statement": {**result_by_class, "operating_result": operating_result, "period_result": period_result, "rows": period_account_rows},
+        "cash_flow": {"opening_cash": cash_opening, "closing_cash": cash_closing, "net_change": cash_closing - cash_opening, "activities": {key: {**value, "net": value["inflows"] - value["outflows"]} for key, value in activity_totals.items()}},
+        "basis": "Solo incluye pólizas contables publicadas. Las operaciones de ventas, cobranza, compras e inventario no se modifican desde este libro.",
+    }
+
+
+def _has_ancestor_code(account: AccountingAccount, by_id: dict[str, AccountingAccount], code: str) -> bool:
+    current = account
+    while current:
+        if current.code == code:
+            return True
+        current = by_id.get(current.parent_id or "")
+    return False
+
+
 @router.post("/accounts", status_code=201, dependencies=[Depends(require_permissions(auth_service, "accounts:manage"))])
 def create_financial_account(data: FinancialAccountInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
     row = FinancialAccount(**data.model_dump(), created_by=identity.email or "")
-    db.add(row); db.commit(); db.refresh(row)
+    db.add(row); db.flush()
+    bank_group = db.scalar(select(AccountingAccount).where(AccountingAccount.code == "1110"))
+    equity_group = db.scalar(select(AccountingAccount).where(AccountingAccount.code == "3000"))
+    if bank_group and equity_group:
+        bank_subaccount = AccountingAccount(
+            code=f"1110-{row.id[:12]}", name=row.name, account_type="asset", parent_id=bank_group.id,
+            linked_financial_account_id=row.id, cash_flow_activity="exclude", created_by=identity.email or "",
+        )
+        db.add(bank_subaccount)
+        if Decimal(row.opening_balance) > 0:
+            opening_equity = db.scalar(select(AccountingAccount).where(AccountingAccount.code == "3001"))
+            if opening_equity is None:
+                opening_equity = AccountingAccount(code="3001", name="Saldos iniciales y aportaciones", account_type="equity", parent_id=equity_group.id, cash_flow_activity="exclude", created_by="system")
+                db.add(opening_equity); db.flush()
+            db.add(AccountingEntry(
+                folio=f"ASI-{row.opening_balance_date:%y%m%d}-{uuid4().hex[:6].upper()}",
+                occurred_on=row.opening_balance_date, description=f"Saldo inicial de {row.name}",
+                reference="Apertura de cuenta financiera", source_type="financial_account_opening", source_id=row.id,
+                created_by=identity.email or "", lines=[
+                    AccountingLine(account=bank_subaccount, debit=Decimal(row.opening_balance), credit=Decimal("0")),
+                    AccountingLine(account=opening_equity, debit=Decimal("0"), credit=Decimal(row.opening_balance)),
+                ],
+            ))
+    db.commit(); db.refresh(row)
     return {**_serialize(row), "current_balance": Decimal(row.opening_balance), "movement_count": 0}
 
 
@@ -4059,9 +4438,20 @@ def reverse_purchase(
 
 
 @router.post("/receivables", status_code=201, dependencies=[Depends(require_permissions(auth_service, "receivables:write"))])
-def add_receivable(data: ReceivableInput, db: Session = Depends(get_db)):
-    if not db.get(Customer, data.customer_id): raise HTTPException(404, "Cliente no encontrado.")
-    row = Receivable(**data.model_dump(), status="overdue" if data.due_date < business_today() else "pending"); db.add(row); db.commit(); db.refresh(row)
+def add_receivable(data: ReceivableInput, identity: AuthIdentity = Depends(identity_dependency(auth_service)), db: Session = Depends(get_db)):
+    customer = db.get(Customer, data.customer_id)
+    if not customer: raise HTTPException(404, "Cliente no encontrado.")
+    receivable_ledger = _ensure_accounting_customer_account(db, customer, identity.email or "")
+    row = Receivable(**data.model_dump(), status="overdue" if data.due_date < business_today() else "pending")
+    db.add(row); db.flush()
+    revenue_ledger = _ensure_accounting_revenue_account(db, identity.email or "")
+    if receivable_ledger and revenue_ledger:
+        db.add(_make_accounting_entry(
+            description=f"Cuenta por cobrar · {customer.name}", occurred_on=business_today(), reference=row.quote_id or row.id,
+            source_type="receivable", source_id=row.id, project_id=None, created_by=identity.email or "",
+            lines=[AccountingLine(account_id=receivable_ledger.id, customer_id=customer.id, debit=row.amount, credit=0), AccountingLine(account_id=revenue_ledger.id, debit=0, credit=row.amount)],
+        ))
+    db.commit(); db.refresh(row)
     return _receivable_result(db, row)
 
 
@@ -4109,6 +4499,17 @@ def record_payment(receivable_id: str, data: PaymentInput, identity: AuthIdentit
     payment = CustomerPayment(receivable_id=row.id, account_id=account.id, cash_movement_id=movement.id,
         amount=data.amount, paid_on=data.paid_on, reference=data.reference.strip(), created_by=identity.email or "")
     db.add(payment); db.flush(); movement.source_id = payment.id
+    bank_ledger = _ensure_accounting_bank_account(db, account, identity.email or "")
+    receivable_ledger = _ensure_accounting_customer_account(db, customer, identity.email or "") if customer else None
+    if bank_ledger and receivable_ledger and customer:
+        sale = db.scalar(select(Sale).where(Sale.quote_id == row.quote_id)) if row.quote_id else None
+        installation = db.get(Installation, sale.installation_id) if sale else None
+        db.add(_make_accounting_entry(
+            description=f"Cobranza de {customer.name}", occurred_on=data.paid_on, reference=data.reference.strip(),
+            source_type="customer_payment", source_id=payment.id, project_id=installation.project_id if installation else None,
+            created_by=identity.email or "",
+            lines=[AccountingLine(account_id=bank_ledger.id, debit=data.amount, credit=0), AccountingLine(account_id=receivable_ledger.id, customer_id=customer.id, debit=0, credit=data.amount)],
+        ))
     row.paid_amount = Decimal(row.paid_amount) + data.amount
     row.status = "paid" if row.paid_amount >= row.amount else "partial"
     db.commit(); db.refresh(row)
@@ -4154,6 +4555,15 @@ def reverse_customer_payment(
         reversal_of_id=original.id, created_by=identity.email or "",
     )
     db.add(correction); db.flush(); cash_reversal.source_id = correction.id
+    accounting_payment = db.scalar(select(AccountingEntry).where(AccountingEntry.source_type == "customer_payment", AccountingEntry.source_id == original.id))
+    if accounting_payment:
+        original_lines = db.scalars(select(AccountingLine).where(AccountingLine.entry_id == accounting_payment.id)).all()
+        db.add(_make_accounting_entry(
+            description=f"Reversa contable de cobranza {original.id}: {data.reason.strip()}", occurred_on=business_today(),
+            reference=original.reference, source_type="customer_payment_reversal", source_id=original.id,
+            project_id=accounting_payment.project_id, created_by=identity.email or "",
+            lines=[AccountingLine(account_id=line.account_id, customer_id=line.customer_id, memo=f"Reversa · {line.memo}" if line.memo else "Reversa de cobranza", debit=line.credit, credit=line.debit) for line in original_lines],
+        ))
     receivable.paid_amount = Decimal(receivable.paid_amount) - Decimal(original.amount)
     receivable.status = "paid" if receivable.paid_amount >= receivable.amount else "partial" if receivable.paid_amount > 0 else "overdue" if receivable.due_date < business_today() else "pending"
     db.commit(); db.refresh(receivable)
