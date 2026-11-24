@@ -4,7 +4,7 @@ import { useAuth } from './persistent-auth';
 import { QRCodeSVG } from 'qrcode.react';
 import { OperationsReportView } from './OperationsReportView';
 import { InventoryIssueIntake } from './InventoryIssueIntake';
-import { InventoryModuleView } from './InventoryModuleView';
+import { InventoryModuleView, type Section as InventorySection } from './InventoryModuleView';
 import { StoryCardReviewView } from './StoryCardReviewView';
 import { addCalendarDaysToIsoDate, addLocalCalendarDays, localDateInputValue } from './dateUtils';
 import './inventory-labels.css';
@@ -132,6 +132,8 @@ export default function App() {
   const [installations, setInstallations] = useState<Installation[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [inventorySection, setInventorySection] = useState<InventorySection>('dashboard');
+  const [inventoryMenuOpen, setInventoryMenuOpen] = useState(false);
   const [inventoryMovements, setInventoryMovements] = useState<InventoryMovement[]>([]);
   const [expenses, setExpenses] = useState<ProjectExpense[]>([]);
   const [pendingExpenseReceipt, setPendingExpenseReceipt] = useState<{expense:ProjectExpense;file:File}|null>(null);
@@ -158,6 +160,9 @@ export default function App() {
     const destination = next === 'revisiones' ? STORY_REVIEW_PATH : '/crm/';
     if (window.location.pathname !== destination) window.history.pushState({ crmView: next }, '', destination);
   }, []);
+
+  const selectInventorySection = useCallback((section: InventorySection) => { setInventorySection(section); navigateView('inventario'); }, [navigateView]);
+  useEffect(() => { if (view === 'inventario') setInventoryMenuOpen(true); }, [view]);
 
   const clientAccount = identity?.roles.includes('cliente') || false;
   const allowedViews = useMemo(() => clientAccount ? [] : ([
@@ -598,7 +603,7 @@ export default function App() {
     <aside className="crm-sidebar">
       <a className="crm-brand" href="/"><span className="brand-mark">A</span><span>arco<span>energy</span><small>GESTIÓN SOLAR</small></span></a>
       <div className="sidebar-label">ESPACIO DE TRABAJO</div>
-      <nav aria-label="Navegación principal">{nav.filter(([key]) => allowedViews.includes(key)).map(([key, icon, label]) => <button key={key} className={`sidebar-link ${view === key ? 'selected' : ''}`} onClick={() => navigateView(key)}><span>{icon}</span>{label}{key === 'seguimientos' && followups.length > 0 && <b>{followups.length}</b>}</button>)}</nav>
+      <nav aria-label="Navegación principal">{nav.filter(([key]) => allowedViews.includes(key)).map(([key, icon, label]) => key === 'inventario' ? <div className="sidebar-group" key="inventario"><button type="button" className={`sidebar-link sidebar-group-toggle ${view === 'inventario' ? 'selected' : ''}`} aria-expanded={inventoryMenuOpen} onClick={() => { setInventoryMenuOpen(open => !open); if (view !== 'inventario') selectInventorySection('dashboard'); }}><span>{icon}</span>{label}<i aria-hidden="true">{inventoryMenuOpen ? '⌄' : '›'}</i></button>{inventoryMenuOpen && <div className="sidebar-sublinks" aria-label="Opciones de inventario">{([['dashboard','Dashboard'],['catalog','Catálogo'],['entries','Entradas'],['exits','Salidas'],['kardex','Kardex'],['scanner','Escáner'],['reports','Reportes'],['settings','Configuración']] as Array<[InventorySection,string]>).map(([section,sectionLabel]) => <button type="button" key={section} className={`sidebar-sublink ${view === 'inventario' && inventorySection === section ? 'selected' : ''}`} aria-current={view === 'inventario' && inventorySection === section ? 'page' : undefined} onClick={() => selectInventorySection(section)}>{sectionLabel}</button>)}</div>}</div> : <button key={key} className={`sidebar-link ${view === key ? 'selected' : ''}`} onClick={() => navigateView(key)}><span>{icon}</span>{label}{key === 'seguimientos' && followups.length > 0 && <b>{followups.length}</b>}</button>)}</nav>
       <div className="sidebar-spacer" />
       <button className="mobile-logout" title="Cerrar sesión" aria-label="Cerrar sesión" onClick={async () => { clearAgentChat(`arcoenergy-agent:${identity.user_id}`); await logout(); window.location.replace('/crm/login'); }}>↗</button>
       <a className="sidebar-mobile-link" href="/app/">↗ App de campo</a>
@@ -634,7 +639,7 @@ export default function App() {
         {view === 'seguimientos' && <FollowupsView items={followups} onComplete={completeFollowup} onCustomer={setSelectedCustomer} pushActive={followupPushActive} onTogglePush={()=>void toggleFollowupPush()} pushSupported={'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window} />}
         {view === 'proyectos' && <ProjectsView items={projects} customers={customers} canWrite={can('installations:write')} token={accessToken || ''} onRefresh={refresh} announce={announce} />}
         {view === 'instalaciones' && <InstallationsView items={installations} projects={projects} customers={customers} team={team} canWrite={can('installations:write')} token={accessToken || ''} onRefresh={refresh} announce={announce} />}
-        {view === 'inventario' && <InventoryModuleView items={inventory} suppliers={suppliers.map(({id,name,active})=>({id,name,active}))} installations={installations} canManage={can('inventory:manage')} canIssue={can('inventory:issue')} canReadCosts={can('inventory:costs:read') || can('inventory:manage')} canManageUsers={can('team:manage')} canReadSuppliers={can('suppliers:read')} canReadProjects={can('installations:read')} token={accessToken || ''} onRefresh={refresh} onNavigate={navigateView} announce={announce} />}
+        {view === 'inventario' && <InventoryModuleView activeSection={inventorySection} onSectionChange={setInventorySection} items={inventory} suppliers={suppliers.map(({id,name,active})=>({id,name,active}))} installations={installations} canManage={can('inventory:manage')} canIssue={can('inventory:issue')} canReadCosts={can('inventory:costs:read') || can('inventory:manage')} canManageUsers={can('team:manage')} canReadSuppliers={can('suppliers:read')} canReadProjects={can('installations:read')} token={accessToken || ''} onRefresh={refresh} onNavigate={navigateView} announce={announce} />}
         {view === 'gastos' && <ExpensesView items={expenses} installations={installations} projects={projects} accounts={accounts} canWrite={can('expenses:write')} canCorrect={can('expenses:write') && !identity.roles.includes('instalador')} onSubmit={createExpense} onReverse={reverseExpense} onDownloadReceipt={downloadExpenseReceipt} pendingReceipt={pendingExpenseReceipt} onRetryReceipt={()=>pendingExpenseReceipt&&void attachExpenseReceipt(pendingExpenseReceipt.expense,pendingExpenseReceipt.file)} />}
         {view === 'cobranza' && <ReceivablesView items={receivables} customers={customers} quotes={quotes} accounts={accounts} canWrite={can('receivables:write')} token={accessToken || ''} onCreate={createReceivable} onItems={setReceivables} onAccounts={setAccounts} announce={announce} />}
         {view === 'cuentas' && <AccountsView accounts={accounts} selectedId={selectedAccountId} onSelect={setSelectedAccountId} movements={accountMovements} canManage={can('accounts:manage')} canWrite={can('accounts:write')} onCreateAccount={createAccount} onCreateMovement={createCashMovement} onTransfer={transferCash} onReverse={reverseCashMovement} />}
