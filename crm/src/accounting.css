@@ -43,4 +43,7 @@
 .accounting-formal-total{padding:8px 10px;font-size:11px}
 .accounting-balance-check{margin-top:10px;padding-top:8px;font-size:10px}
 .page-content.balance-report-only{padding-top:12px}
+.page-content.financial-report-only{padding-top:12px}
+.financial-report-only .page-foot{display:none}
 @media(max-width:760px){.accounting-balance-sheet{padding:12px}.accounting-balance-columns{gap:14px}.accounting-balance-column>h3{font-size:10px}.accounting-balance-column .accounting-account{min-height:29px;padding-top:3px;padding-bottom:3px;font-size:10px}.accounting-balance-column .accounting-link{font-size:10px}.accounting-formal-title b{font-size:15px}.page-content.balance-report-only{padding-top:12px}}
+@media(max-width:760px){.page-content.financial-report-only{padding-top:12px}}
