@@ -406,6 +406,66 @@ class CashMovement(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
+class AccountingAccount(Base):
+    """Chart of accounts used only by financial statements."""
+    __tablename__ = "ae_accounting_accounts"
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_ae_accounting_account_code"),
+        Index("ix_ae_accounting_accounts_parent", "parent_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    code: Mapped[str] = mapped_column(String(40), nullable=False)
+    name: Mapped[str] = mapped_column(String(180), nullable=False)
+    account_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    parent_id: Mapped[str | None] = mapped_column(ForeignKey("ae_accounting_accounts.id"), nullable=True)
+    linked_customer_id: Mapped[str | None] = mapped_column(ForeignKey("ae_customers.id"), nullable=True, index=True)
+    linked_financial_account_id: Mapped[str | None] = mapped_column(ForeignKey("ae_financial_accounts.id"), nullable=True, index=True)
+    cash_flow_activity: Mapped[str] = mapped_column(String(20), default="operating", nullable=False)
+    is_group: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(180), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    parent: Mapped["AccountingAccount | None"] = relationship(remote_side="AccountingAccount.id", foreign_keys=[parent_id])
+
+
+class AccountingEntry(Base):
+    """Balanced, append-only financial movement; never mutates operational records."""
+    __tablename__ = "ae_accounting_entries"
+    __table_args__ = (
+        UniqueConstraint("folio", name="uq_ae_accounting_entry_folio"),
+        UniqueConstraint("source_type", "source_id", name="uq_ae_accounting_entry_source"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    folio: Mapped[str] = mapped_column(String(40), nullable=False)
+    occurred_on: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+    reference: Mapped[str] = mapped_column(String(180), default="")
+    project_id: Mapped[str | None] = mapped_column(ForeignKey("ae_projects.id"), nullable=True, index=True)
+    source_type: Mapped[str] = mapped_column(String(40), default="manual", nullable=False)
+    source_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="posted", nullable=False)
+    created_by: Mapped[str] = mapped_column(String(180), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    lines: Mapped[list["AccountingLine"]] = relationship(back_populates="entry", cascade="all, delete-orphan")
+
+
+class AccountingLine(Base):
+    __tablename__ = "ae_accounting_lines"
+    __table_args__ = (
+        Index("ix_ae_accounting_lines_account", "account_id"),
+        Index("ix_ae_accounting_lines_customer", "customer_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    entry_id: Mapped[str] = mapped_column(ForeignKey("ae_accounting_entries.id", ondelete="CASCADE"), nullable=False, index=True)
+    account_id: Mapped[str] = mapped_column(ForeignKey("ae_accounting_accounts.id"), nullable=False)
+    customer_id: Mapped[str | None] = mapped_column(ForeignKey("ae_customers.id"), nullable=True)
+    memo: Mapped[str] = mapped_column(String(240), default="")
+    debit: Mapped[float] = mapped_column(Numeric(14, 2), default=0, nullable=False)
+    credit: Mapped[float] = mapped_column(Numeric(14, 2), default=0, nullable=False)
+    entry: Mapped[AccountingEntry] = relationship(back_populates="lines")
+    account: Mapped[AccountingAccount] = relationship()
+
+
 class Supplier(Base):
     __tablename__ = "ae_suppliers"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
