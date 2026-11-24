@@ -19,6 +19,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
+COPY scripts ./scripts
 COPY entrypoint.sh ./entrypoint.sh
 RUN chmod +x /app/entrypoint.sh && chown -R app:app /app
 

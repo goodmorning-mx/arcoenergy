@@ -2220,3 +2220,32 @@ La integración deja a stakeholders la revisión de valuación/costo, stock nega
 | Tarjeta | Estado | Pendiente |
 | --- | --- | --- |
 | US-45 | Implementación v1 en iteración 160 sobre el descubrimiento de iteración 157; fuentes visuales y texto literal intactos | Revisar en `/crm/` por portal: flujos, permisos, valuación, stock negativo, umbrales, costos, empresa, Drive y casos reales con Josué, Mario y equipo de almacén. La tarjeta queda sin Finished hasta esa revisión. |
+
+## US-46 · Menú desplegable e importación del inventario
+
+**Solicitante:** Usuario Arco Energy · nombre por confirmar. **Iteración:** Inventario 1. **Versión:** 1.
+
+**Relato literal:** “mira ahora vamos a trabajar por modulos; entonces vas a agregar historycards que yo mismo fui agregando; entonces la siguiente storycard que necesito es que dentro del modulo de inventario dejes todas estas funcionalidades que ya tiene el sistema de inventario. [Image #1]”
+
+**Requerimiento literal de implementación:** “bueno entonces haz la implementacion tomalo como un /goal no te detengas hasta que este terminado, ahora si ya vamos a implementar incrementalmente entonces ya vamos a ir haciendo modelos, checa con que relacion de otros modulos tiene, por ahora el modulo de usuarios que ya esta listo con roles y el de inventario, toma en cuenta los otros modulos que vamos a implementar”
+
+“Para empezar las opciones de los modulos en el sidebar deben ser desplegables es decir cada modulo va a tener sus diferentes opciones. empecemos por inventario; actualmente las opciones de inventario que seria dashboard entradas salidas deben ir como opciones desplegables en el panel lateral. 2.- en downloads acabo de dejar un zip es el ultimo que descargue; internamente tiene un csv que necesito que extraigas y leas; despues ajustes todos los modelos e importes el data que ahi esta. tomalo como /goal”
+
+**Capturas:** nueve referencias del producto de inventario existente. Conservaron dashboard, catálogo, entradas, salidas/devoluciones, kardex, escáner, reportes, proveedores, proyectos y configuración.
+
+**Criterios:**
+
+- Abrir las secciones de Inventario desde el sidebar principal desplegable del CRM.
+- Mantener las vistas del inventario dentro del panel central del CRM.
+- Importar el catálogo y los historiales del ZIP más reciente; relacionar proveedores, proyectos, productos, documentos, responsables y fechas.
+- Permitir folios documentales compartidos por renglones de productos e importación idempotente.
+- Establecer la existencia del catálogo desde la fotografía exportada y conservar el historial sin volver a sumar ni restar esas existencias.
+- Guardar productos legados fuera del catálogo como referencias inactivas para conservar los folios de sus movimientos.
+
+**Validación de la exportación:** 38 renglones de catálogo (37 activos, uno inactivo), cinco referencias históricas fuera del catálogo, cinco proveedores, 24 proyectos, 95 entradas, 237 salidas y 332 renglones de Kardex. El valor y cantidad actual resultan $388,474.66 y 1,290 unidades; las 95 entradas y 237 salidas coinciden renglón por renglón con el Kardex. Hay un folio de entrada compartido por dos productos. El ZIP no se agrega al repositorio.
+
+**Observación para stakeholder:** los agregados exportados dicen 7 artículos con stock bajo y 3 agotados; la vista calculada sobre filas de producto y mínimos da 9 bajos y 3 agotados. La carga preserva las cantidades y mínimos de cada fila, y el estado de revisión queda pendiente para que Josué, Mario y almacén confirmen el criterio.
+
+**Solución implementada:** submenú de Inventario en el sidebar común y módulo dentro del panel central; nuevos campos de proyecto y vínculo de movimientos con proyecto; folio no único e identificador de origen único; tabla de lotes de importación; importador versionado que consume el ZIP en runtime y crea los productos históricos faltantes como inactivos. La migración agrega la tarjeta a `ae_history_cards` y su checklist/solución a `ae_history_card_reviews`. La storycard queda sin Finished hasta la verificación de stakeholders.
+
+**Pruebas:** backend completo (336); CRM build y pruebas (4); importación en SQLite temporal: 38 productos de catálogo, cinco históricos, 332 movimientos, un folio con varios renglones, stock estable y valor reconciliado. La importación en DEV queda pendiente del merge/despliegue de esta iteración.

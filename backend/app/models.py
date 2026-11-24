@@ -124,6 +124,14 @@ class Project(Base):
     customer_id: Mapped[str] = mapped_column(ForeignKey("ae_customers.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(180), nullable=False)
     notes: Mapped[str] = mapped_column(Text, default="")
+    location: Mapped[str] = mapped_column(String(240), default="", server_default="", nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="planning", server_default="planning", nullable=False)
+    source_status: Mapped[str] = mapped_column(String(80), default="", server_default="", nullable=False)
+    priority: Mapped[str] = mapped_column(String(30), default="medium", server_default="medium", nullable=False)
+    progress_percent: Mapped[float] = mapped_column(Numeric(5, 2), default=0, server_default="0", nullable=False)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    contract_amount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    source: Mapped[str] = mapped_column(String(40), default="crm", server_default="crm", nullable=False)
     created_by: Mapped[str] = mapped_column(String(180), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
@@ -264,9 +272,12 @@ class InventoryMovement(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     # The deployment migration makes this required after backfilling old ledger rows.
     # Keep metadata nullable so earlier data migrations can insert and backfill movements.
-    folio: Mapped[str | None] = mapped_column(String(40), nullable=True, unique=True, index=True)
+    # A document folio may contain several product lines; source_key is the row idempotency key.
+    folio: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    source_key: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
     item_id: Mapped[str] = mapped_column(ForeignKey("ae_inventory.id", ondelete="RESTRICT"), nullable=False, index=True)
     installation_id: Mapped[str | None] = mapped_column(ForeignKey("ae_installations.id", ondelete="RESTRICT"), nullable=True, index=True)
+    project_id: Mapped[str | None] = mapped_column(ForeignKey("ae_projects.id", ondelete="RESTRICT"), nullable=True, index=True)
     quantity: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     movement_type: Mapped[str] = mapped_column(String(20), default="in", nullable=False)
     unit_cost: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
@@ -283,9 +294,20 @@ class InventoryMovement(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
     item: Mapped[InventoryItem] = relationship(back_populates="movements")
     installation: Mapped[Installation | None] = relationship(back_populates="inventory_movements", foreign_keys=[installation_id])
+    project: Mapped[Project | None] = relationship(foreign_keys=[project_id])
     purchase_line: Mapped["PurchaseLine | None"] = relationship(back_populates="inventory_movements")
     supplier: Mapped["Supplier | None"] = relationship(back_populates="inventory_movements", foreign_keys=[supplier_id])
     work_order_material: Mapped[WorkOrderMaterial | None] = relationship(back_populates="inventory_movements")
+
+
+class InventoryImportBatch(Base):
+    __tablename__ = "ae_inventory_import_batches"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    source_sha256: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    source_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    summary: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    imported_by: Mapped[str] = mapped_column(String(180), nullable=False, default="")
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
 
 
 @event.listens_for(InventoryMovement, "before_insert")

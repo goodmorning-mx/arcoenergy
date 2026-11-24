@@ -237,6 +237,8 @@ def _serialize_inventory_movement(row: InventoryMovement | None, identity: AuthI
         return None
     if not ({"inventory:costs:read", "inventory:manage"} & identity.permissions):
         result.pop("unit_cost", None)
+    if row.project_id:
+        result["project_name"] = row.project.name if row.project else None
     return result
 
 
@@ -1691,7 +1693,7 @@ def _project_result(project: Project, db: Session) -> dict:
         **_serialize(project),
         "customer": {"id": customer.id, "name": customer.name, "city": customer.city} if customer else None,
         "work_orders": [{"id": order.id, "folio": order.folio, "status": order.status, "scheduled_at": order.scheduled_at} for order in orders],
-        "status": "planning" if not orders else ("completed" if all(order.status in {"closed", "cancelled"} for order in orders) else "active"),
+        "status": project.status if not orders else ("completed" if all(order.status in {"closed", "cancelled"} for order in orders) else "active"),
     }
 
 
