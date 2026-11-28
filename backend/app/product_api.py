@@ -1274,6 +1274,39 @@ def list_customers(db: Session = Depends(get_db)):
     return [_serialize(row) for row in db.scalars(select(Customer).order_by(Customer.created_at.desc())).all()]
 
 
+@router.get("/customers/account-balances", dependencies=[
+    Depends(require_permissions(auth_service, "customers:read")),
+    Depends(require_permissions(auth_service, "accounts:read")),
+])
+def list_customer_account_balances(db: Session = Depends(get_db)):
+    """Return balances from the exact customer subaccounts shown on the balance sheet."""
+    linked_accounts = db.scalars(select(AccountingAccount).where(
+        AccountingAccount.active.is_(True), AccountingAccount.is_group.is_(False),
+        AccountingAccount.account_type == "asset", AccountingAccount.linked_customer_id.is_not(None),
+    ).order_by(AccountingAccount.code)).all()
+    if not linked_accounts:
+        return []
+    account_ids = [row.id for row in linked_accounts]
+    totals = {account_id: {"debit": Decimal("0"), "credit": Decimal("0")} for account_id in account_ids}
+    for line, entry in db.execute(
+        select(AccountingLine, AccountingEntry)
+        .join(AccountingEntry, AccountingEntry.id == AccountingLine.entry_id)
+        .where(AccountingLine.account_id.in_(account_ids), AccountingEntry.status == "posted",
+               AccountingEntry.occurred_on <= business_today())
+    ).all():
+        totals[line.account_id]["debit"] += Decimal(line.debit)
+        totals[line.account_id]["credit"] += Decimal(line.credit)
+    customer_totals: dict[str, dict] = {}
+    for account in linked_accounts:
+        customer_id = account.linked_customer_id
+        if not customer_id:
+            continue
+        total = customer_totals.setdefault(customer_id, {"customer_id": customer_id, "balance": Decimal("0"), "account_count": 0})
+        total["balance"] += totals[account.id]["debit"] - totals[account.id]["credit"]
+        total["account_count"] += 1
+    return sorted(customer_totals.values(), key=lambda row: (row["customer_id"]))
+
+
 @router.post("/public/leads", status_code=201)
 def create_public_lead(data: PublicLeadInput, db: Session = Depends(get_db)):
     if data.website.strip():

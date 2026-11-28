@@ -2335,3 +2335,21 @@ La integración deja a stakeholders la revisión de valuación/costo, stock nega
 **Solución propuesta:** wizard de cuatro pasos con tarjetas visuales de efectivo, bancos y CxC, cuentas filtradas por tipo y resumen del impacto. Pendiente recorrido con ventas y contabilidad.
 
 **Estado de revisión de la iteración:** todas las tarjetas se insertan como no terminadas para que los stakeholders marquen Finished y registren observaciones desde Revisión storycards. La migración `202611270163` agrega US-50–US-56 a la base de datos sin sobrescribir versiones existentes.
+
+### US-57 · Cobranza: tarjetas primero y calendario con vista previa
+
+**Autor:** stakeholder Arco Energy; nombre por confirmar.
+**Fuente literal:** “cambia el orden, cambia las tarjetas del cliente primero y despues el calendario; ademas marca con un recuadro de color el Hoy en el calendario, ademas en el calendario muestra el preview de que cliente tiene que pagar”
+
+**Criterios:** tarjetas primero; hoy resaltado; nombres de clientes por fecha con pagos; monto y cuotas visibles; selección de fecha filtra la cartera.
+**Solución propuesta:** cartera por cliente antes del calendario, recuadro verde en Hoy y vista previa de clientes e importes en las fechas con vencimientos. Pendiente validación de usuarios.
+
+### US-58 · Clientes vinculados al balance general
+
+**Autor:** stakeholder Arco Energy; nombre por confirmar.
+**Fuente literal:** “los clientes deben aparecer en el modulo de clientes; deben ser los mismos clientes que aparecen en el balance general, como cuenta de clientes.”
+
+**Criterios:** los clientes vinculados a subcuentas por cobrar aparecen en el directorio sin duplicarse; la relación utiliza el mismo customer_id; usuarios con permiso contable ven el saldo de la subcuenta; los roles sin acceso contable no reciben esos importes.
+**Solución propuesta:** endpoint protegido que calcula saldo desde pólizas publicadas de las subcuentas vinculadas; el directorio vuelve a consultar la cartera al abrirse y destaca estos saldos. Pendiente validación de usuario.
+
+**Registro:** la migración `202611280164` agrega US-57 y US-58 sin sobrescribir historia previa y con checklist/Finished sin marcar.
