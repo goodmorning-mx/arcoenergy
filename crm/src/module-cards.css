@@ -15,7 +15,7 @@
 /* Customer directory cards grow with their content so wrapped names and balances
    never spill into the next grid row. */
 .customer-card-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));gap:20px;align-items:stretch;min-width:0}
-.customer-card{box-sizing:border-box;aspect-ratio:auto;height:100%;min-height:285px;overflow:hidden;overflow-wrap:anywhere;padding:19px;gap:12px}
+.customer-card{box-sizing:border-box;aspect-ratio:auto;height:auto;min-height:285px;align-self:stretch;overflow-wrap:anywhere;padding:19px;gap:12px}
 .customer-card-name,.customer-card-contact,.customer-card-location{min-width:0;overflow-wrap:anywhere;line-height:1.45}
 .customer-card-email{white-space:normal;word-break:break-word}
 .customer-card-receivable{min-width:0}
