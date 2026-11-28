@@ -11,3 +11,13 @@
 @media(max-width:800px){.installation-kanban{grid-template-columns:repeat(3,minmax(250px,80vw))}.payment-method-grid{grid-template-columns:1fr}.sales-chart-bars{gap:4px}.sales-chart-column small{font-size:8px}}
 .collection-content{padding-top:12px!important}.collection-content .page-foot{display:none}
 .account-picker-trigger,.account-picker-option{display:flex;align-items:center;gap:11px;width:100%;padding:11px;border:1px solid #dce6de;border-radius:10px;background:#fff;color:#263b30;text-align:left}.account-picker-trigger{min-height:58px}.account-picker-trigger:disabled{opacity:.55}.account-picker-trigger>span:nth-child(2),.account-picker-option>span:nth-child(2){display:grid;gap:4px;flex:1}.account-picker-trigger b,.account-picker-option b{font-size:12px}.account-picker-trigger small,.account-picker-option small{color:#718078;font-size:10px}.account-picker-trigger i{margin-left:auto;font-style:normal;font-size:20px;color:#718078}.account-picker-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:9px;background:#edf6ef;font-size:18px}.account-picker-options{display:grid;gap:8px}.account-picker-option{cursor:pointer}.account-picker-option:hover,.account-picker-option.selected{border-color:#188057;background:#f0f8f2}.account-picker-option strong{font-size:12px;white-space:nowrap}.customer-card{aspect-ratio:1/0.9}
+
+/* Customer directory cards grow with their content so wrapped names and balances
+   never spill into the next grid row. */
+.customer-card-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));gap:20px;align-items:stretch;min-width:0}
+.customer-card{box-sizing:border-box;aspect-ratio:auto;height:100%;min-height:285px;overflow:hidden;overflow-wrap:anywhere;padding:19px;gap:12px}
+.customer-card-name,.customer-card-contact,.customer-card-location{min-width:0;overflow-wrap:anywhere;line-height:1.45}
+.customer-card-email{white-space:normal;word-break:break-word}
+.customer-card-receivable{min-width:0}
+.customer-card-footer{flex-wrap:wrap;align-items:center}
+@media(max-width:600px){.customer-card-grid{grid-template-columns:minmax(0,1fr);gap:14px}.customer-card{min-height:0;padding:17px}}
