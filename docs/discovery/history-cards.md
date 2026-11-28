@@ -2353,3 +2353,55 @@ La integración deja a stakeholders la revisión de valuación/costo, stock nega
 **Solución propuesta:** endpoint protegido que calcula saldo desde pólizas publicadas de las subcuentas vinculadas; el directorio vuelve a consultar la cartera al abrirse y destaca estos saldos. Pendiente validación de usuario.
 
 **Registro:** la migración `202611280164` agrega US-57 y US-58 sin sobrescribir historia previa y con checklist/Finished sin marcar.
+
+## Iteración CRM · Dashboard, instalaciones y tablas (2026-11-28)
+
+### US-59 · Tarjetas responsivas de clientes
+
+**Relato original:** “si me gusto solo dale mas formato a las tarjetas mas separacion; [Image #1] y que no se salgan los containers todo debe quedar bien responsivo con sus containers auto etc.”
+
+**Historia interpretada:** Como usuario del CRM, quiero tarjetas de clientes con separación suficiente y altura adaptable para consultar todos sus datos sin que se desborden o se encimen.
+
+**Solución propuesta:** Se eliminó la proporción fija de tarjeta, se permitió envolver contenido largo y se ajustaron columnas, alturas y espacios para pantallas responsivas.
+
+### US-60 · Resumen inicial centrado en ventas
+
+**Relato original:** “el dashboard vamos a modificarlo todo; primero que nada quita todo del dashboard yo te voy a ir diciendo que secciones vamos a agregar. [Image #1] para empezar primero necesitamos el de ventas; es decir que se ha vendido este mes. deben ir por contenedores horizontales y grandes, porque despues tambien vamos a tener el container de cotizaciones el de cuentas por cobrar y el de operaciones. van a tener tarjetas e indicadores grandes.”
+
+**Historia interpretada:** Como administrador, quiero que el Resumen muestre inicialmente solo un contenedor amplio de ventas del mes con indicadores grandes, para ir incorporando los demás bloques por iteraciones posteriores.
+
+**Solución propuesta:** Sustituir los paneles existentes por un contenedor horizontal que calcule ventas del mes y muestre importe, operaciones, contado y crédito.
+
+### US-61 · Instalaciones con tablero de muestra
+
+**Relato original:** “al apartado de instalaciones agregale porfavor mockup data. [Image #1] unas 10 porfavor. quita todos los encabezados simplemente deja la palabra instalaciones en grande hasta arriba”
+
+**Historia interpretada:** Como coordinador, quiero ver alrededor de diez órdenes ficticias en el tablero de Instalaciones y dejar como único encabezado el título grande, para previsualizar el flujo por etapas.
+
+**Solución propuesta:** Añadir órdenes DEMO estables a la siembra de DEV para completar diez y simplificar el encabezado conservando la acción de asignación.
+
+### US-62 · Ventas en tabla
+
+**Relato original:** “en el modulo de ventas esta tarjeta mejor cambiala a tabla porfavor”
+
+**Historia interpretada:** Como usuario de Ventas, quiero consultar las operaciones en una tabla para comparar folios, clientes, método, orden, materiales e importes con rapidez.
+
+**Solución propuesta:** Reemplazar las tarjetas por una tabla de operaciones con columnas contables y operativas, acciones de corrección y desplazamiento horizontal.
+
+### US-63 · Modal de operaciones y espaciado de tablas
+
+**Relato original:** “este modal que describe las operaciones hazlo bien amplio, ademas agrega paddings a las tablas para que no se vean hasta la orilla del container”
+
+**Historia interpretada:** Como usuario que registra operaciones, quiero un modal amplio y tablas con margen interior para leer y capturar información con comodidad.
+
+**Solución propuesta:** Ampliar el ancho máximo de modales de operación y agregar margen interior a tablas en tarjetas y modales.
+
+### US-64 · Calendario de cobranza antes de las tarjetas
+
+**Relato original:** “en el de cobranza mejor si pon las tarjetas de los clientes abajo y el calendario hasta arriba”
+
+**Historia interpretada:** Como persona de cobranza, quiero ver primero el calendario y debajo las tarjetas de clientes con saldo pendiente.
+
+**Solución propuesta:** Colocar el calendario como primera sección del módulo de Cobranza y mover la cartera en tarjetas debajo, conservando los previews por fecha y el resaltado de hoy.
+
+**Registro:** la migración `202611280165` registra US-59 a US-64 con su texto literal, solución propuesta y checklist sin completar, pendientes de validación por los stakeholders. Los autores quedan por confirmar.

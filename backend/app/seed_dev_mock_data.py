@@ -152,6 +152,35 @@ def seed(db: Session, today: date | None = None) -> dict[str, int]:
                 confirmed_at=now-timedelta(days=1) if email.startswith("cesar") and status=="in_progress" else None,
                 created_at=now-timedelta(days=3))
 
+    # Additional repeatable field-board examples bring DEV to ten installation cards.
+    # These stay clearly labeled as DEMO and never overwrite non-demo installations.
+    extra_install_specs = [
+        ("004", "mariana", "assigned", 2),
+        ("005", "roberto", "assigned", 5),
+        ("006", "fernando", "in_progress", 1),
+        ("007", "lucia", "in_progress", 9),
+        ("008", "ernesto", "closed", -18),
+        ("009", "paola", "closed", -26),
+        ("010", "mariana", "assigned", 16),
+    ]
+    for suffix, cust, status, offset in extra_install_specs:
+        installation = put(Installation, f"installation-demo-{suffix}",
+            folio=f"DEMO-OT-{suffix}", customer_id=customers[cust].id,
+            project_id=projects[cust].id if cust in projects else None,
+            quote_id=quotes[f"quote-{cust}"].id, scheduled_at=now+timedelta(days=offset),
+            lead_installer="cesar.flores@arcoenergy.mx", status=status,
+            checklist=[{"label": task, "done": status == "closed" or (status == "in_progress" and index == 0)}
+                       for index, task in enumerate(["Confirmar materiales", "Montaje", "Pruebas", "Entrega"])],
+            notes="DEMO · Orden de trabajo ficticia para previsualizar el tablero.",
+            material_request_drive_file_id="", material_request_filename="",
+            material_request_content_type="", material_request_updated_at=None)
+        for email in ("cesar.flores@arcoenergy.mx", "instalador.demo@arcoenergy.test"):
+            put(InstallationAssignment, f"assignment-demo-{suffix}-{email}",
+                installation_id=installation.id, installer_email=email,
+                assigned_by="josue.agundiz@arcoenergy.mx",
+                confirmed_at=now-timedelta(days=1) if email.startswith("cesar") and status == "in_progress" else None,
+                created_at=now-timedelta(days=3))
+
     # Suppliers and product catalog. Existing real inventory and package prices remain untouched.
     suppliers = {}
     for key, name, contact, phone, terms, days in [
