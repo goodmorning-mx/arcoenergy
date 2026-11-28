@@ -80,7 +80,7 @@ def upgrade():
         )).scalar_one_or_none() or 0) + 1
         card_id = str(uuid4())
         bind.execute(cards.insert().values(
-            id=card_id, version=version, source_type="conversation", source_language="es",
+            id=card_id, story_id=row["story_id"], version=version, source_type="conversation", source_language="es",
             source_artifact={"type": "conversation", "captured_as": "literal", "reference": "Conversación Arco Energy · Iteración CRM · 28/11/2026"},
             source_attribution="Usuario Arco Energy · autor por confirmar", source_confidence="direct_quote", source_links=[],
             unresolved_questions=[], linked_cards=[], recorded_by="Codex · implementación", created_at=now,
