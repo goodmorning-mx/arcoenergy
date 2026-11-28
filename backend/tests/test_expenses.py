@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from gm_auth.models import AuthIdentity
 
-from app.models import Base, CashMovement, Customer, FinancialAccount, Installation
+from app.models import AccountingAccount, AccountingEntry, AccountingLine, Base, CashMovement, Customer, FinancialAccount, Installation
 from app.product_api import ExpenseInput, PaymentCorrectionInput, add_expense, list_expenses, list_financial_accounts, reverse_expense
 from app.roles import ROLE_PERMISSIONS
 
@@ -45,6 +45,8 @@ def test_accountant_can_record_general_or_project_expenses_with_financial_date()
         linked_movements = db.query(CashMovement).filter(CashMovement.source_type == "expense").all()
         current_balance = list_financial_accounts(db)[0]["current_balance"]
         linked_amount = sum(row.amount for row in linked_movements)
+        journal = db.query(AccountingEntry).filter(AccountingEntry.source_type == "expense").all()
+        journal_lines = [line for entry in journal for line in db.query(AccountingLine).filter(AccountingLine.entry_id == entry.id).all()]
 
     assert project_expense["installation_id"] == installation.id
     assert general_expense["installation_id"] is None
@@ -54,6 +56,8 @@ def test_accountant_can_record_general_or_project_expenses_with_financial_date()
     assert len(linked_movements) == 2
     assert linked_amount == 2100
     assert current_balance == 2900
+    assert len(journal) == 2
+    assert sum(row.debit for row in journal_lines) == sum(row.credit for row in journal_lines) == 2100
 
 
 def test_accountant_must_select_an_active_account_for_expense() -> None:
@@ -91,6 +95,10 @@ def test_expense_correction_appends_offset_and_restores_linked_account() -> None
         rows = list_expenses(db)
         movements = db.query(CashMovement).order_by(CashMovement.created_at).all()
         balance = list_financial_accounts(db)[0]["current_balance"]
+        journal = db.query(AccountingEntry).filter(AccountingEntry.source_type.in_(["expense", "expense_reversal"])).all()
+        lines = [line for entry in journal for line in db.query(AccountingLine).filter(AccountingLine.entry_id == entry.id).all()]
+        expense_account_ids = {row.id for row in db.query(AccountingAccount).filter(AccountingAccount.account_type == "expense").all()}
+        net_expense = sum((line.debit - line.credit) for line in lines if line.account_id in expense_account_ids)
         with pytest.raises(HTTPException) as error:
             reverse_expense(expense["id"], PaymentCorrectionInput(reason="Segundo intento"), identity, db)
 
@@ -102,6 +110,8 @@ def test_expense_correction_appends_offset_and_restores_linked_account() -> None
     assert movements[1].direction == "in"
     assert movements[1].reversal_of_id == movements[0].id
     assert balance == 10000
+    assert len(journal) == 2
+    assert net_expense == 0
     assert error.value.status_code == 409
 
 

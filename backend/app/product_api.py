@@ -3081,7 +3081,7 @@ def add_expense(data: ExpenseInput, identity: AuthIdentity = Depends(require_per
         result["receipt_filename"] = row.receipt_filename or None
         result["account_name"] = account.name if account else None
         return result
-    if "instalador" not in identity.roles and not data.account_id:
+    if not data.account_id:
         raise HTTPException(422, "Selecciona la cuenta de caja o banco que pagó este gasto.")
     account = None
     if data.account_id:
@@ -3094,6 +3094,28 @@ def add_expense(data: ExpenseInput, identity: AuthIdentity = Depends(require_per
             occurred_on=data.occurred_on, source_type="expense", source_id=row.id,
             created_by=identity.email or "")
         db.add(movement)
+        cash_ledger = _ensure_accounting_bank_account(db, account, identity.email or "")
+        root_code = "5000" if data.category.casefold() == "materiales" else "6100" if data.category.casefold() == "intereses" else "6200" if data.category.casefold() in {"otro", "préstamos"} else "6000"
+        expense_root = db.scalar(select(AccountingAccount).where(AccountingAccount.code == root_code, AccountingAccount.is_group.is_(True)))
+        if expense_root is None:
+            expense_names={"5000":"Costo de venta","6000":"Gastos de operación","6100":"Gastos financieros","6200":"Gastos personales y otros"}
+            expense_root=AccountingAccount(code=root_code,name=expense_names[root_code],account_type="expense",is_group=True,created_by=identity.email or "")
+            db.add(expense_root); db.flush()
+        if cash_ledger is None:
+            raise HTTPException(409, "No se pudo vincular la cuenta financiera con su subcuenta contable.")
+        expense_ledger = db.scalar(select(AccountingAccount).where(AccountingAccount.parent_id == expense_root.id, AccountingAccount.name == data.category, AccountingAccount.is_group.is_(False)))
+        if expense_ledger is None:
+            expense_ledger = AccountingAccount(
+                code=f"{root_code}-{row.id[:12]}", name=data.category, account_type="expense",
+                parent_id=expense_root.id, cash_flow_activity="operating", created_by=identity.email or "",
+            )
+            db.add(expense_ledger); db.flush()
+        db.add(_make_accounting_entry(
+            description=f"Gasto · {data.category}: {data.description}", occurred_on=data.occurred_on,
+            reference=row.id, source_type="expense", source_id=row.id, project_id=row.project_id,
+            created_by=identity.email or "",
+            lines=[AccountingLine(account_id=expense_ledger.id, debit=data.amount, credit=0), AccountingLine(account_id=cash_ledger.id, debit=0, credit=data.amount)],
+        ))
     _record_offline_operation(data, "expense", row.id, identity, db)
     db.commit(); db.refresh(row)
     result = _serialize(row)
@@ -3129,6 +3151,15 @@ def list_expenses(db: Session = Depends(get_db)):
         item["project_city"] = customer.city if customer else ""
         result.append(item)
     return result
+
+
+@router.get("/expenses/payment-accounts", dependencies=[Depends(require_permissions(auth_service, "expenses:write"))])
+def list_expense_payment_accounts(db: Session = Depends(get_db)):
+    """Expose only selectable account labels to field expense entry; omit balances."""
+    return [
+        {"id": row.id, "name": row.name, "account_type": row.account_type}
+        for row in db.scalars(select(FinancialAccount).where(FinancialAccount.active.is_(True)).order_by(FinancialAccount.account_type, FinancialAccount.name)).all()
+    ]
 
 
 @router.put("/expenses/{expense_id}/receipt-file")
@@ -3236,6 +3267,7 @@ def reverse_expense(expense_id: str, data: PaymentCorrectionInput, identity: Aut
 
     correction = ProjectExpense(
         installation_id=original.installation_id,
+        project_id=original.project_id,
         category=original.category,
         expense_type=original.expense_type,
         description=f"Corrección del gasto {original.id}: {data.reason}",
@@ -3261,6 +3293,15 @@ def reverse_expense(expense_id: str, data: PaymentCorrectionInput, identity: Aut
             source_id=original.id,
             reversal_of_id=movement.id,
             created_by=identity.email or "",
+        ))
+    original_entry = db.scalar(select(AccountingEntry).where(AccountingEntry.source_type == "expense", AccountingEntry.source_id == original.id))
+    if original_entry:
+        original_lines = db.scalars(select(AccountingLine).where(AccountingLine.entry_id == original_entry.id)).all()
+        db.add(_make_accounting_entry(
+            description=f"Reversa contable de gasto {original.id}: {data.reason}", occurred_on=business_today(),
+            reference=original.id, source_type="expense_reversal", source_id=original.id,
+            project_id=original.project_id, created_by=identity.email or "",
+            lines=[AccountingLine(account_id=line.account_id, customer_id=line.customer_id, memo=f"Reversa · {line.memo}" if line.memo else "Reversa de gasto", debit=line.credit, credit=line.debit) for line in original_lines],
         ))
     try:
         db.commit()
@@ -3320,7 +3361,12 @@ def _ensure_accounting_bank_account(db: Session, account: FinancialAccount, emai
         return existing
     parent = db.scalar(select(AccountingAccount).where(AccountingAccount.code == "1110"))
     if parent is None:
-        return None
+        assets = db.scalar(select(AccountingAccount).where(AccountingAccount.code == "1000"))
+        if assets is None:
+            assets = AccountingAccount(code="1000", name="Activo", account_type="asset", is_group=True, created_by=email)
+            db.add(assets); db.flush()
+        parent = AccountingAccount(code="1110", name="Caja y bancos", account_type="asset", parent_id=assets.id, is_group=True, created_by=email)
+        db.add(parent); db.flush()
     row = AccountingAccount(
         code=f"1110-{account.id[:12]}", name=account.name, account_type="asset", parent_id=parent.id,
         linked_financial_account_id=account.id, cash_flow_activity="exclude", created_by=email,

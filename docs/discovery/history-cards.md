@@ -2294,3 +2294,44 @@ La integración deja a stakeholders la revisión de valuación/costo, stock nega
 **Aclaración de formato solicitada por stakeholder (2026-11-24):** “el balance general debe tener este formato, 2 columas 1 para activo y otra para pasivo + capital”. La referencia visual compartida presenta Activo en la columna izquierda y Pasivo + Capital en la derecha, con fecha de corte, agrupaciones, subtotales y totales enfrentados. Se conserva como precisión de US-47; la vista CRM aplica dos columnas adaptables y mantiene accesibles los mayores de cada cuenta.
 
 **Aclaración de presentación del estado de resultados (2026-11-24):** se solicita tomar como referencia la captura de CONTPAQi “Estado de Resultados (Formato Costo de lo Vendido)”, con renglones agrupados de ingresos y egresos y columnas de Periodo, porcentaje, Acumulado y porcentaje. Se conserva como precisión de US-49. El CRM presenta acumulado desde enero hasta el fin del periodo seleccionado, además del periodo y sus porcentajes sobre ingresos.
+
+## Iteración CRM · vistas operativas y vínculo contable (2026-11-27)
+
+### US-50 · Calendario y cartera visual de cobranza
+**Autor:** usuario Arco Energy; solicitante final por confirmar.
+**Relato literal:** “primero quita estos 2 recuadros de cobranza. hasta arriba debe ir el calendario hasta arriba; despues debajo debe ir las tarjetas de los clientes a cobrar proximamente con su deuda pendiente, en forma de cards cada uno.”
+**Criterios:** calendario primero; retirar formulario y tabla anteriores; tarjetas agrupadas por cliente con saldo, vencimiento, movimientos, pago y WhatsApp; selección de día filtra vencimientos.
+**Solución propuesta:** el módulo abre directamente con calendario y cards agrupadas debajo. Se mantiene sin Finished hasta revisión de stakeholders.
+
+### US-51 · Gastos en tabla con póliza contable
+**Autor:** usuario Arco Energy; solicitante final por confirmar.
+**Relato literal:** “en el modulo de gastos lo vamos a hacer en forma de tabla; con un bonito UI utiliza alguna tabla de material UI [Image #1] /goal. los gastos tambien deben reflejar la contabilidad entonces igual manera se pregunta la categoria, el proyecto, y el metodo de gasto de que cuenta sale, ese modal de cuentas nos va a servir porque es reutilizable, el chiste es que reflejen las operaciones financieras, e impacten los estados financieros para que puedan ser proyectados al dia.”
+**Criterios:** tabla filtrable; formulario modal con fecha, categoría, tipo, descripción, monto, proyecto/OT, cuenta y comprobante; cuenta obligatoria; póliza débito a gasto / crédito a caja-banco; reversas append-only también en el mayor.
+**Solución propuesta:** tabla con filtros y modal; categorías mapeadas a costo de venta, operación, financiero y personal/otros; gasto y reversa crean pólizas balanceadas ligadas al proyecto. Pendiente validación de la clasificación final por Mario.
+
+### US-52 · Directorio de clientes en tarjetas
+**Relato literal:** “en el modulo de clientes pues deben ir los clientes tambien en formas de tarjetas cuadradas como material UI [Image #1]”
+**Criterios:** grid de cards responsivo con identidad/contacto/estado, búsqueda y apertura de ficha existente.
+**Solución propuesta:** cuadrícula de clientes y acceso a su ficha drawer. Pendiente revisión de usuarios.
+
+### US-53 · Ventas en tarjetas y gráfica temporal
+**Relato literal:** “las ventas de igual manera deben ir en forma de tarjeta, ademas agrega hasta arriba un grafico de barras por semana por mes y por anio [Image #1] /goal”
+**Criterios:** gráfica superior con semana/mes/año; ventas como cards con cliente, folio, OT, monto, forma de cobro, materiales y corrección.
+**Solución propuesta:** gráfica calculada desde ventas vigentes y cards por operación. Pendiente revisión de usuarios.
+
+### US-54 · Proyectos en tarjetas
+**Relato literal:** “los proyectos es nuestra parte mas importante tambien necesito que le des formato de tarjeta [Image #1] /goal”
+**Criterios:** cards con folio, proyecto, cliente, ciudad, órdenes y estado; búsqueda y alta en modal.
+**Solución propuesta:** tablero de proyectos en cards con órdenes vinculadas y formulario modal. Pendiente revisión de coordinador.
+
+### US-55 · Instalaciones por etapa
+**Relato literal:** “las instalaciones las vamos a poner como columnas horizontales donde simplemente tenemos 3 que serian pendientes; en progreso, y terminadas. [Image #1]/goal”
+**Criterios:** columnas horizontales de Pendientes, En progreso y Terminadas; cards con contacto, cuadrilla, agenda y materiales; asignación en modal; estado derivado del progreso real de OT/checklist/consumo.
+**Solución propuesta:** Kanban horizontal de tres columnas con asignación en modal. Pendiente validar la interpretación de estados y revisar con instaladores.
+
+### US-56 · Venta guiada por método de pago y cuenta
+**Relato literal:** “ahora, segun el modulo de contabilidad; todas las operaciones representan su igual en la contabilidad; entonces necesitaos que por ejemplo al agregar una venta forzosamente se pregunte el metodo de pago, no quiero un modal, sino slides en el modal donde primero registras al cliente, despues el monto, y despues con iconos vas a registrar en que cuenta se van a reflejar de la contabilidad si bancos, efectivo, clientes. [Image #1]”
+**Criterios:** wizard de cliente/propuesta, monto, método/cuenta y orden; exigir propuesta y forma de cobro; filtrar cuentas por banco/efectivo; crédito pide calendario de cuotas; mostrar póliza e impacto antes de confirmar.
+**Solución propuesta:** wizard de cuatro pasos con tarjetas visuales de efectivo, bancos y CxC, cuentas filtradas por tipo y resumen del impacto. Pendiente recorrido con ventas y contabilidad.
+
+**Estado de revisión de la iteración:** todas las tarjetas se insertan como no terminadas para que los stakeholders marquen Finished y registren observaciones desde Revisión storycards. La migración `202611270163` agrega US-50–US-56 a la base de datos sin sobrescribir versiones existentes.
